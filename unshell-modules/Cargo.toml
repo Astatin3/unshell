@@ -1,0 +1,11 @@
+[package]
+name = "unshell-modules"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["exec"]
+"exec" = ["libloading"]
+
+[dependencies]
+libloading = {version = "0.8.9", optional = true}

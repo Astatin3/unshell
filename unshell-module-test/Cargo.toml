@@ -1,0 +1,24 @@
+[package]
+name = "unshell-module-test"
+version = "0.1.0"
+edition = "2024"
+
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+strip = true # Strip symbols from the binary
+# strip = "debuginfo"
+opt-level = "s"  # Optimize for size
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = false
+
+
+[dependencies]
+log = "0.4.28"
+unshell-logger = {path = "../unshell-logger"}
+unshell-modules = {path = "../unshell-modules"}
+# log = "0.4.28"
