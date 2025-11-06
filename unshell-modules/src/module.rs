@@ -2,6 +2,7 @@ use libloading::{Library, Symbol};
 
 use crate::{ModuleError, logger::SetupLogger};
 
+// #[derive(Clone, Copy)]
 pub struct Module {
     // name: String,
     lib: Library,
@@ -17,7 +18,7 @@ impl Module {
         };
 
         if let Ok(setup_logger) = this.get_symbol::<SetupLogger>(b"setup_logger") {
-            setup_logger(log::logger(), log::max_level()).unwrap();
+            setup_logger(log::logger(), log::max_level()).map_err(|e| ModuleError::LogError(e))?;
         } else {
             warn!("setup_logger not found");
         }

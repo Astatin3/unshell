@@ -1,15 +1,9 @@
-// #![no]
+use unshell_modules::{Manager, Module, ModuleError, module_interface};
 
 #[macro_use]
 extern crate log;
 
-mod manager;
-
-use std::sync::{Arc, Mutex};
-
-use unshell_modules::{Module, ModuleError, module_interface};
-
-use crate::manager::Manager;
+// use unshell_modules::{Module, ModuleError, module_interface};
 
 module_interface! {
     Interface {
@@ -19,9 +13,8 @@ module_interface! {
     }
 }
 
-// const modules: Arc<Mutex<Vec<Module>>> = Arc::new(Mutex::new(Vec::new()));
-
 fn main() {
+    // Init the logger (This uses like 600MB of storage)
     pretty_env_logger::init();
 
     info!("Initalized");
@@ -31,15 +24,11 @@ fn main() {
 
         let mut modules = Vec::new();
         for arg in args.skip(1) {
+            info!("Loading module: {}", arg);
             modules.push(Module::new(&arg)?)
         }
-        let _manager = Manager::new(modules);
-
-        // for i in 1..args.len() {}
-
-        // let interface = module.get_interface::<Interface>()?;
-
-        // interface.test1();
+        Manager::run(modules);
+        // manager.join();
 
         Ok(())
     }() {
