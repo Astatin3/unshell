@@ -19,6 +19,6 @@ debug = false
 
 [dependencies]
 log = "0.4.28"
-unshell-logger = {path = "../unshell-logger"}
+# unshell-logger = {path = "../unshell-logger"}
 unshell-modules = {path = "../unshell-modules"}
 # log = "0.4.28"

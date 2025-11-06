@@ -2,8 +2,11 @@
 #[macro_use]
 extern crate log;
 
-pub use unshell_logger::setup_logger;
-use unshell_modules::module_interface;
+use std::thread::{self, Thread};
+
+// pub use unshell_logger::setup_logger;
+pub use unshell_modules::setup_logger;
+use unshell_modules::{ManagerInterface, module_interface};
 
 extern "C" fn test1() {
     warn!("Test1 called");
@@ -29,6 +32,6 @@ pub fn interface() -> Interface {
 }
 
 #[unsafe(no_mangle)]
-pub fn testfunc() {
-    info!("testfunc called");
+pub fn init(interface: ManagerInterface) {
+    thread::spawn(|| {});
 }

@@ -9,3 +9,4 @@ default = ["exec"]
 
 [dependencies]
 libloading = {version = "0.8.9", optional = true}
+log = "0.4.28"

@@ -130,20 +130,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "unshell-logger"
-version = "0.1.0"
-dependencies = [
- "log",
-]
-
-[[package]]
 name = "unshell-module-load"
 version = "0.1.0"
 dependencies = [
  "libloading",
  "log",
  "pretty_env_logger",
- "unshell-logger",
  "unshell-modules",
 ]
 
@@ -152,6 +144,7 @@ name = "unshell-modules"
 version = "0.1.0"
 dependencies = [
  "libloading",
+ "log",
 ]
 
 [[package]]

@@ -1,3 +1,18 @@
+#[macro_use]
+extern crate log;
+
+mod logger;
+mod module;
+
+pub use logger::setup_logger;
+pub use module::Module;
+
+#[derive(Debug)]
+pub enum ModuleError {
+    LibLoadingError(libloading::Error),
+    LinkError(String),
+}
+
 #[macro_export]
 macro_rules! module_interface {
     ($interface_name:ident { $(fn $fn_name:ident($($arg:ident : $ty:ty),* $(,)?) $(-> $ret:ty)?);* $(;)? }) => {
@@ -34,30 +49,9 @@ macro_rules! module_interface {
         }
     };
 }
-// mod callable;
 
-// pub enum Error {
-//     LibLoadingError(libloading::Error),
-// }
-
-// #[cfg(feature = "exec")]
-// pub struct Module {
-//     lib: libloading::Library,
-// }
-
-// impl Module {
-//     pub fn new(path: &str) -> Result<Self, Error> {
-//         let lib =
-//             unsafe { libloading::Library::new(path) }.map_err(|e| Error::LibLoadingError(e))?;
-//         Ok(Module { lib })
-//     }
-//     pub fn functions(&self) {
-//         // self.lib.
-
-//         // self.lib.get(name).map_err(|e| Error::LibLoadingError(e))
-//     }
-// }
-
-// pub use callable::Callable;
-// pub use callable::Function;
-// pub use callable::wrap;
+module_interface! {
+    ManagerInterface {
+        fn test123();
+    }
+}
