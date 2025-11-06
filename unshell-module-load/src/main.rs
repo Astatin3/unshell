@@ -1,23 +1,10 @@
-use std::any::Any;
+#[macro_use]
+extern crate log;
 
 use libloading::{Library, Symbol};
 use log::{info, warn};
 use unshell_logger::SetupLogger;
-use unshell_modules::{module, module_interface};
-// use unshell_modules::IntoFunctionPtr;
-// use unshell_modules::test;
-// use unshell_modules::ExportFunction;
-
-// fn test1() {
-//     warn!("Test1 not called");
-// }
-
-// fn test2() {
-//     warn!("Test2 not called");
-// }
-// fn test3() {
-//     warn!("Test3 not called");
-// }
+use unshell_modules::module_interface;
 
 module_interface! {
     Interface {
@@ -27,35 +14,70 @@ module_interface! {
     }
 }
 
-fn main() {
-    // println!("Hello, world!");
+#[allow(dead_code)]
+#[derive(Debug)]
+enum ModuleError {
+    LibLoadingError(libloading::Error),
+    LinkError(String),
+}
 
-    // test();
+struct Module {
+    name: String,
+    lib: Library,
+}
 
-    pretty_env_logger::init();
+impl Module {
+    pub fn new(path: &str) -> Result<Self, ModuleError> {
+        let lib = unsafe { Library::new(&path) }.map_err(|e| ModuleError::LibLoadingError(e))?;
 
-    warn!("Warning message");
+        Ok(Self {
+            name: path.to_owned(),
+            lib,
+        })
+    }
+    pub fn get_symbol<T>(&self, symbol: &[u8]) -> Result<Symbol<'_, T>, ModuleError> {
+        let symbol = unsafe { self.lib.get::<T>(symbol) }
+            .map_err(|e| ModuleError::LinkError(format!("Failed to load symbol: {}", e)))?;
 
-    unsafe {
-        let lib = Library::new("../unshell-module-test/target/release/libunshell_module_test.so")
-            .unwrap();
-
-        let ret = lib.get::<SetupLogger>(b"setup_logger");
-
-        if let Ok(setup_logger) = ret {
+        Ok(symbol)
+    }
+    pub fn init_logger(&self) {
+        if let Ok(setup_logger) = self.get_symbol::<SetupLogger>(b"setup_logger") {
             setup_logger(log::logger(), log::max_level()).unwrap();
         } else {
             warn!("setup_logger not found");
         }
+    }
+    pub fn get_interface<T>(&self) -> Result<T, ModuleError> {
+        if let Ok(interface_function) = self.get_symbol::<fn() -> T>(b"interface") {
+            Ok(interface_function())
+        } else {
+            Err(ModuleError::LinkError(format!(
+                "Interface function not found!"
+            )))
+        }
+    }
+}
 
-        let module = lib.get::<fn() -> Interface>(b"functions").unwrap();
+fn main() {
+    pretty_env_logger::init();
 
-        let i = module();
+    info!("Initalized");
 
-        // i.test1();
+    match || -> Result<(), ModuleError> {
+        let module =
+            Module::new("../unshell-module-test/target/release/libunshell_module_test.so")?;
+        module.init_logger();
 
-        info!("Func: {:?}", i.test1);
+        let interface = module.get_interface::<Interface>()?;
 
-        i.test1();
+        interface.test1();
+
+        Ok(())
+    }() {
+        Ok(_) => {}
+        Err(e) => {
+            error!("ERROR! {:?}", e);
+        }
     }
 }

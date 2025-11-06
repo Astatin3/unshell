@@ -1,3 +1,5 @@
+#![allow(improper_ctypes_definitions)]
+
 use log::{LevelFilter, Log, SetLoggerError};
 
 #[allow(dead_code)]
