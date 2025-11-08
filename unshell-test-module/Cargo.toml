@@ -1,11 +1,19 @@
+cargo-features = ["trim-paths"]
+
 [package]
-name = "unshell-module-test"
+name = "unshell-test-module"
 version = "0.1.0"
 edition = "2024"
 
 
 [lib]
 crate-type = ["cdylib"]
+
+[features]
+default = ["client-component", "server-component"]
+client-component = []
+server-component = []
+# server = []
 
 [profile.release]
 strip = true # Strip symbols from the binary
@@ -15,10 +23,13 @@ lto = true
 codegen-units = 1
 panic = "abort"
 debug = false
+trim-paths = "all"
+
+# crate-type = ["cdylib"]
 
 
 [dependencies]
+bincode = "2.0.1"
+crossbeam-channel = "0.5.15"
 log = "0.4.28"
-# unshell-logger = {path = "../unshell-logger"}
 unshell-modules = {path = "../unshell-modules"}
-# log = "0.4.28"

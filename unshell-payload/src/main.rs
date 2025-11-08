@@ -3,8 +3,6 @@ use unshell_modules::{Manager, Module, ModuleError, module_interface};
 #[macro_use]
 extern crate log;
 
-// use unshell_modules::{Module, ModuleError, module_interface};
-
 module_interface! {
     Interface {
         fn test1();
@@ -17,7 +15,7 @@ fn main() {
     // Init the logger (This uses like 600MB of storage)
     pretty_env_logger::init();
 
-    info!("Initalized");
+    info!("Initialized");
 
     match || -> Result<(), ModuleError> {
         let args = std::env::args();

@@ -1,7 +1,7 @@
 # cargo-features = ["trim-paths"]
 
 [package]
-name = "unshell-module-load"
+name = "unshell-payload"
 version = "0.1.0"
 edition = "2024"
 

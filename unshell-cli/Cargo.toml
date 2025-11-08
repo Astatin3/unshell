@@ -1,0 +1,7 @@
+[package]
+name = "unshell-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+unshell-test-module = {path = "../unshell-test-module"}#, default-features = false, features = ["server-component"]}

@@ -38,16 +38,13 @@ impl Manager {
 
             let runtime = init(this.clone());
 
+            info!("Initialized {}", i);
+
             runtimes.push(runtime);
         }
 
         Self::join(&mut runtimes);
     }
-
-    // /// Helper function to retrieve ManagerInterface type, for interfacing with ModuleManager accross FFI boundry.
-    // pub fn get_interface(&self) -> ManagerInterface {
-    //     ManagerInterface::from_raw(Self::get_manager)
-    // }
 
     /// Iterateratively loop through all runtimes, until all are finished executing
     pub fn join(runtimes: &mut Vec<Box<dyn ModuleRuntime>>) {
