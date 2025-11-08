@@ -1,8 +1,7 @@
 use libloading::{Library, Symbol};
 
-use crate::{ModuleError, logger::SetupLogger};
+use crate::{ModuleError, module::logger::SetupLogger};
 
-// #[derive(Clone, Copy)]
 pub struct Module {
     // name: String,
     lib: Library,
@@ -31,15 +30,15 @@ impl Module {
 
         Ok(symbol)
     }
-    pub fn get_interface<T>(&self) -> Result<T, ModuleError> {
-        if let Ok(interface_function) = self.get_symbol::<fn() -> T>(b"interface") {
-            Ok(interface_function())
-        } else {
-            Err(ModuleError::LinkError(format!(
-                "Interface function not found!"
-            )))
-        }
-    }
+    // pub fn get_interface<T>(&self) -> Result<T, ModuleError> {
+    //     if let Ok(interface_function) = self.get_symbol::<fn() -> T>(b"interface") {
+    //         Ok(interface_function())
+    //     } else {
+    //         Err(ModuleError::LinkError(format!(
+    //             "Interface function not found!"
+    //         )))
+    //     }
+    // }
 }
 
 // extern "C" fn test1234() {

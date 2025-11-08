@@ -1,30 +1,15 @@
-#[macro_use]
-extern crate log;
-
 mod logger;
 mod manager;
 mod module;
+
+// use std::any::Any;
 
 pub use logger::setup_logger;
 pub use manager::Manager;
 pub use module::Module;
 
-///Generic error type for module-related operations.
-#[derive(Debug)]
-pub enum ModuleError {
-    LibLoadingError(libloading::Error),
-    LogError(log::SetLoggerError),
-    LinkError(String),
-    Error(String),
-}
-
-/// Trait for defining modules that have a runtime.
-pub trait ModuleRuntime: Send {
-    /// Returns true if the module is running.
-    /// After returning false, the module will be dropped.
-    fn is_running(&self) -> bool;
-    /// Consumes the module, implementation should kill whatever is running.
-    fn kill(self: Box<Self>);
+pub trait Interface {
+    fn as_any(self: Box<Self>) -> Box<dyn std::any::Any>;
 }
 
 /// "Module Interface" helper macro that creates a struct with function pointers
@@ -71,6 +56,12 @@ macro_rules! module_interface {
                 Self {
                     $($fn_name),*
                 }
+            }
+        }
+
+        impl crate::module::Interface for $interface_name {
+            fn as_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+                self
             }
         }
     };

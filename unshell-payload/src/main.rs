@@ -1,15 +1,10 @@
-use unshell_modules::{Manager, Module, ModuleError, module_interface};
+use unshell_lib::{
+    ModuleError,
+    module::{Manager, Module},
+};
 
 #[macro_use]
 extern crate log;
-
-module_interface! {
-    Interface {
-        fn test1();
-        fn test2();
-        fn test3();
-    }
-}
 
 fn main() {
     // Init the logger (This uses like 600MB of storage)
@@ -26,7 +21,6 @@ fn main() {
             modules.push(Module::new(&arg)?)
         }
         Manager::run(modules);
-        // manager.join();
 
         Ok(())
     }() {

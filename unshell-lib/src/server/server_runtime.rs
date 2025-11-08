@@ -5,7 +5,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use unshell_modules::ModuleRuntime;
+use crate::ModuleRuntime;
 
 use crate::Announcement;
 
@@ -31,39 +31,11 @@ impl ListenerRuntime {
                 let stream = stream.unwrap();
                 println!("New connection from {}", stream.peer_addr().unwrap());
                 streams.lock().unwrap().push(stream);
-
-                // thread::spawn(move || {
-                //     let _ = handle_connection(&mut stream);
-                //     info!("Connection from {} closed", stream.peer_addr().unwrap());
-                // });
             }
         });
-
-        // let reader = BufReader::new(stream.try_clone().unwrap());
-        // let writer = BufWriter::new(stream.try_clone().unwrap());
-
         Self {
             thread_handle,
             streams,
-            // stream,
-            // reader,
-            // writer,
-            // thread_handle: thread::spawn(move || {
-
-            //     for stream in listener.incoming() {
-            //         let mut stream = stream.unwrap();
-
-            //         thread::spawn(move || {
-            //             let _ = handle_connection(&mut stream);
-            //             info!("Connection from {} closed", stream.peer_addr().unwrap());
-            //         });
-            //     }
-            //     // thread::sleep(Duration::from_secs(2));
-
-            //     // let manager_lock = manager.lock().unwrap();
-            //     // manager_lock.test1234(111.1111);
-            //     // drop(manager_lock);
-            // }),
         }
     }
 

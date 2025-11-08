@@ -1,6 +1,6 @@
 use std::io::{Write, stdin, stdout};
 
-use unshell_test_module::Announcement;
+use unshell_lib::Announcement;
 
 // use unshell_test_module::ListenerRuntime;
 
@@ -9,7 +9,7 @@ use unshell_test_module::Announcement;
 // }
 
 fn main() {
-    let mut serverruntime = unshell_test_module::ListenerRuntime::new();
+    let mut serverruntime = unshell_lib::server::ListenerRuntime::new();
 
     loop {
         print!("> ");

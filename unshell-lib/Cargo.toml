@@ -1,0 +1,10 @@
+[package]
+name = "unshell-lib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libloading = {version = "0.8.9"}
+bincode = "2.0.1"
+log = "0.4.28"
+# unshell-modules = {path = "../unshell-modules"}

@@ -1,18 +1,4 @@
-#![no_main]
-#[macro_use]
-extern crate log;
-
 use bincode::{Decode, Encode};
-
-#[cfg(feature = "client-component")]
-mod client;
-#[cfg(feature = "client-component")]
-pub use client::*;
-
-#[cfg(feature = "server-component")]
-mod server;
-#[cfg(feature = "server-component")]
-pub use server::ListenerRuntime;
 
 #[derive(Debug, Encode, Decode)]
 pub enum Announcement {

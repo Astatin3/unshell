@@ -1,19 +1,21 @@
 cargo-features = ["trim-paths"]
 
 [package]
-name = "unshell-test-module"
+name = "unshell-breakout-module"
 version = "0.1.0"
 edition = "2024"
 
+[dependencies]
+# unshell-modules = {path = "../unshell-modules"}
+unshell-lib = {path = "../unshell-lib"}
 
 [lib]
 crate-type = ["cdylib"]
 
 [features]
-default = ["client-component", "server-component"]
-client-component = []
-server-component = []
-# server = []
+default = ["client", "server"]
+client = []
+server = []
 
 [profile.release]
 strip = true # Strip symbols from the binary
@@ -26,10 +28,3 @@ debug = false
 trim-paths = "all"
 
 # crate-type = ["cdylib"]
-
-
-[dependencies]
-bincode = "2.0.1"
-crossbeam-channel = "0.5.15"
-log = "0.4.28"
-unshell-modules = {path = "../unshell-modules"}

@@ -8,9 +8,9 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use unshell_modules::{Manager, ModuleRuntime};
+// use unshell_modules::{Manager, ModuleRuntime};
 
-use crate::Announcement;
+use crate::{Announcement, ModuleRuntime, module::Manager};
 
 pub struct RuntimeTest {
     thread_handle: JoinHandle<()>,
