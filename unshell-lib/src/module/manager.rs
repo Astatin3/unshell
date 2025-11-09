@@ -5,8 +5,11 @@ use std::{
     time::Duration,
 };
 
+use unshell_obfuscate::symbol;
+
 use crate::{Component, ModuleRuntime, module::Module};
 
+// #[derive(Debug)]
 pub struct Manager {
     modules: Vec<Module>,
     components: HashMap<&'static str, Box<dyn Component>>,
@@ -45,12 +48,15 @@ impl Manager {
 
         // let mut runtimes = Vec::new();
 
+        info!("Symbol name: {}", symbol!("get_components"));
+
         for i in 0..module_count {
             info!("Importing module {}", i);
             // let this_lock = .unwrap();
             let component_func = if let Ok(component_func) = this.modules[i]
-                .get_symbol::<fn() -> HashMap<&'static str, Box<dyn Component>>>(b"get_components")
-            {
+                .get_symbol::<fn() -> HashMap<&'static str, Box<dyn Component>>>(
+                    symbol!("get_components").as_bytes(),
+                ) {
                 component_func
             } else {
                 warn!("get_components function not found");
@@ -75,6 +81,10 @@ impl Manager {
 
             thread::sleep(Duration::from_micros(100));
         }
+    }
+
+    pub fn get_component(&self) -> HashMap<&'static str, Box<dyn Component>> {
+        self.components.clone()
     }
 
     // pub extern "C" fn test1234(&self, float: f32) {

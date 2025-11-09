@@ -5,6 +5,9 @@ name = "unshell-payload"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+obfuscate = ["unshell-obfuscate/obfuscate"]
+
 [dependencies]
 env_logger = "0.11.8"
 libloading = "0.8.9"
@@ -12,6 +15,7 @@ log = "0.4.28"
 pretty_env_logger = "0.5.0"
 # unshell-logger = {path = "../unshell-logger"}
 unshell-lib = {path = "../unshell-lib"}
+unshell-obfuscate = {path = "../unshell-obfuscate"}
 
 [profile.release]
 strip = true # Strip symbols from the binary

@@ -3,6 +3,8 @@ use unshell_lib::{
     module::{Manager, Module},
 };
 
+use unshell_obfuscate::obs;
+
 #[macro_use]
 extern crate log;
 
@@ -11,6 +13,9 @@ fn main() {
     pretty_env_logger::init();
 
     info!("Initialized");
+
+    let s = obs!("Obvias string");
+    info!("{}", s);
 
     match || -> Result<(), ModuleError> {
         let args = std::env::args();

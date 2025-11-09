@@ -5,10 +5,6 @@ name = "unshell-breakout-module"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-# unshell-modules = {path = "../unshell-modules"}
-unshell-lib = {path = "../unshell-lib"}
-
 [lib]
 crate-type = ["cdylib"]
 
@@ -16,6 +12,14 @@ crate-type = ["cdylib"]
 default = ["client", "server"]
 client = []
 server = []
+obfuscate = ["unshell-obfuscate/obfuscate"]
+
+
+[dependencies]
+# unshell-modules = {path = "../unshell-modules"}
+unshell-lib = {path = "../unshell-lib"}
+unshell-obfuscate = {path = "../unshell-obfuscate"}
+
 
 [profile.release]
 strip = true # Strip symbols from the binary

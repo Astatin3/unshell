@@ -2,8 +2,14 @@
 
 use std::collections::HashMap;
 use unshell_lib::Component;
+use unshell_obfuscate::obfuscated_symbol;
 
-#[unsafe(no_mangle)]
+#[obfuscated_symbol]
+fn test124() {
+    println!("test");
+}
+
+#[obfuscated_symbol]
 pub fn get_components() -> HashMap<&'static str, Box<dyn Component>> {
     let mut components: HashMap<&'static str, Box<dyn Component>> = HashMap::new();
 

@@ -7,4 +7,4 @@ edition = "2024"
 libloading = {version = "0.8.9"}
 bincode = "2.0.1"
 log = "0.4.28"
-# unshell-modules = {path = "../unshell-modules"}
+unshell-obfuscate = {path = "../unshell-obfuscate"}
