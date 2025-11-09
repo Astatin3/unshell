@@ -1,6 +1,8 @@
 use libloading::{Library, Symbol};
 
-use crate::{ModuleError, module::logger::SetupLogger};
+use crate::{ModuleError, logger::SetupLogger, logger::logger};
+
+use crate::*;
 
 pub struct Module {
     // name: String,
@@ -11,13 +13,10 @@ impl Module {
     pub fn new(path: &str) -> Result<Self, ModuleError> {
         let lib = unsafe { Library::new(&path) }.map_err(|e| ModuleError::LibLoadingError(e))?;
 
-        let this = Self {
-            // name: path.to_owned(),
-            lib,
-        };
+        let this = Self { lib };
 
         if let Ok(setup_logger) = this.get_symbol::<SetupLogger>(b"setup_logger") {
-            setup_logger(log::logger(), log::max_level()).map_err(|e| ModuleError::LogError(e))?;
+            setup_logger(logger());
         } else {
             warn!("setup_logger not found");
         }

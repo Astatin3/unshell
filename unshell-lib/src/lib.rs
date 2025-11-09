@@ -1,8 +1,7 @@
 #![no_main]
-#[macro_use]
-extern crate log;
 
 pub mod client;
+pub mod logger;
 pub mod module;
 pub mod server;
 
@@ -17,7 +16,7 @@ use crate::module::{Interface, Manager};
 #[derive(Debug)]
 pub enum ModuleError {
     LibLoadingError(libloading::Error),
-    LogError(log::SetLoggerError),
+    // LogError(log::SetLoggerError),
     LinkError(String),
     Error(String),
 }

@@ -8,6 +8,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+use crate::*;
 // use unshell_modules::{Manager, ModuleRuntime};
 
 use crate::{Announcement, ModuleRuntime, module::Manager};
@@ -51,7 +52,7 @@ impl RuntimeTest {
 
                     match a {
                         Announcement::TestAnnouncement(s) => {
-                            info!("Received test announcement: {}", s)
+                            println!("Received test announcement: {}", s)
                         }
                     }
                 }

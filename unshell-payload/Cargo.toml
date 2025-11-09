@@ -1,4 +1,4 @@
-# cargo-features = ["trim-paths"]
+cargo-features = ["trim-paths"]
 
 [package]
 name = "unshell-payload"
@@ -11,8 +11,7 @@ obfuscate = ["unshell-obfuscate/obfuscate"]
 [dependencies]
 env_logger = "0.11.8"
 libloading = "0.8.9"
-log = "0.4.28"
-pretty_env_logger = "0.5.0"
+proc-macro2 = "1.0.103"
 # unshell-logger = {path = "../unshell-logger"}
 unshell-lib = {path = "../unshell-lib"}
 unshell-obfuscate = {path = "../unshell-obfuscate"}
@@ -24,5 +23,5 @@ lto = true # Link tree optimization
 codegen-units = 1
 panic = "abort"
 debug = false # Remove debug
-# trim-paths="all"
+trim-paths="all"
 # panic=immediate-abort

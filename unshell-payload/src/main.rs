@@ -3,19 +3,14 @@ use unshell_lib::{
     module::{Manager, Module},
 };
 
-use unshell_obfuscate::obs;
-
 #[macro_use]
-extern crate log;
+extern crate unshell_lib;
 
 fn main() {
-    // Init the logger (This uses like 600MB of storage)
-    pretty_env_logger::init();
+    // #[cfg(not(feature = "obfuscate"))]
+    unshell_lib::logger::PrettyLogger::init();
 
     info!("Initialized");
-
-    let s = obs!("Obvias string");
-    info!("{}", s);
 
     match || -> Result<(), ModuleError> {
         let args = std::env::args();
@@ -31,7 +26,7 @@ fn main() {
     }() {
         Ok(_) => {}
         Err(e) => {
-            error!("ERROR! {:?}", e);
+            info!("ERROR! {:?}", e);
         }
     }
 }

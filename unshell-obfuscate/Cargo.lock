@@ -221,6 +221,7 @@ dependencies = [
  "getrandom",
  "hex",
  "hex-literal",
+ "proc-macro2",
  "quote",
  "sha2",
  "syn",

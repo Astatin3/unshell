@@ -1,13 +1,15 @@
 #![feature(proc_macro_quote)]
+#![feature(proc_macro_span)]
 
 use proc_macro::TokenStream;
-
 use quote::quote;
-
-use syn::{ItemFn, parse_macro_input};
+use syn::{Expr, ItemFn, LitStr, parse_macro_input};
 
 #[cfg(feature = "obfuscate")]
 mod encrypt;
+
+mod format_helper;
+use format_helper::*;
 
 // Put all encrypt-related dependencies in a module, so they are easier to use with the feature flag
 #[cfg(feature = "obfuscate")]
@@ -131,4 +133,108 @@ pub fn obs(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(obfuscated_expansion)
+}
+
+// #[proc_macro]
+// pub fn file_literal(_input: TokenStream) -> TokenStream {
+//     // let input = input.into_iter().collect::<Vec<_>>();
+//     // if input.len() != 1 {
+//     //     let msg = format!("expected exactly one input token, got {}", input.len());
+//     //     return quote! { compile_error!(#msg) }.into();
+//     // }
+
+//     let string = file!();
+//     let lit_str = LitStr::new(string, proc_macro2::Span::call_site());
+
+//     // let string_lit = match LitStr::try_from(&input) {
+//     //     // Error if the token is not a string literal
+//     //     Err(e) => return e.to_compile_error(),
+//     //     Ok(lit) => lit,
+//     // };
+
+//     (quote! {
+//         #lit_str
+//     })
+//     .into()
+// }
+
+#[proc_macro]
+pub fn file_symbol(_input: TokenStream) -> TokenStream {
+    // Get the call site span to extract file information
+    let span = proc_macro::Span::call_site();
+    let source_file = span.source();
+    let file_path = source_file.file();
+    let line_num = source_file.line();
+    let concatted = format!("{}:{}", file_path, line_num);
+
+    // Return as a string literal
+    let output = quote! {
+        unshell_obfuscate::symbol!(#concatted)
+    };
+    // let output = quote! {
+    //     #concatted
+    // };
+    output.into()
+}
+
+#[proc_macro]
+pub fn format_obs(input: TokenStream) -> TokenStream {
+    let PrintlnArgs { format_str, args } = parse_macro_input!(input as PrintlnArgs);
+
+    let segments = parse_format_string(&format_str);
+
+    if segments.is_empty() {
+        return quote! {
+            print!("\n")
+        }
+        .into();
+    }
+
+    let mut parts = Vec::new();
+
+    for segment in segments {
+        match segment {
+            FormatSegment::Static(text) => {
+                parts.push(quote! {
+                    unshell_obfuscate::symbol!(#text).to_string()
+                });
+            }
+            FormatSegment::Dynamic(spec, idx) => {
+                if idx >= args.len() {
+                    return syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("argument {} is missing", idx),
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+
+                let arg = &args[idx];
+                let fmt_spec = if spec.is_empty() {
+                    quote! { "{}" }
+                } else {
+                    let full_spec = format!("{{{}}}", spec);
+                    quote! { #full_spec }
+                };
+
+                // quote! {
+                //     println!(#fmt_spec, #arg);
+                // }
+                parts.push(quote! {
+                    format!(#fmt_spec, #arg)
+                });
+            }
+        }
+    }
+
+    (quote! {
+        {
+            let mut string = String::new();
+            #(
+                string.push_str(&#parts);
+            )*
+            string
+        }
+    })
+    .into()
 }

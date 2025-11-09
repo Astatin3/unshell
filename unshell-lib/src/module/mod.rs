@@ -1,10 +1,9 @@
-mod logger;
 mod manager;
 mod module;
 
 // use std::any::Any;
 
-pub use logger::setup_logger;
+// pub use logger::setup_logger;
 pub use manager::Manager;
 pub use module::Module;
 

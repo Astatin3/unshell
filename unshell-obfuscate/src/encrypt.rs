@@ -19,6 +19,11 @@ const STATIC_IV: [u8; 16] = [
     0x6d, 0x79, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x5f, 0x69, 0x76, 0x5f, 0x30, 0x31, 0x32,
 ];
 
+fn pkcs7_padded_length(input_len: usize) -> usize {
+    let block_size = 16;
+    ((input_len / block_size) + 1) * block_size
+}
+
 pub fn get_obfuscated_symbol_name(input: &str) -> String {
     // 1. Get the key from the environment
     // let key_str =
@@ -36,7 +41,9 @@ pub fn get_obfuscated_symbol_name(input: &str) -> String {
     let mut plaintext = input.to_string();
     let plaintext = unsafe { plaintext.as_bytes_mut() };
 
-    let mut buf = [0u8; 48];
+    let buf_len = pkcs7_padded_length(plaintext.len());
+    let mut buf: Vec<u8> = vec![0; buf_len];
+
     buf[..plaintext.len()].copy_from_slice(plaintext);
     let ciphertext = cipher
         .encrypt_padded_mut::<Pkcs7>(&mut buf, plaintext.len())

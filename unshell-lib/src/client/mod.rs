@@ -1,6 +1,5 @@
 mod client_runtime;
 
-// use crate::module::Interface;
 use std::sync::{Arc, Mutex};
 
 pub const MODULE_NAME: &'static str = "client";
@@ -15,6 +14,7 @@ use crate::{
     client::client_runtime::RuntimeTest,
     module::{Interface, Manager},
     module_interface,
+    warn,
     // module_interface,
 };
 

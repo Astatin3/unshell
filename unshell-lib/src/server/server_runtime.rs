@@ -5,9 +5,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::ModuleRuntime;
-
-use crate::Announcement;
+use crate::*;
 
 pub struct ListenerRuntime {
     thread_handle: JoinHandle<()>,
@@ -19,7 +17,7 @@ pub struct ListenerRuntime {
 
 impl ListenerRuntime {
     pub fn new() -> ListenerRuntime {
-        info!("Starting listener runtime on 127.0.0.1:1234");
+        info!("Starting listener runtime on 127.0.0.1:1234",);
         let listener = TcpListener::bind("127.0.0.1:1234").unwrap();
         let streams = Arc::new(Mutex::new(Vec::new()));
 

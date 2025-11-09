@@ -7,7 +7,8 @@ use std::{
 
 use unshell_obfuscate::symbol;
 
-use crate::{Component, ModuleRuntime, module::Module};
+use crate::*;
+use module::Module;
 
 // #[derive(Debug)]
 pub struct Manager {
@@ -65,7 +66,8 @@ impl Manager {
 
             let components = component_func();
 
-            info!("[{i}] Loaded {} components", components.len());
+            let len = components.len();
+            info!("[{}] Loaded {} components", i, len);
 
             this.components.extend(components);
         }
