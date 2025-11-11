@@ -123,12 +123,14 @@ impl Base62 {
         let base = Base62::new(&key, length % 255);
         let encoded = base.encode(data);
 
+        // For the case that the encoded length is not equal to the predicted length
+        // The nonce must be derived from this length, so this needs to be ensured
+        //
+        // Re-encode with the correct length
         if encoded.len() != length {
             let len = encoded.len();
             let base = Base62::new(&key, len % 255);
             let encoded = base.encode(data);
-
-            println!("Fallback");
 
             assert_eq!(encoded.len(), len);
 
@@ -141,8 +143,6 @@ impl Base62 {
         let base = Base62::new(&key, data.len() % 255);
         base.decode(data)
     }
-
-    // pub fn encode_full
 }
 
 // Helper: Check if big integer (as bytes) is zero
