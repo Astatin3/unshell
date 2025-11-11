@@ -3,10 +3,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Expr, ItemFn, LitStr, parse_macro_input};
-
-#[cfg(feature = "obfuscate")]
-mod encrypt;
+use syn::{ItemFn, parse_macro_input};
 
 mod format_helper;
 use format_helper::*;
@@ -14,11 +11,12 @@ use format_helper::*;
 // Put all encrypt-related dependencies in a module, so they are easier to use with the feature flag
 #[cfg(feature = "obfuscate")]
 mod obs_deps {
-    pub use crate::encrypt::get_obfuscated_symbol_name;
     pub use syn::LitStr;
-
-    pub const ENV_KEY_NAME: &str = "OBFUSCATION_KEY";
-    pub const BACKUP_ENV_KEY: &str = "OBFUSCATION_KEY_DO_NOT_USE";
+    pub use unshell_crypt::BACKUP_ENV_KEY;
+    pub use unshell_crypt::ENV_KEY_NAME;
+    pub use unshell_crypt::STATIC_IV;
+    pub use unshell_crypt::aes::encrypt_aes_lines;
+    pub use unshell_crypt::fill;
 }
 #[cfg(feature = "obfuscate")]
 use obs_deps::*;
@@ -49,13 +47,18 @@ pub fn symbol(input: TokenStream) -> TokenStream {
 #[cfg(feature = "obfuscate")]
 pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input function
+
+    use unshell_crypt::aes::encrypt_aes;
     let func = parse_macro_input!(item as ItemFn);
 
     // Get the original function name
     let fn_name = func.sig.ident.to_string();
 
+    // get the encryption key
+    let key_str = std::env::var(ENV_KEY_NAME).unwrap_or(BACKUP_ENV_KEY.to_owned());
+
     // Generate the new, obfuscated name
-    let obfuscated_name = get_obfuscated_symbol_name(&fn_name);
+    let obfuscated_name = encrypt_aes_lines(&fn_name, &key_str, STATIC_IV);
 
     // Create a new string literal for the name
     let new_name_lit = LitStr::new(&obfuscated_name, func.sig.ident.span());
@@ -77,8 +80,11 @@ pub fn symbol(input: TokenStream) -> TokenStream {
     let lit_str = parse_macro_input!(input as LitStr);
     let original_name = lit_str.value();
 
+    // get the encryption key
+    let key_str = std::env::var(ENV_KEY_NAME).unwrap_or(BACKUP_ENV_KEY.to_owned());
+
     // Generate the exact same obfuscated name
-    let obfuscated_name = get_obfuscated_symbol_name(&original_name);
+    let obfuscated_name = encrypt_aes_lines(&original_name, &key_str, STATIC_IV);
 
     // Expand to a static string literal
     TokenStream::from(quote! {
@@ -106,7 +112,7 @@ pub fn obs(input: TokenStream) -> TokenStream {
 
     // 1. Generate a unique, random key for this string
     let mut key = vec![0u8; len];
-    getrandom::fill(&mut key).expect("Failed to get random bytes for XOR key");
+    fill(&mut key).expect("Failed to get random bytes for XOR key");
 
     // 2. XOR the string with the key
     let mut obfuscated = Vec::with_capacity(len);

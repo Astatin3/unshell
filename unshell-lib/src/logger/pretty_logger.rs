@@ -18,10 +18,10 @@ static GREY: &str = "\x1b[90m";
 impl Logger for PrettyLogger {
     fn log(&self, message: Record) {
         let log_level = match message.log_level {
-            LogLevel::Debug => format!("{DEBUG_COLOR}DEBUG"),
+            LogLevel::Debug => format!("{DEBUG_COLOR}DBUG"),
             LogLevel::Info => format!("{INFO_COLOR}INFO"),
             LogLevel::Warn => format!("{WARN_COLOR}WARN"),
-            LogLevel::Error => format!("{ERROR_COLOR}ERROR"),
+            LogLevel::Error => format!("{ERROR_COLOR}ERR!"),
         };
 
         let date: DateTime<Utc> = message.time.into();

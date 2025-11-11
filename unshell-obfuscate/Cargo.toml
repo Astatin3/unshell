@@ -1,6 +1,5 @@
 [package]
 name = "unshell-obfuscate"
-version = "0.1.0"
 edition = "2024"
 
 [lib]
@@ -11,13 +10,8 @@ proc-macro = true
 obfuscate = []
 
 [dependencies]
-aes = "0.8.4"
-block-padding = "0.4.1"
-cbc = "0.1.2"
-getrandom = "0.3.4"
-hex = "0.4.3"
-hex-literal = "1.1.0"
 quote = "1.0.42"
-sha2 = "0.10.9"
 syn = {version = "2.0.109", features = ["full"]}
 proc-macro2 = "1.0.103"
+
+unshell-crypt = {path = "../unshell-crypt"}

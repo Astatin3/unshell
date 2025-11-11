@@ -2,7 +2,6 @@ cargo-features = ["trim-paths"]
 
 [package]
 name = "unshell-payload"
-version = "0.1.0"
 edition = "2024"
 
 [features]
@@ -12,7 +11,7 @@ obfuscate = ["unshell-obfuscate/obfuscate"]
 env_logger = "0.11.8"
 libloading = "0.8.9"
 proc-macro2 = "1.0.103"
-# unshell-logger = {path = "../unshell-logger"}
+
 unshell-lib = {path = "../unshell-lib"}
 unshell-obfuscate = {path = "../unshell-obfuscate"}
 

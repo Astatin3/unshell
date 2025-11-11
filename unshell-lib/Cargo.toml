@@ -1,10 +1,21 @@
 [package]
 name = "unshell-lib"
-version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Base dependencies
 libloading = {version = "0.8.9"}
 bincode = "2.0.1"
 unshell-obfuscate = {path = "../unshell-obfuscate"}
 chrono = "0.4.42"
+
+# Crypt dependencies
+aes = "0.8.4"
+block-padding = "0.4.1"
+cbc = "0.1.2"
+getrandom = "0.3.4"
+hex = "0.4.3"
+hex-literal = "1.1.0"
+sha2 = "0.10.9"
+
+#

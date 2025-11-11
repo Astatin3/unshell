@@ -403,17 +403,24 @@ dependencies = [
 
 [[package]]
 name = "unshell-lib"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
+ "aes",
  "bincode",
+ "block-padding 0.4.1",
+ "cbc",
  "chrono",
+ "getrandom",
+ "hex",
+ "hex-literal",
  "libloading",
+ "sha2",
  "unshell-obfuscate",
 ]
 
 [[package]]
 name = "unshell-obfuscate"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "aes",
  "block-padding 0.4.1",

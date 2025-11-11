@@ -1,12 +1,16 @@
 #![no_main]
 
 pub mod client;
+pub mod crypt;
 pub mod logger;
 pub mod module;
 pub mod server;
 
 mod announcement;
-use std::sync::{Arc, Mutex};
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
+};
 
 pub use announcement::Announcement;
 
@@ -18,7 +22,28 @@ pub enum ModuleError {
     LibLoadingError(libloading::Error),
     // LogError(log::SetLoggerError),
     LinkError(String),
+    CryptError(String),
     Error(String),
+}
+
+impl std::error::Error for ModuleError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+
+    fn description(&self) -> &str {
+        "description() is deprecated; use Display"
+    }
+
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        Some(self)
+    }
+}
+
+impl fmt::Display for ModuleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(format!("{:?}", self).as_str())
+    }
 }
 
 /// Trait for defining modules that have a runtime.
