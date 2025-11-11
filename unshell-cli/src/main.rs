@@ -11,8 +11,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut input = String::new();
         stdin().read_line(&mut input).expect("Failed to read line");
 
-        // println!("{}", input);
-
         let args = input.trim().split(" ").collect::<Vec<&str>>();
 
         match args[0] {
@@ -32,6 +30,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        println!("{:?}", args);
+        // println!("{:?}", args);
     }
 }

@@ -7,17 +7,17 @@ use unshell_lib::{
 extern crate unshell_lib;
 
 fn main() {
-    // #[cfg(not(feature = "obfuscate"))]
+    #[cfg(not(feature = "obfuscate"))]
     unshell_lib::logger::PrettyLogger::init();
 
-    info!("Initialized");
+    debug!("Initialized");
 
     match || -> Result<(), ModuleError> {
         let args = std::env::args();
 
         let mut modules = Vec::new();
         for arg in args.skip(1) {
-            info!("Loading module: {}", arg);
+            debug!("Loading module: {}", arg);
             modules.push(Module::new(&arg)?)
         }
         Manager::run(modules);
@@ -26,7 +26,7 @@ fn main() {
     }() {
         Ok(_) => {}
         Err(e) => {
-            info!("ERROR! {:?}", e);
+            debug!("ERROR! {:?}", e);
         }
     }
 }

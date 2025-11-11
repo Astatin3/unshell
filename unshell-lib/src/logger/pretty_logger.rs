@@ -27,9 +27,11 @@ impl Logger for PrettyLogger {
         let date: DateTime<Utc> = message.time.into();
         let date = date.to_rfc2822().to_string();
 
+        let location = message.location.unwrap_or("".to_string());
+
         println!(
             "{OFF_WHITE}[{TIME_COLOR}{}{OFF_WHITE}] {} {WHITE}{} {GREY}{}{WHITE}",
-            date, log_level, message.message, message.location
+            date, log_level, message.message, location
         );
     }
 }

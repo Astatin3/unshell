@@ -18,7 +18,7 @@ pub enum LogLevel {
 #[derive(Debug)]
 pub struct Record {
     log_level: LogLevel,
-    location: String,
+    location: Option<String>,
     // line: u32,
     time: SystemTime,
     message: String,
@@ -46,7 +46,12 @@ pub fn set_logger(logger: &'static dyn Logger) {
     }
 }
 
-pub fn add_record(log_level: LogLevel, location: String, time: SystemTime, message: String) {
+pub fn add_record(
+    log_level: LogLevel,
+    location: Option<String>,
+    time: SystemTime,
+    message: String,
+) {
     logger().log(Record {
         log_level,
         location,

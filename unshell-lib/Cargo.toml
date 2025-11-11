@@ -2,6 +2,9 @@
 name = "unshell-lib"
 edition = "2024"
 
+[features]
+log_debug = []
+
 [dependencies]
 # Base dependencies
 libloading = {version = "0.8.9"}

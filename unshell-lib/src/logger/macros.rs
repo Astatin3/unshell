@@ -1,3 +1,4 @@
+#[cfg(feature = "log_debug")]
 #[macro_export]
 macro_rules! debug {
     ($fmt:tt) => {{
@@ -5,7 +6,12 @@ macro_rules! debug {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Debug,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
@@ -15,10 +21,27 @@ macro_rules! debug {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Debug,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
+    }};
+}
+
+#[cfg(not(feature = "log_debug"))]
+#[macro_export]
+macro_rules! debug {
+    ($fmt:tt) => {{
+        let _ = $fmt;
+    }};
+    ($fmt:tt, $($arg:expr),*) => {{
+        let _ = $fmt;
+        let _ = ($($arg),*);
     }};
 }
 
@@ -29,7 +52,12 @@ macro_rules! info {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Info,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
@@ -39,7 +67,12 @@ macro_rules! info {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Info,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
@@ -53,7 +86,12 @@ macro_rules! warn {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Warn,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
@@ -63,7 +101,12 @@ macro_rules! warn {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Warn,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
@@ -77,7 +120,12 @@ macro_rules! error {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Error,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );
@@ -87,7 +135,12 @@ macro_rules! error {
 
         $crate::logger::add_record(
             $crate::logger::LogLevel::Error,
-            String::from(unshell_obfuscate::file_symbol!()),
+
+            #[cfg(feature = "log_debug")]
+            Some(String::from(unshell_obfuscate::file_symbol!())),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             std::time::SystemTime::now(),
             log_result
         );

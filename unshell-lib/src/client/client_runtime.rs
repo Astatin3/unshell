@@ -25,9 +25,15 @@ impl RuntimeTest {
 
         Self {
             thread_handle: thread::spawn(move || {
-                info!("Connecting to server...");
-                let mut stream = TcpStream::connect("localhost:1234").unwrap();
-                info!("Connectied");
+                debug!("Connecting to server...");
+                let mut stream = match TcpStream::connect("localhost:1234") {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        error!("Failed to connect to server: {}", e);
+                        return;
+                    }
+                };
+                info!("Connected");
                 // let reader = BufReader::new(stream.try_clone().unwrap());
                 // let mut writer = BufWriter::new(stream.try_clone().unwrap());
 

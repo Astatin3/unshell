@@ -1,7 +1,6 @@
 #![no_main]
 
 pub mod client;
-pub mod crypt;
 pub mod logger;
 pub mod module;
 pub mod server;

@@ -29,10 +29,9 @@ impl Manager {
 
         let mut runtimes: Vec<Box<dyn ModuleRuntime>> = Vec::new();
 
-        for (name, component) in components {
+        for (_name, component) in components {
             let module_runtime = component.start_runtime(this.clone());
             if let Some(module_runtime) = module_runtime {
-                info!("Initialized {}", name);
                 runtimes.push(module_runtime);
             }
         }
@@ -47,12 +46,8 @@ impl Manager {
             components: HashMap::new(),
         };
 
-        // let mut runtimes = Vec::new();
-
-        info!("Symbol name: {}", symbol!("get_components"));
-
         for i in 0..module_count {
-            info!("Importing module {}", i);
+            debug!("Importing module {}", i);
             // let this_lock = .unwrap();
             let component_func = if let Ok(component_func) = this.modules[i]
                 .get_symbol::<fn() -> HashMap<&'static str, Box<dyn Component>>>(
@@ -67,7 +62,7 @@ impl Manager {
             let components = component_func();
 
             let len = components.len();
-            info!("[{}] Loaded {} components", i, len);
+            debug!("[{}] Loaded {} components", i, len);
 
             this.components.extend(components);
         }

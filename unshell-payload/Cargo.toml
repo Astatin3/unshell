@@ -6,6 +6,7 @@ edition = "2024"
 
 [features]
 obfuscate = ["unshell-obfuscate/obfuscate"]
+log_debug = ["unshell-lib/log_debug"]
 
 [dependencies]
 env_logger = "0.11.8"
