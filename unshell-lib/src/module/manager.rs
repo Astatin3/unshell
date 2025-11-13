@@ -7,81 +7,142 @@ use std::{
 
 use unshell_obfuscate::symbol;
 
-use crate::*;
+use crate::{
+    config::{NamedComponent, PayloadConfig, RuntimeConfig},
+    *,
+};
 use module::Module;
 
 // #[derive(Debug)]
-pub struct Manager {
+pub struct Manager<'a> {
+    id: &'static str,
+
     modules: Vec<Module>,
-    components: HashMap<&'static str, Box<dyn Component>>,
+
+    active_runtimes: Vec<&'a dyn ModuleRuntime>,
+    // runtime_config: Vec<RuntimeConfig>,
+    components: HashMap<String, &'a NamedComponent>,
 }
 
 // static mut MANAGER_RUNTIME: Option<Arc<Mutex<Manager>>> = None;
 
-impl Manager {
+impl<'a> Manager<'a> {
+    fn new(id: &'static str, config: &'a Vec<NamedComponent>, modules: Vec<Module>) -> Self {
+        Self {
+            id,
+
+            // config,
+            modules,
+
+            components: config.iter().map(|c| (c.name.to_string(), c)).collect(),
+
+            active_runtimes: Vec::new(),
+        }
+    }
+
     /// Create Manager, and run initilization for each Module
     #[allow(static_mut_refs)]
-    pub fn run<'a>(modules: Vec<Module>) {
-        let this: Self = Self::load_modules(modules);
-        let components = this.components.clone();
+    pub fn run(config: &'static PayloadConfig, modules: Vec<Module>) {
+        // Construct self
+        let this = Self::new(&config.id, &config.components, modules);
+
+        // Load each of the pre-prepared modules
+        // this.load_components();
 
         let this = Arc::new(Mutex::new(this));
 
-        let mut runtimes: Vec<Box<dyn ModuleRuntime>> = Vec::new();
+        Self::start_runtimes(this.clone(), &config.runtime_config);
 
-        for (_name, component) in components {
-            let module_runtime = component.start_runtime(this.clone());
-            if let Some(module_runtime) = module_runtime {
-                runtimes.push(module_runtime);
-            }
-        }
+        // let components = this.components.clone();
 
-        Self::join(&mut runtimes);
+        // let mut runtimes: Vec<Box<dyn ModuleRuntime>> = Vec::new();
+
+        // for (_name, component) in components {
+        //     let module_runtime = component.start_runtime(this.clone());
+        //     if let Some(module_runtime) = module_runtime {
+        //         runtimes.push(module_runtime);
+        //     }
+        // }
+
+        Self::join(this);
     }
 
-    pub fn load_modules<'a>(modules: Vec<Module>) -> Self {
-        let module_count = modules.len();
-        let mut this = Self {
-            modules,
-            components: HashMap::new(),
-        };
+    // fn load_components(&mut self) {
+    //     for i in 0..self.modules.len() {
+    //         debug!("Importing module {}", i);
+    //         // let this_lock = .unwrap();
+    //         let component_func = if let Ok(component_func) = self.modules[i]
+    //             .get_symbol::<fn() -> HashMap<&'static str, Box<dyn Component>>>(
+    //                 symbol!("get_components").as_bytes(),
+    //             ) {
+    //             component_func
+    //         } else {
+    //             warn!("get_components function not found");
+    //             continue;
+    //         };
 
-        for i in 0..module_count {
-            debug!("Importing module {}", i);
-            // let this_lock = .unwrap();
-            let component_func = if let Ok(component_func) = this.modules[i]
-                .get_symbol::<fn() -> HashMap<&'static str, Box<dyn Component>>>(
-                    symbol!("get_components").as_bytes(),
-                ) {
-                component_func
-            } else {
-                warn!("get_components function not found");
-                continue;
+    //         let components = component_func();
+
+    //         let len = components.len();
+    //         debug!("[{}] Loaded {} components", i, len);
+
+    //         self.components.extend(components);
+    //     }
+    // }
+
+    /// Start each runtime
+    fn start_runtimes(this: Arc<Mutex<Self>>, runtimes: &'static Vec<RuntimeConfig>) {
+        for runtime in runtimes {
+            let mut this_lock = this.lock().unwrap();
+
+            let component = match this_lock.components.get(runtime.parent_component) {
+                Some(component) => component,
+                None => {
+                    warn!(
+                        "Could not find component {} which is referenced by runtime {}",
+                        runtime.parent_component, runtime.name
+                    );
+                    continue;
+                }
             };
 
-            let components = component_func();
+            let runtime = match (*component.start_runtime)(runtime) {
+                Ok(runtime) => runtime,
+                Err(e) => {
+                    warn!("Failed to start runtime: {:?}", e);
+                    continue;
+                }
+            };
 
-            let len = components.len();
-            debug!("[{}] Loaded {} components", i, len);
-
-            this.components.extend(components);
+            this_lock.active_runtimes.push(runtime);
         }
-
-        this
     }
 
     /// Iterateratively loop through all runtimes, until all are finished executing
-    pub fn join(runtimes: &mut Vec<Box<dyn ModuleRuntime>>) {
-        // let mut len = runtimes.len().clone();
-        while runtimes.len() > 0 {
-            runtimes.retain(|runtime| runtime.is_running());
+    fn join(this: Arc<Mutex<Self>>) {
+        loop {
+            let mut this_lock = this.lock().unwrap();
 
-            thread::sleep(Duration::from_micros(100));
+            if this_lock.active_runtimes.len() <= 0 {
+                break;
+            }
+
+            this_lock
+                .active_runtimes
+                .retain(|runtime| runtime.is_running());
+
+            drop(this_lock);
+
+            thread::sleep(Duration::from_millis(500));
         }
     }
 
-    pub fn get_component(&self) -> HashMap<&'static str, Box<dyn Component>> {
-        self.components.clone()
+    // pub fn get_component(&self) -> HashMap<&'static str, Box<dyn Component>> {
+    //     self.components.clone()
+    // }
+
+    pub fn get_name(&self) -> &str {
+        self.id
     }
 
     // pub extern "C" fn test1234(&self, float: f32) {

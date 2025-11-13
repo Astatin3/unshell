@@ -1,9 +1,13 @@
 #![no_main]
 
 pub mod client;
+pub mod config;
 pub mod logger;
 pub mod module;
 pub mod server;
+
+mod components;
+pub use components::get_components;
 
 mod announcement;
 use std::{
@@ -46,7 +50,7 @@ impl fmt::Display for ModuleError {
 }
 
 /// Trait for defining modules that have a runtime.
-pub trait ModuleRuntime: Send {
+pub trait ModuleRuntime: Send + Sync {
     /// Returns true if the module is running.
     /// After returning false, the module will be dropped.
     fn is_running(&self) -> bool;
@@ -56,7 +60,8 @@ pub trait ModuleRuntime: Send {
 
 pub trait Component {
     fn name(&self) -> &'static str;
-    fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>>;
+    // fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>>;
+
     fn get_interface(&self) -> Box<dyn Interface>;
     fn clone_box(&self) -> Box<dyn Component>;
 }

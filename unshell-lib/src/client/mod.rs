@@ -1,7 +1,5 @@
 mod client_runtime;
 
-use std::sync::{Arc, Mutex};
-
 pub const MODULE_NAME: &'static str = "client";
 
 // pub use unshell_modules::setup_logger;
@@ -10,9 +8,7 @@ pub const MODULE_NAME: &'static str = "client";
 
 use crate::{
     Component,
-    ModuleRuntime,
-    client::client_runtime::RuntimeTest,
-    module::{Interface, Manager},
+    module::Interface,
     module_interface,
     warn,
     // module_interface,
@@ -60,9 +56,9 @@ impl Component for ClientComponent {
         MODULE_NAME
     }
 
-    fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>> {
-        Some(Box::new(RuntimeTest::new(manager)))
-    }
+    // fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>> {
+    //     Some(Box::new(RuntimeTest::new(manager)))
+    // }
 
     fn clone_box(&self) -> Box<dyn Component> {
         Box::new(self.clone())
