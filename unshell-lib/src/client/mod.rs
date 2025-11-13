@@ -6,12 +6,15 @@ pub const MODULE_NAME: &'static str = "client";
 
 // use unshell_modules::{Manager, ModuleRuntime, module_interface};
 
+use std::any::TypeId;
+
 use crate::{
-    Component,
-    module::Interface,
+    ModuleError,
+    ModuleRuntime,
+    client::client_runtime::ClientRuntime,
+    config::{InterfaceWrapper, NamedComponent, RuntimeConfig},
     module_interface,
-    warn,
-    // module_interface,
+    warn, // module_interface,
 };
 
 pub extern "C" fn test1() {
@@ -32,39 +35,35 @@ module_interface! {
     }
 }
 
-// #[unsafe(no_mangle)]
-// pub fn interface() -> Interface {
-//     Interface::from_raw(test1, test2, test3)
-// }
+pub struct ClientInterfaceWrapper;
 
-// #[unsafe(no_mangle)]
-// pub fn init(manager: Arc<Mutex<Manager>>) -> Box<dyn ModuleRuntime> {
-//     info!("Initializing client module");
-// }
+impl InterfaceWrapper for ClientInterfaceWrapper {
+    fn get_interface<T: 'static>(&self) -> Option<T>
+    where
+        Self: Sized,
+    {
+        if TypeId::of::<T>() == TypeId::of::<ClientInterface>() {
+            let my_struct = ClientInterface::from_raw(test1, test2, test3);
 
-#[derive(Clone)]
-pub struct ClientComponent;
-
-impl ClientComponent {
-    pub fn new() -> Self {
-        ClientComponent
+            unsafe { Some(std::mem::transmute_copy(&my_struct)) }
+        } else {
+            None
+        }
     }
 }
 
-impl Component for ClientComponent {
-    fn name(&self) -> &'static str {
-        MODULE_NAME
-    }
+fn get_interface() -> Option<&'static (dyn InterfaceWrapper + Sync)> {
+    Some(&ClientInterfaceWrapper)
+}
 
-    // fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>> {
-    //     Some(Box::new(RuntimeTest::new(manager)))
-    // }
+fn start_runtime(config: &'static RuntimeConfig) -> Result<Box<dyn ModuleRuntime>, ModuleError> {
+    Ok(Box::new(ClientRuntime::new(config)?))
+}
 
-    fn clone_box(&self) -> Box<dyn Component> {
-        Box::new(self.clone())
-    }
-
-    fn get_interface(&self) -> Box<dyn Interface> {
-        Box::new(ClientInterface::from_raw(test1, test2, test3))
+pub const fn get_named_component() -> NamedComponent {
+    NamedComponent {
+        name: MODULE_NAME,
+        get_interface: &get_interface,
+        start_runtime: &start_runtime,
     }
 }

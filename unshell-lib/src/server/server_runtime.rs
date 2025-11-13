@@ -17,7 +17,7 @@ pub struct ListenerRuntime {
 
 impl ListenerRuntime {
     pub fn new() -> ListenerRuntime {
-        info!("Starting listener runtime on 127.0.0.1:1234",);
+        // info!("Starting listener runtime on {}",);
         let listener = TcpListener::bind("127.0.0.1:1234").unwrap();
         let streams = Arc::new(Mutex::new(Vec::new()));
 
@@ -51,11 +51,6 @@ impl ListenerRuntime {
         println!("Announcement {:?} sent", announcement);
 
         Ok(())
-
-        // self.stream
-        //     .write_all(&u32::to_be_bytes(bytes.len() as u32))?;
-        // self.stream.write_all(&bytes)?;
-        // self.stream.flush()?;
     }
 }
 

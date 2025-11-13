@@ -11,6 +11,7 @@ log_debug = ["unshell-lib/log_debug"]
 
 [dependencies]
 env_logger = "0.11.8"
+lazy_static = "1.5.0"
 libloading = "0.8.9"
 proc-macro2 = "1.0.103"
 

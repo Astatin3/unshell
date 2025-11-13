@@ -8,10 +8,11 @@ use syn::{ItemFn, parse_macro_input};
 mod format_helper;
 use format_helper::*;
 
+use syn::LitStr;
+
 // Put all encrypt-related dependencies in a module, so they are easier to use with the feature flag
 #[cfg(feature = "obfuscate")]
 mod obs_deps {
-    pub use syn::LitStr;
     pub use unshell_crypt::BACKUP_ENV_KEY;
     pub use unshell_crypt::ENV_KEY_NAME;
     pub use unshell_crypt::STATIC_IV;
@@ -24,7 +25,12 @@ use obs_deps::*;
 #[proc_macro]
 #[cfg(not(feature = "obfuscate"))]
 pub fn obs(input: TokenStream) -> TokenStream {
-    input
+    let input = parse_macro_input!(input as LitStr);
+
+    (quote::quote! {
+        String::from(#input)
+    })
+    .into()
 }
 
 #[proc_macro_attribute]
@@ -48,7 +54,6 @@ pub fn symbol(input: TokenStream) -> TokenStream {
 pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input function
 
-    use unshell_crypt::aes::encrypt_aes;
     let func = parse_macro_input!(item as ItemFn);
 
     // Get the original function name

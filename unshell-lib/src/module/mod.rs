@@ -7,10 +7,6 @@ mod module;
 pub use manager::Manager;
 pub use module::Module;
 
-pub trait Interface {
-    fn as_any(self: Box<Self>) -> Box<dyn std::any::Any>;
-}
-
 /// "Module Interface" helper macro that creates a struct with function pointers
 /// Useful for defining and requiring modules' functions accross FFI boundry.
 #[macro_export]
@@ -58,10 +54,10 @@ macro_rules! module_interface {
             }
         }
 
-        impl crate::module::Interface for $interface_name {
-            fn as_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-                self
-            }
-        }
+        // impl crate::module::Interface for $interface_name {
+        //     fn as_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        //         self
+        //     }
+        // }
     };
 }

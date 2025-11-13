@@ -2,31 +2,40 @@ use std::{
     io::Read,
     net::TcpStream,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
 };
 
-use crate::*;
+use crate::{config::RuntimeConfig, *};
 // use unshell_modules::{Manager, ModuleRuntime};
 
-use crate::{Announcement, ModuleRuntime, module::Manager};
+use crate::{Announcement, ModuleRuntime};
 
-pub struct RuntimeTest {
+pub struct ClientRuntime {
     thread_handle: JoinHandle<()>,
     join_signal: Arc<AtomicBool>,
 }
 
-impl RuntimeTest {
-    pub fn new(_manager: Arc<Mutex<Manager>>) -> RuntimeTest {
+impl ClientRuntime {
+    pub fn new(config: &'static RuntimeConfig) -> Result<ClientRuntime, ModuleError> {
         let join_signal = Arc::new(AtomicBool::new(false));
         let join_clone = join_signal.clone();
 
-        Self {
+        let host = match config.config.get("host") {
+            Some(host) => host,
+            None => {
+                return Err(ModuleError::Error(
+                    "Could not find HOST in Client Runtime".into(),
+                ));
+            }
+        };
+
+        Ok(Self {
             thread_handle: thread::spawn(move || {
                 debug!("Connecting to server...");
-                let mut stream = match TcpStream::connect("localhost:1234") {
+                let mut stream = match TcpStream::connect(host) {
                     Ok(stream) => stream,
                     Err(e) => {
                         error!("Failed to connect to server: {}", e);
@@ -64,11 +73,11 @@ impl RuntimeTest {
                 }
             }),
             join_signal,
-        }
+        })
     }
 }
 
-impl ModuleRuntime for RuntimeTest {
+impl ModuleRuntime for ClientRuntime {
     // fn init(&mut self) {}
 
     fn is_running(&self) -> bool {

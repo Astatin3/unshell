@@ -468,7 +468,6 @@ name = "unshell-breakout-module"
 version = "0.1.0"
 dependencies = [
  "unshell-lib",
- "unshell-obfuscate",
 ]
 
 [[package]]

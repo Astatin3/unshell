@@ -23,23 +23,33 @@ pub struct PayloadConfig {
 pub struct RuntimeConfig {
     pub parent_component: &'static str,
     pub name: &'static str,
-    pub config: HashMap<String, String>,
+    pub config: HashMap<&'static str, String>,
 }
 
+#[derive(Clone)]
 pub struct NamedComponent {
     pub name: &'static str,
 
     // + Sync + Sync + Sync + Sync + Sync + Sync + Sync + Sync
     pub get_interface: &'static (dyn Fn() -> Option<&'static (dyn InterfaceWrapper + Sync)> + Sync),
     pub start_runtime: &'static (
-                 dyn Fn(&'static RuntimeConfig) -> Result<&'static dyn ModuleRuntime, ModuleError>
+                 dyn Fn(&'static RuntimeConfig) -> Result<Box<dyn ModuleRuntime>, ModuleError>
                      + Sync
              ),
 }
 
 /// Trait that wraps the get_interface<T>() function inside of components
 pub trait InterfaceWrapper: Send + Sync {
-    fn get_interface<T>() -> Option<T>
+    fn get_interface<T: 'static>(&self) -> Option<T>
     where
         Self: Sized;
 }
+
+// impl<T: 'static> InterfaceWrapper for T {
+//     default fn get_interface<T>() -> Option<T>
+//     where
+//         Self: Sized,
+//     {
+//         None
+//     }
+// }

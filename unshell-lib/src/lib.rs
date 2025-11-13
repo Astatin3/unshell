@@ -12,12 +12,12 @@ pub use components::get_components;
 mod announcement;
 use std::{
     fmt,
-    sync::{Arc, Mutex},
+    // sync::{Arc, Mutex},
 };
 
 pub use announcement::Announcement;
 
-use crate::module::{Interface, Manager};
+// use crate::module::{Interface, Manager};
 
 ///Generic error type for module-related operations.
 #[derive(Debug)]
@@ -58,16 +58,16 @@ pub trait ModuleRuntime: Send + Sync {
     fn kill(self: Box<Self>);
 }
 
-pub trait Component {
-    fn name(&self) -> &'static str;
-    // fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>>;
+// pub trait Component {
+//     fn name(&self) -> &'static str;
+//     // fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>>;
 
-    fn get_interface(&self) -> Box<dyn Interface>;
-    fn clone_box(&self) -> Box<dyn Component>;
-}
+//     fn get_interface(&self) -> Box<dyn Interface>;
+//     fn clone_box(&self) -> Box<dyn Component>;
+// }
 
-impl Clone for Box<dyn Component> {
-    fn clone(&self) -> Box<dyn Component> {
-        self.clone_box()
-    }
-}
+// impl Clone for Box<dyn Component> {
+//     fn clone(&self) -> Box<dyn Component> {
+//         self.clone_box()
+//     }
+// }

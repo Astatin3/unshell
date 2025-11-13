@@ -10,6 +10,7 @@ client = []
 server = []
 
 log_debug = []
+obfuscate = ["unshell-obfuscate/obfuscate"]
 
 
 [dependencies]

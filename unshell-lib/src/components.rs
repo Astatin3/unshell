@@ -1,15 +1,16 @@
 use unshell_obfuscate::obfuscated_symbol;
 
-use crate::{Component, config::NamedComponent};
-
-use std::collections::HashMap;
+use crate::config::NamedComponent;
 
 #[obfuscated_symbol]
 pub fn get_components() -> Vec<NamedComponent> {
     // let mut components: HashMap<&'static str, Box<dyn Component>> = HashMap::new();
 
+    // let a = crate::client::get_interface;
+
     return vec![
-        NamedComponent {name:,crate::client::MODULE_NAME, get_interface: crate::client::get_interface, start_runtime: todo!() },
+        #[cfg(feature = "client")]
+        crate::client::get_named_component(),
     ];
 
     // components

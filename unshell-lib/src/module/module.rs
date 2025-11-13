@@ -5,7 +5,6 @@ use crate::{ModuleError, logger::SetupLogger, logger::logger};
 use crate::*;
 
 pub struct Module {
-    // name: String,
     lib: Library,
 }
 
@@ -29,6 +28,9 @@ impl Module {
 
         Ok(symbol)
     }
+    // pub fn get_id(&self) -> &str {
+    //     self.id
+    // }
     // pub fn get_interface<T>(&self) -> Result<T, ModuleError> {
     //     if let Ok(interface_function) = self.get_symbol::<fn() -> T>(b"interface") {
     //         Ok(interface_function())

@@ -10,15 +10,13 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["client", "server"]
-client = []
-server = []
-obfuscate = ["unshell-obfuscate/obfuscate"]
+client = ["unshell-lib/client"]
+server = ["unshell-lib/server"]
+obfuscate = ["unshell-lib/obfuscate"]
 
 
 [dependencies]
-# unshell-modules = {path = "../unshell-modules"}
 unshell-lib = {path = "../unshell-lib"}
-unshell-obfuscate = {path = "../unshell-obfuscate"}
 
 
 [profile.release]
