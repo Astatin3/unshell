@@ -16,15 +16,15 @@ lazy_static! {
         id: symbol!("Test ID"),
         components: unshell_lib::get_components(),
         runtime_config: vec![RuntimeConfig {
-            parent_component: symbol!("client"),
-            name: symbol!("client runtime"),
-            config: HashMap::from([(symbol!("host"), obs!("localhost:1234"))]),
+            parent_component: symbol!("client").to_string(),
+            name: symbol!("client runtime").to_string(),
+            config: HashMap::from([(symbol!("host").to_string(), obs!("localhost:1234"))]),
         }],
     };
 }
 
 fn main() {
-    // #[cfg(not(feature = "obfuscate"))]
+    #[cfg(not(feature = "obfuscate"))]
     unshell_lib::logger::PrettyLogger::init();
 
     debug!("Initialized");

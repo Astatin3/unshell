@@ -2,7 +2,7 @@ use std::{
     io::Read,
     net::TcpStream,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
@@ -43,16 +43,6 @@ impl ClientRuntime {
                     }
                 };
                 info!("Connected");
-                // let reader = BufReader::new(stream.try_clone().unwrap());
-                // let mut writer = BufWriter::new(stream.try_clone().unwrap());
-
-                // let (a, b) = crossbeam_channel::unbounded();
-
-                // a.
-
-                // if join_receiver.len() == 0 {
-                //     join_receiver.recv().unwrap();
-                // }
 
                 while !join_clone.load(Ordering::Relaxed) {
                     let mut size_buf = [0u8; 4];
@@ -69,12 +59,29 @@ impl ClientRuntime {
                         Announcement::TestAnnouncement(s) => {
                             println!("Received test announcement: {}", s)
                         }
+                        _ => {}
                     }
                 }
             }),
             join_signal,
         })
     }
+
+    // pub fn send(&mut self, announcement: &Announcement) -> Result<(), ModuleError> {
+    //     let bytes = announcement.encode();
+
+    //     let mut streams = self.stream.lock().unwrap();
+
+    //     for stream in streams.iter_mut() {
+    //         stream.write_all(&u32::to_be_bytes(bytes.len() as u32))?;
+    //         stream.write_all(&bytes)?;
+    //         stream.flush()?;
+    //     }
+
+    //     println!("Announcement {:?} sent", announcement);
+
+    //     Ok(())
+    // }
 }
 
 impl ModuleRuntime for ClientRuntime {

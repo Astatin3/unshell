@@ -9,24 +9,24 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [features]
-default = ["client", "server"]
+default = ["client", "server", "log_debug"]
+
 client = ["unshell-lib/client"]
 server = ["unshell-lib/server"]
+
+log_debug = ["unshell-lib/log_debug"]
 obfuscate = ["unshell-lib/obfuscate"]
 
 
 [dependencies]
-unshell-lib = {path = "../unshell-lib"}
+unshell-lib = {path = "../unshell-lib", default-featues = false}
 
 
 [profile.release]
 strip = true # Strip symbols from the binary
-# strip = "debuginfo"
 opt-level = "s"  # Optimize for size
 lto = true
 codegen-units = 1
 panic = "abort"
 debug = false
 trim-paths = "all"
-
-# crate-type = ["cdylib"]

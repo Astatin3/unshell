@@ -10,14 +10,9 @@ mod components;
 pub use components::get_components;
 
 mod announcement;
-use std::{
-    fmt,
-    // sync::{Arc, Mutex},
-};
+use std::fmt;
 
 pub use announcement::Announcement;
-
-// use crate::module::{Interface, Manager};
 
 ///Generic error type for module-related operations.
 #[derive(Debug)]

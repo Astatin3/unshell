@@ -3,6 +3,8 @@ use std::collections::HashMap;
 // use bincode::{Decode, Encode};
 // use serde::{Deserialize, Serialize};
 
+use bincode::{Decode, Encode};
+
 use crate::{ModuleError, ModuleRuntime};
 
 // /// Payload config that is instantiated
@@ -19,11 +21,11 @@ pub struct PayloadConfig {
     pub runtime_config: Vec<RuntimeConfig>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct RuntimeConfig {
-    pub parent_component: &'static str,
-    pub name: &'static str,
-    pub config: HashMap<&'static str, String>,
+    pub parent_component: String,
+    pub name: String,
+    pub config: HashMap<String, String>,
 }
 
 #[derive(Clone)]

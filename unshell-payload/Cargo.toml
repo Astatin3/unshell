@@ -7,7 +7,10 @@ edition = "2024"
 [features]
 obfuscate = ["unshell-obfuscate/obfuscate"]
 log_debug = ["unshell-lib/log_debug"]
-# default = ["obfuscate"]
+
+client = ["unshell-lib/client"]
+server = ["unshell-lib/server"]
+
 
 [dependencies]
 env_logger = "0.11.8"
@@ -15,7 +18,7 @@ lazy_static = "1.5.0"
 libloading = "0.8.9"
 proc-macro2 = "1.0.103"
 
-unshell-lib = {path = "../unshell-lib"}
+unshell-lib = {path = "../unshell-lib", default-features = false}
 unshell-obfuscate = {path = "../unshell-obfuscate"}
 
 [profile.release]
@@ -26,4 +29,3 @@ codegen-units = 1
 panic = "abort"
 debug = false # Remove debug
 trim-paths="all"
-# panic=immediate-abort

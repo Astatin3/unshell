@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
@@ -51,6 +51,24 @@ impl ListenerRuntime {
         println!("Announcement {:?} sent", announcement);
 
         Ok(())
+    }
+
+    pub fn recv(&mut self) -> Result<Announcement, ModuleError> {
+        let stream = &mut self.streams.lock().unwrap()[0];
+
+        let mut size_buf = [0u8; 4];
+        stream.read_exact(&mut size_buf).unwrap();
+        let size = u32::from_be_bytes(size_buf);
+
+        let mut buf = vec![0u8; size as usize];
+
+        stream.read_exact(&mut buf).unwrap();
+
+        if let Some(announcement) = Announcement::decode(&buf) {
+            Ok(announcement)
+        } else {
+            Err(ModuleError::Error("Failed to decode announcement".into()))
+        }
     }
 }
 

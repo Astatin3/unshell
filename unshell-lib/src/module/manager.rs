@@ -19,18 +19,17 @@ pub struct Manager {
     pub modules: Vec<Module>,
 
     active_runtimes: Vec<Box<dyn ModuleRuntime>>,
-    // runtime_config: Vec<RuntimeConfig>,
     components: HashMap<String, NamedComponent>,
 }
 
 // static mut MANAGER_RUNTIME: Option<Arc<Mutex<Manager>>> = None;
 
 impl Manager {
-    fn new(id: &'static str, config: Vec<NamedComponent>, modules: Vec<Module>) -> Self {
+    fn new(id: &'static str, components: Vec<NamedComponent>, modules: Vec<Module>) -> Self {
         Self {
             id,
             modules,
-            components: config
+            components: components
                 .into_iter()
                 .map(|c| (c.name.to_string(), c))
                 .collect(),
@@ -43,6 +42,9 @@ impl Manager {
     pub fn run(config: &'static PayloadConfig, modules: Vec<Module>) {
         // Construct self
         let mut this = Self::new(&config.id, config.components.clone(), modules);
+
+        debug!("Imported {} base components", this.components.len());
+        debug!("Imported {} base runtimes", &config.runtime_config.len());
 
         // Load each of the pre-prepared modules
         this.load_components();
@@ -60,7 +62,7 @@ impl Manager {
         for module in &self.modules {
             // Load get_components function from shared object library
             let component_func = match module
-                .get_symbol::<fn() -> Vec<NamedComponent>>(symbol!(b"get_components"))
+                .get_symbol::<fn() -> Vec<NamedComponent>>(symbol!("get_components").as_bytes())
             {
                 Ok(func) => func,
                 Err(_) => {
@@ -70,7 +72,7 @@ impl Manager {
             };
 
             let components = component_func();
-            let component_name = "TODO";
+            let component_name = "TODO"; //TODO: Make this actually load component name
 
             debug!("{} - Retrieved payload metadata", component_name);
 
@@ -88,11 +90,11 @@ impl Manager {
         for runtime in runtimes {
             let mut this_lock = this.lock().unwrap();
 
-            let component = match this_lock.components.get(runtime.parent_component) {
+            let component = match this_lock.components.get(&runtime.parent_component) {
                 Some(component) => component,
                 None => {
                     warn!(
-                        "Could not find component {} which is referenced by runtime {}",
+                        "Could not find component '{}' which is referenced by runtime: {}",
                         runtime.parent_component, runtime.name
                     );
                     continue;
@@ -119,12 +121,18 @@ impl Manager {
             let mut this_lock = this.lock().unwrap();
 
             if this_lock.active_runtimes.len() <= 0 {
+                debug!("There are no more runtimes! Exiting...");
                 break;
             }
 
-            this_lock
-                .active_runtimes
-                .retain(|runtime| runtime.is_running());
+            this_lock.active_runtimes.retain(|runtime| {
+                if runtime.is_running() {
+                    true
+                } else {
+                    debug!("Runtime exited!"); //TODO: Make this better
+                    false
+                }
+            });
 
             drop(this_lock);
 
