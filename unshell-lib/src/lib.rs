@@ -10,7 +10,7 @@ mod components;
 pub use components::get_components;
 
 mod announcement;
-use std::fmt;
+use std::fmt::{self, Debug};
 
 pub use announcement::Announcement;
 

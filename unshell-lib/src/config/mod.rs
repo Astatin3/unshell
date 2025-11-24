@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 // use bincode::{Decode, Encode};
 // use serde::{Deserialize, Serialize};
@@ -38,6 +38,16 @@ pub struct NamedComponent {
                  dyn Fn(&'static RuntimeConfig) -> Result<Box<dyn ModuleRuntime>, ModuleError>
                      + Sync
              ),
+}
+
+impl Debug for NamedComponent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NamedComponent")
+            .field("name", &self.name)
+            // .field("get_interface", &self.get_interface)
+            // .field("start_runtime", &self.start_runtime)
+            .finish()
+    }
 }
 
 /// Trait that wraps the get_interface<T>() function inside of components

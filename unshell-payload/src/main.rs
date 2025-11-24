@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::fs::File;
+use std::{collections::HashMap, io::Read};
 
 use lazy_static::lazy_static;
 use unshell_lib::{
@@ -38,7 +39,15 @@ fn main() {
         let mut modules = Vec::new();
         for arg in args.skip(1) {
             debug!("Loading module: {}", arg);
-            modules.push(Module::new(&arg)?)
+
+            let mut file = File::open(arg).map_err(|e| ModuleError::Error(e.to_string().into()))?;
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer)
+                .map_err(|e| ModuleError::Error(e.to_string().into()))?;
+
+            modules.push(Module::new_bytes(&buffer)?)
+
+            // modules.push(Module::new(&arg)?)
         }
 
         // Run the manager, this is blocking.
