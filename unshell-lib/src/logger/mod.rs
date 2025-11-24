@@ -41,6 +41,7 @@ impl Logger for DefaultLogger {
 }
 
 pub fn set_logger_box(logger: Box<dyn Logger>) {
+    #[cfg(feature = "log")]
     unsafe {
         LOGGER = Box::leak(logger);
     }

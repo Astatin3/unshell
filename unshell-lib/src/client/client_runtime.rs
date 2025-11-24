@@ -85,10 +85,7 @@ impl ClientRuntime {
 }
 
 impl ModuleRuntime for ClientRuntime {
-    // fn init(&mut self) {}
-
     fn is_running(&self) -> bool {
-        // println!("Checking if running");
         !self.thread_handle.is_finished()
     }
 
@@ -97,6 +94,5 @@ impl ModuleRuntime for ClientRuntime {
             self.join_signal.store(true, Ordering::Relaxed);
             let _ = self.thread_handle.join();
         }
-        // drop(self);
     }
 }

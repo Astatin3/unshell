@@ -2,6 +2,7 @@ use unshell_obfuscate::obfuscated_symbol;
 
 use crate::config::NamedComponent;
 
+/// Publicly facing accessor function for the payload to load inside the breakout modules.
 #[obfuscated_symbol]
 pub fn get_components() -> Vec<NamedComponent> {
     return vec![

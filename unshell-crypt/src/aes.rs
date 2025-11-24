@@ -83,10 +83,12 @@ pub fn decrypt_aes_lines(input: &str, key_str: &str, iv: [u8; 16]) -> String {
     let mut decrypted_result = input.to_string();
     let mut total_offset = 0;
 
+    // Split input by segments of base62 chars, denoted by two _'s, and attempt to decode
     for aes_block in Regex::new(r"_([0-9a-zA-Z]*?)_").unwrap().find_iter(&input) {
         let range = aes_block.range();
         let aes_block = aes_block.as_str()[1..(aes_block.len() - 1)].to_string();
 
+        // If the decryption is successful, offset the current offset position
         if let Ok(decrypted_block) = decrypt_aes(&aes_block, key_str, iv) {
             let range = (range.start + total_offset as usize)..(range.end + total_offset as usize);
 
@@ -95,6 +97,7 @@ pub fn decrypt_aes_lines(input: &str, key_str: &str, iv: [u8; 16]) -> String {
 
             decrypted_result.replace_range(range, &decrypted_block);
         } else {
+            // If the decode is unsuccessful, leave the underscore-denoted region as is
             continue;
         }
     }
