@@ -1,9 +1,21 @@
-use std::io::{Write, stdin, stdout};
+use lazy_static::lazy_static;
+use unshell_lib::{config::PayloadConfig, module::Manager};
+use unshell_obfuscate::symbol;
 
-use unshell_lib::Announcement;
+lazy_static! {
+    static ref PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
+        id: symbol!("Test ID"),
+        components: unshell_lib::get_components(),
+        runtime_config: vec![],
+    };
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut serverruntime = unshell_lib::server::ListenerRuntime::new();
+    unshell_lib::logger::PrettyLogger::init();
+
+    Manager::run(&PAYLOAD_CONFIG, Vec::new());
+
+    // let mut serverruntime = unshell_lib::server::ListenerRuntime::new();
 
     // loop {
     //     print!("> ");
@@ -33,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     // println!("{:?}", args);
     // }
 
-    serverruntime.send(&Announcement::GetRuntimes)?;
+    // serverruntime.send(&Announcement::GetRuntimes)?;
 
     // let response = serverruntime.
 

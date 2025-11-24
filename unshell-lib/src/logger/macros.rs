@@ -41,7 +41,7 @@ macro_rules! debug {
     }};
     ($fmt:tt, $($arg:expr),*) => {{
         let _ = $fmt;
-        let _ = ($($arg),*);
+        $(let _ = $arg;)*
     }};
 }
 

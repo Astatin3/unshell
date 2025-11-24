@@ -1,9 +1,9 @@
 [package]
 name = "unshell-cli"
-version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 unshell-lib = {path = "../unshell-lib"}
 unshell-obfuscate = {path = "../unshell-obfuscate"}
 unshell-crypt = {path = "../unshell-crypt"}
+lazy_static = "1.5.0"

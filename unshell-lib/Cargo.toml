@@ -3,13 +3,14 @@ name = "unshell-lib"
 edition = "2024"
 
 [features]
-default = ["client", "server"]
+default = ["client", "server", "log_debug"]
 
 # Components
 client = []
 server = []
 
-log_debug = []
+log = []
+log_debug = ["log"]
 obfuscate = ["unshell-obfuscate/obfuscate"]
 
 

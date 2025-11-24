@@ -2,7 +2,7 @@ use std::{
     io::Read,
     net::TcpStream,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},

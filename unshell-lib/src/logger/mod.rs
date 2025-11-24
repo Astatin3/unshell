@@ -1,4 +1,10 @@
+// Choose if the macros are enabled based on the feature setting
+#[cfg(feature = "log")]
 pub mod macros;
+
+#[cfg(not(feature = "log"))]
+pub mod macros_disabled;
+
 mod pretty_logger;
 
 use std::time::SystemTime;
