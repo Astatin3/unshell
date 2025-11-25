@@ -20,7 +20,10 @@ static PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
     runtime_config: vec![RuntimeConfig {
         parent_component: symbol!("client").to_string(),
         name: symbol!("client runtime").to_string(),
-        config: HashMap::from([(symbol!("host").to_string(), obs!("localhost:1234"))]),
+        config: HashMap::from([
+            (symbol!("host").to_string(), obs!("localhost:1234")),
+            (symbol!("retry").to_string(), obs!("1000")),
+        ]),
     }],
 };
 

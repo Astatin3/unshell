@@ -10,7 +10,7 @@ pub trait Stream<T>: Send + Sync {
     fn is_alive(&self) -> bool;
 
     fn len(&self) -> usize;
-    fn read(&mut self) -> Option<T>;
+    fn read(&self) -> Vec<T>;
 
     fn write(&mut self, data: T) -> Result<(), ModuleError>;
 

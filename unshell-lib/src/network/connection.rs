@@ -43,11 +43,8 @@ impl Stream<Announcement> for Connection {
         self.rx.len()
     }
 
-    fn read(&mut self) -> Option<Announcement> {
-        match self.rx.is_empty() {
-            true => None,
-            false => self.rx.recv().ok(),
-        }
+    fn read(&self) -> Vec<Announcement> {
+        self.rx.try_iter().collect()
     }
 
     fn write(&mut self, data: Announcement) -> Result<(), crate::ModuleError> {

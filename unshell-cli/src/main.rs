@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    io::{Write, stdin, stdout},
+};
 
 use static_init::dynamic;
 use unshell_lib::{
@@ -41,39 +44,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Manager::st
 
-    Manager::join(manager);
+    // Manager::join(manager);
 
-    // loop {
-    //     print!("> ");
-    //     stdout().flush().expect("Failed to flush stdout");
-    //     let mut input = String::new();
-    //     stdin().read_line(&mut input).expect("Failed to read line");
+    loop {
+        print!("> ");
+        stdout().flush().expect("Failed to flush stdout");
+        let mut input = String::new();
+        stdin().read_line(&mut input).expect("Failed to read line");
 
-    //     let args = input.trim().split(" ").collect::<Vec<&str>>();
+        let args = input.trim().split(" ").collect::<Vec<&str>>();
 
-    //     match args[0] {
-    //         "" => {}
-    //         "test" => {
-    //             if let Some(arg) = args.get(1) {
-    //                 println!("Test with argument: {}", arg);
-    //                 serverruntime
-    //                     .send(&Announcement::TestAnnouncement(arg.to_string()))
-    //                     .unwrap();
-    //             } else {
-    //                 println!("Test without argument");
-    //             }
-    //         }
-    //         _ => {
-    //             println!("Invalid Command: '{}'", args[0]);
-    //         }
-    //     }
+        match args[0] {
+            "" => {}
+            "test" => {
+                if let Some(arg) = args.get(1) {
+                    println!("Test with argument: {}", arg);
+                    // serverruntime
+                    //     .send(&Announcement::TestAnnouncement(arg.to_string()))
+                    //     .unwrap();
+                } else {
+                    println!("Test without argument");
+                }
+            }
+            _ => {
+                println!("Invalid Command: '{}'", args[0]);
+            }
+        }
 
-    //     // println!("{:?}", args);
-    // }
+        // println!("{:?}", args);
+    }
 
     // serverruntime.send(&Announcement::GetRuntimes)?;
 
     // let response = serverruntime.
 
-    Ok(())
+    // Ok(())
 }

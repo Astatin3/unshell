@@ -1,4 +1,7 @@
 mod manager;
+mod manager_announcement;
+mod manager_connection;
+
 mod module;
 
 mod proc_load;
