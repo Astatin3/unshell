@@ -8,5 +8,7 @@ pub fn get_components() -> Vec<NamedComponent> {
     return vec![
         #[cfg(feature = "client")]
         crate::client::get_named_component(),
+        #[cfg(feature = "server")]
+        crate::server::get_named_component(),
     ];
 }

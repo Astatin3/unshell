@@ -40,6 +40,7 @@ impl Logger for DefaultLogger {
     fn log(&self, _: Record) {}
 }
 
+#[allow(unused_variables)]
 pub fn set_logger_box(logger: Box<dyn Logger>) {
     #[cfg(feature = "log")]
     unsafe {

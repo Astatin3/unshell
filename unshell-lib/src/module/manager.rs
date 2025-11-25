@@ -39,7 +39,7 @@ impl Manager {
 
     /// Create Manager, and run initilization for each Module
     #[allow(static_mut_refs)]
-    pub fn run(config: &'static PayloadConfig, modules: Vec<Module>) {
+    pub fn start(config: &'static PayloadConfig, modules: Vec<Module>) -> Arc<Mutex<Self>> {
         // Construct self
         let mut this = Self::new(&config.id, config.components.clone(), modules);
 
@@ -51,11 +51,12 @@ impl Manager {
 
         let this = Arc::new(Mutex::new(this));
 
-        Self::start_runtimes(this.clone(), &config.runtime_config);
+        debug!("Starting runtimes...");
+        for runtime in &config.runtime_config {
+            Self::start_runtime(this.clone(), runtime);
+        }
 
-        // drop(config);
-
-        Self::join(this);
+        this
     }
 
     fn load_components(&mut self) {
@@ -84,39 +85,8 @@ impl Manager {
         }
     }
 
-    /// Start each runtime
-    fn start_runtimes(this: Arc<Mutex<Self>>, runtimes: &'static Vec<RuntimeConfig>) {
-        debug!("Starting runtimes...");
-        for runtime in runtimes {
-            let mut this_lock = this.lock().unwrap();
-
-            let component = match this_lock.components.get(&runtime.parent_component) {
-                Some(component) => component,
-                None => {
-                    warn!(
-                        "Could not find component '{}' which is referenced by runtime: {}",
-                        runtime.parent_component, runtime.name
-                    );
-                    continue;
-                }
-            };
-
-            debug!("Starting runtime: {}", runtime.name);
-
-            let runtime = match (*component.start_runtime)(runtime) {
-                Ok(runtime) => runtime,
-                Err(e) => {
-                    warn!("Failed to start runtime: {:?}", e);
-                    continue;
-                }
-            };
-
-            this_lock.active_runtimes.push(runtime);
-        }
-    }
-
     /// Iterateratively loop through all runtimes, until all are finished executing
-    fn join(this: Arc<Mutex<Self>>) {
+    pub fn join(this: Arc<Mutex<Self>>) {
         loop {
             let mut this_lock = this.lock().unwrap();
 
@@ -140,20 +110,35 @@ impl Manager {
         }
     }
 
-    // pub fn get_component(&self) -> HashMap<&'static str, Box<dyn Component>> {
-    //     self.components.clone()
-    // }
+    /// Start a runtime
+    pub fn start_runtime<'a>(this: Arc<Mutex<Self>>, runtime: &'static RuntimeConfig) {
+        let mut this_lock = this.lock().unwrap();
+
+        let component = match this_lock.components.get(&runtime.parent_component) {
+            Some(component) => component,
+            None => {
+                warn!(
+                    "Could not find component '{}' which is referenced by runtime: {}",
+                    runtime.parent_component, runtime.name
+                );
+                return;
+            }
+        };
+
+        debug!("Starting runtime: {}", runtime.name);
+
+        let runtime = match (*component.start_runtime)(runtime) {
+            Ok(runtime) => runtime,
+            Err(e) => {
+                warn!("Failed to start runtime: {:?}", e);
+                return;
+            }
+        };
+
+        this_lock.active_runtimes.push(runtime);
+    }
 
     pub fn get_name(&self) -> &str {
         self.id
     }
-
-    // pub extern "C" fn test1234(&self, float: f32) {
-    //     info!("Manager Test Sucsessfull! {}", float.powf(2.));
-    // }
-
-    // #[allow(static_mut_refs, improper_ctypes_definitions)]
-    // pub extern "C" fn get_manager() -> Arc<Mutex<Manager>> {
-    //     unsafe { MANAGER_RUNTIME.clone().unwrap() }
-    // }
 }

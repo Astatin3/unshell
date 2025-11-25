@@ -5,10 +5,11 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::*;
+use crate::{config::RuntimeConfig, *};
 
 pub struct ListenerRuntime {
     thread_handle: JoinHandle<()>,
+    // join_signal: Arc<AtomicBool>,
     // listener: TcpListener,
     streams: Arc<Mutex<Vec<TcpStream>>>,
     // reader: BufReader<TcpListener>,
@@ -16,9 +17,19 @@ pub struct ListenerRuntime {
 }
 
 impl ListenerRuntime {
-    pub fn new() -> ListenerRuntime {
+    pub fn new(config: &'static RuntimeConfig) -> Result<Self, ModuleError> {
         // info!("Starting listener runtime on {}",);
-        let listener = TcpListener::bind("127.0.0.1:1234").unwrap();
+
+        let host = match config.config.get("host") {
+            Some(host) => host,
+            None => {
+                return Err(ModuleError::Error(
+                    "Could not find HOST in Server Runtime".into(),
+                ));
+            }
+        };
+
+        let listener = TcpListener::bind(host).unwrap();
         let streams = Arc::new(Mutex::new(Vec::new()));
 
         let streams_clone = streams.clone();
@@ -27,14 +38,14 @@ impl ListenerRuntime {
             let streams = streams_clone.clone();
             for stream in listener.incoming() {
                 let stream = stream.unwrap();
-                println!("New connection from {}", stream.peer_addr().unwrap());
+                debug!("New connection from {}", stream.peer_addr().unwrap());
                 streams.lock().unwrap().push(stream);
             }
         });
-        Self {
+        Ok(Self {
             thread_handle,
             streams,
-        }
+        })
     }
 
     pub fn send(&mut self, announcement: &Announcement) -> Result<(), std::io::Error> {
@@ -48,7 +59,7 @@ impl ListenerRuntime {
             stream.flush()?;
         }
 
-        println!("Announcement {:?} sent", announcement);
+        debug!("Announcement {:?} sent", announcement);
 
         Ok(())
     }
@@ -81,6 +92,7 @@ impl ModuleRuntime for ListenerRuntime {
 
     fn kill(self: Box<Self>) {
         if !self.thread_handle.is_finished() {
+            // self.join_signal.store(true, Ordering::Relaxed);
             let _ = self.thread_handle.join();
         }
         // drop(self);

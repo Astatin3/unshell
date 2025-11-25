@@ -4,6 +4,7 @@ pub mod client;
 pub mod config;
 pub mod logger;
 pub mod module;
+pub mod network;
 pub mod server;
 
 mod components;
