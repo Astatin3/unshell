@@ -11,9 +11,14 @@ mod components;
 pub use components::get_components;
 
 mod announcement;
-use std::fmt::{self, Debug};
+use std::{
+    fmt::{self, Debug},
+    sync::{Arc, Mutex},
+};
 
 pub use announcement::Announcement;
+
+use crate::module::Manager;
 
 ///Generic error type for module-related operations.
 #[derive(Debug)]
@@ -47,6 +52,8 @@ impl fmt::Display for ModuleError {
 
 /// Trait for defining modules that have a runtime.
 pub trait ModuleRuntime: Send + Sync {
+    fn init(&mut self, manager: Arc<Mutex<Manager>>) -> Result<(), ModuleError>;
+
     /// Returns true if the module is running.
     /// After returning false, the module will be dropped.
     fn is_running(&self) -> bool;

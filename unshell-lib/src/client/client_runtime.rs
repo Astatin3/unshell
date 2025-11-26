@@ -1,5 +1,4 @@
 use std::{
-    io::Read,
     net::TcpStream,
     sync::{
         Arc,
@@ -9,83 +8,24 @@ use std::{
     time::Duration,
 };
 
-use crate::{config::RuntimeConfig, *};
+use crate::{config::RuntimeConfig, network::Stream, *};
 // use unshell_modules::{Manager, ModuleRuntime};
 
-use crate::{Announcement, ModuleRuntime};
+use crate::ModuleRuntime;
 
 pub struct ClientRuntime {
-    thread_handle: JoinHandle<()>,
+    config: &'static RuntimeConfig,
+    thread_handle: Option<JoinHandle<()>>,
     join_signal: Arc<AtomicBool>,
 }
 
 impl ClientRuntime {
     pub fn new(config: &'static RuntimeConfig) -> Result<ClientRuntime, ModuleError> {
         let join_signal = Arc::new(AtomicBool::new(false));
-        let join_clone = join_signal.clone();
-
-        let host = match config.config.get("host") {
-            Some(host) => host,
-            None => {
-                return Err(ModuleError::Error(
-                    "Could not find HOST in Client Runtime".into(),
-                ));
-            }
-        };
-
-        let retry = match config.config.get("retry") {
-            Some(host) => Duration::from_millis(host.parse::<u64>().unwrap()),
-            None => {
-                return Err(ModuleError::Error(
-                    "Could not find RETRY in Client Runtime".into(),
-                ));
-            }
-        };
 
         Ok(Self {
-            thread_handle: thread::spawn(move || {
-                debug!("Connecting to server...");
-
-                loop {
-                    let mut stream = match TcpStream::connect(host) {
-                        Ok(stream) => stream,
-                        Err(e) => {
-                            error!("Failed to connect to server: {}", e);
-                            thread::sleep(retry);
-                            continue;
-                        }
-                    };
-                    info!("Connected");
-
-                    while !join_clone.load(Ordering::Relaxed) {
-                        let mut size_buf = [0u8; 4];
-                        match stream.read_exact(&mut size_buf) {
-                            Ok(()) => {}
-                            Err(_) => {
-                                break;
-                            }
-                        };
-                        let size = u32::from_be_bytes(size_buf);
-
-                        let mut buf = vec![0u8; size as usize];
-
-                        stream.read_exact(&mut buf).unwrap();
-
-                        let a = Announcement::decode(&buf).unwrap();
-
-                        match a {
-                            Announcement::TestAnnouncement(s) => {
-                                println!("Received test announcement: {}", s)
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    debug!("Disconnected from {}", host);
-
-                    thread::sleep(retry);
-                }
-            }),
+            config,
+            thread_handle: None,
             join_signal,
         })
     }
@@ -109,13 +49,75 @@ impl ClientRuntime {
 
 impl ModuleRuntime for ClientRuntime {
     fn is_running(&self) -> bool {
-        !self.thread_handle.is_finished()
+        self.thread_handle.as_ref().is_none_or(|h| h.is_finished())
     }
 
     fn kill(self: Box<Self>) {
-        if !self.thread_handle.is_finished() {
+        if !self.is_running() {
             self.join_signal.store(true, Ordering::Relaxed);
-            let _ = self.thread_handle.join();
+            if let Some(handle) = self.thread_handle {
+                let _ = handle.join();
+            }
         }
+    }
+
+    fn init(&mut self, manager: Arc<Mutex<Manager>>) -> Result<(), ModuleError> {
+        let host = match self.config.config.get("host") {
+            Some(host) => host,
+            None => {
+                return Err(ModuleError::Error(
+                    "Could not find HOST in Client Runtime".into(),
+                ));
+            }
+        };
+
+        let retry = match self.config.config.get("retry") {
+            Some(retry) => Duration::from_millis(retry.parse::<u64>().unwrap()),
+            None => {
+                return Err(ModuleError::Error(
+                    "Could not find RETRY in Client Runtime".into(),
+                ));
+            }
+        };
+
+        // let join_clone = self.join_signal.clone();
+
+        thread::spawn(move || {
+            debug!("Connecting to server...");
+
+            loop {
+                let stream = match TcpStream::connect(host) {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        error!("Failed to connect to server: {}", e);
+                        thread::sleep(retry);
+                        continue;
+                    }
+                };
+                info!("Connected to {}", host);
+
+                thread::sleep(Duration::from_millis(100));
+                // Duration::from_millis(100);
+
+                let stream = crate::network::TcpStream::new(stream);
+                let stream_clone = stream.try_clone().unwrap();
+
+                manager.lock().unwrap().add_connection(stream_clone);
+
+                // while !join_clone.load(Ordering::Relaxed) {
+
+                // }
+
+                while stream.is_alive() {
+                    thread::sleep(Duration::from_millis(100));
+                }
+
+                debug!("Disconnected from 1234 {}", host);
+
+                thread::sleep(retry);
+            }
+        });
+
+        Ok(())
     }
 }

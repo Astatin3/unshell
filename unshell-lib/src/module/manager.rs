@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     config::{NamedComponent, PayloadConfig, RuntimeConfig},
-    network::Connection,
+    network::Stream,
     *,
 };
 use module::Module;
@@ -24,7 +24,7 @@ pub struct Manager {
     components: HashMap<String, NamedComponent>,
     active_runtimes: Vec<Box<dyn ModuleRuntime>>,
 
-    pub connections: Vec<Connection>,
+    pub connections: Vec<Box<dyn Stream<Announcement>>>,
 }
 
 // static mut MANAGER_RUNTIME: Option<Arc<Mutex<Manager>>> = None;
@@ -60,9 +60,16 @@ impl Manager {
 
         let this = Arc::new(Mutex::new(this));
 
-        debug!("Starting runtimes...");
+        debug!("Creating runtimes...");
         for runtime in &config.runtime_config {
-            Self::start_runtime(this.clone(), runtime);
+            Self::create_runtime(this.clone(), runtime);
+        }
+
+        debug!("Starting runtimes...");
+        for runtime in &mut this.lock().unwrap().active_runtimes {
+            if let Err(e) = runtime.init(this.clone()) {
+                warn!("Failed to start runtime: {}", e);
+            }
         }
 
         this.lock().unwrap().handle = Some(Self::start_thread(this.clone()));
@@ -141,7 +148,7 @@ impl Manager {
     }
 
     /// Start a runtime
-    pub fn start_runtime<'a>(this: Arc<Mutex<Self>>, runtime: &'static RuntimeConfig) {
+    fn create_runtime<'a>(this: Arc<Mutex<Self>>, runtime: &'static RuntimeConfig) {
         let mut this_lock = this.lock().unwrap();
 
         let component = match this_lock.components.get(&runtime.parent_component) {
@@ -166,6 +173,21 @@ impl Manager {
         };
 
         this_lock.active_runtimes.push(runtime);
+    }
+
+    pub fn add_runtime(
+        this: Arc<Mutex<Self>>,
+        runtime: &'static RuntimeConfig,
+    ) -> Result<(), ModuleError> {
+        Self::create_runtime(this.clone(), runtime);
+
+        this.lock()
+            .unwrap()
+            .active_runtimes
+            .iter_mut()
+            .last()
+            .unwrap()
+            .init(this.clone())
     }
 
     pub fn get_name(&self) -> &str {

@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: HashMap::from([(symbol!("host").to_string(), obs!("localhost:1234"))]),
     });
 
-    Manager::start_runtime(manager.clone(), runtime);
+    Manager::add_runtime(manager.clone(), runtime)?;
 
     // Manager::st
 
@@ -56,9 +56,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match args[0] {
             "" => {}
+            "c" => {
+                println!(
+                    "Current connections: {}",
+                    manager.lock().unwrap().connections.len()
+                )
+            }
             "test" => {
                 if let Some(arg) = args.get(1) {
                     println!("Test with argument: {}", arg);
+
+                    manager
+                        .lock()
+                        .unwrap()
+                        .broadcast(unshell_lib::Announcement::TestAnnouncement(arg.to_string()))?;
+
                     // serverruntime
                     //     .send(&Announcement::TestAnnouncement(arg.to_string()))
                     //     .unwrap();

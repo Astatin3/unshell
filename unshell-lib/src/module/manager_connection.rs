@@ -1,11 +1,7 @@
-use crate::{
-    Announcement,
-    module::Manager,
-    network::{Connection, Stream},
-};
+use crate::{Announcement, ModuleError, module::Manager, network::Stream};
 
 impl Manager {
-    pub fn add_connection(&mut self, connection: Connection) {
+    pub fn add_connection(&mut self, connection: Box<dyn Stream<Announcement>>) {
         self.connections.push(connection);
     }
 
@@ -17,13 +13,20 @@ impl Manager {
         // Collect all incoming announcements
         let announcements = self
             .connections
-            .iter()
-            .map(|c| c.read())
+            .iter_mut()
+            .map(|c| c.try_read())
             .flat_map(|array| array)
             .collect::<Vec<Announcement>>();
 
         for announcement in announcements {
             self.recv_announcement(&announcement)
         }
+    }
+
+    pub fn broadcast(&mut self, announcement: Announcement) -> Result<(), ModuleError> {
+        for connection in &mut self.connections {
+            connection.write(announcement.clone())?;
+        }
+        Ok(())
     }
 }
