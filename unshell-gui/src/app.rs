@@ -1,4 +1,4 @@
-use crate::flowchart::FlowChart;
+use crate::{config::Config, flowchart::FlowChart};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -6,11 +6,11 @@ use crate::flowchart::FlowChart;
 pub struct TemplateApp {
     tab: Tab,
 
-    #[serde(skip)]
     flowchart: FlowChart,
+    config: Config,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq)]
 pub enum Tab {
     Flowchart,
     Test,
@@ -24,6 +24,7 @@ impl Default for TemplateApp {
             // label: "Hello World!".to_owned(),
             // value: 2.7,
             flowchart: FlowChart::new(),
+            config: Config::new(),
         }
     }
 }
@@ -58,29 +59,25 @@ impl eframe::App for TemplateApp {
         egui::TopBottomPanel::top("tab_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
 
-            egui::MenuBar::new()
-                // .style(StyleModifier::new(|s| s.visuals))
-                .ui(ui, |ui| {
-                    if ui
-                        .menu_button("Network", |ui| if ui.button("Quit").clicked() {})
-                        .response
-                        .clicked()
-                    {
-                        self.tab = Tab::Flowchart;
-                    };
+            egui::MenuBar::new().ui(ui, |ui| {
+                if ui
+                    .selectable_label(self.tab == Tab::Flowchart, "Network")
+                    .clicked()
+                {
+                    self.tab = Tab::Flowchart;
+                }
 
-                    if ui
-                        .menu_button("Test", |ui| if ui.button("Quit").clicked() {})
-                        .response
-                        .clicked()
-                    {
-                        self.tab = Tab::Test;
-                    };
+                if ui
+                    .selectable_label(self.tab == Tab::Test, self.config.title())
+                    .clicked()
+                {
+                    self.tab = Tab::Test;
+                }
 
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        egui::widgets::global_theme_preference_switch(ui);
-                    });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    egui::widgets::global_theme_preference_switch(ui);
                 });
+            });
         });
 
         egui::TopBottomPanel::bottom("tab_panel").show(ctx, |ui| {
@@ -90,54 +87,12 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        // egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-        //     // The top panel is often a good place for a menu bar:
-
-        //     egui::MenuBar::new().ui(ui, |ui| {
-        //         if ui
-        //             .menu_button("Network", |ui| if ui.button("Quit").clicked() {})
-        //             .response
-        //             .clicked()
-        //         {
-        //             self.tab = Tab::Flowchart;
-        //         };
-
-        //         if ui
-        //             .menu_button("Test", |ui| if ui.button("Quit").clicked() {})
-        //             .response
-        //             .clicked()
-        //         {
-        //             self.tab = Tab::Test;
-        //         };
-        //     });
-        // });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.tab {
-                Tab::Flowchart => {
-                    self.flowchart.paint(ui);
-                }
-                Tab::Test => {
-                    // The central panel the region left after adding TopPanel's and SidePanel's
-                    ui.heading("eframe template");
-
-                    ui.horizontal(|ui| {
-                        ui.label("Write something: ");
-                        // ui.text_edit_singleline(&mut self.label);
-                    });
-
-                    // ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-                    // if ui.button("Increment").clicked() {
-                    //     self.value += 1.0;
-                    // }
-
-                    ui.separator();
-
-                    ui.add(egui::github_link_file!(
-                        "https://github.com/emilk/eframe_template/blob/main/",
-                        "Source code."
-                    ));
-                }
+        egui::CentralPanel::default().show(ctx, |ui| match self.tab {
+            Tab::Flowchart => {
+                self.flowchart.paint(ui);
+            }
+            Tab::Test => {
+                self.config.update(ui);
             }
         });
     }

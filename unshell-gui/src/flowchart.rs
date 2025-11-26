@@ -8,6 +8,8 @@ const BG_STROKE: Stroke = Stroke {
     color: Color32::GRAY,
 };
 
+#[derive(serde::Deserialize, serde::Serialize)]
+
 pub struct FlowChart {
     // frame: Frame,
     container: DraggableContainer,
@@ -46,14 +48,15 @@ impl FlowChart {
                 0.,
                 Color32::PURPLE,
                 BG_STROKE,
-                egui::StrokeKind::Middle,
+                egui::StrokeKind::Outside,
             );
             ui.label("Tests");
-            ui.button("Test");
+            let _ = ui.button("Test");
         })
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct DraggableContainer {
     pub pos: egui::Pos2,
     pub size: egui::Vec2,
