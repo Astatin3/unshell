@@ -100,6 +100,7 @@ impl Config {
                             .column(Column::remainder())
                             .column(Column::remainder())
                             .column(Column::remainder())
+                            .column(Column::auto().resizable(false))
                             .min_scrolled_height(0.0)
                             .sense(egui::Sense::click());
 
@@ -117,6 +118,7 @@ impl Config {
                                 header.col(|ui| {
                                     ui.strong("Runtimes");
                                 });
+                                header.col(|_| {});
                             })
                             .body(|mut body| {
                                 for i in 0..self.current_payloads.len() {
@@ -137,6 +139,20 @@ impl Config {
                                         });
                                         row.col(|ui| {
                                             ui.label("A");
+                                        });
+                                        row.col(|ui| {
+                                            if ui.button("Edit").clicked() {
+                                                self.state = ConfigState::EditConfig(
+                                                    i,
+                                                    self.current_payloads[i].clone(),
+                                                );
+                                            }
+                                            // if ui.button("Delete").clicked() {
+                                            //     self.state = ConfigState::EditConfig(
+                                            //         i,
+                                            //         self.current_payloads[i].clone(),
+                                            //     );
+                                            // }
                                         });
 
                                         if row.response().clicked() {

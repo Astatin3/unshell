@@ -2688,6 +2688,7 @@ dependencies = [
  "egui_extras",
  "log",
  "pretty_env_logger",
+ "rand 0.9.2",
  "serde",
  "unshell-lib",
  "wasm-bindgen-futures",
