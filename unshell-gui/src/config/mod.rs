@@ -15,8 +15,8 @@ enum ConfigState {
     EditConfig(usize, PayloadConfig),
 }
 
-impl Config {
-    pub fn new() -> Self {
+impl Default for Config {
+    fn default() -> Self {
         Self {
             state: ConfigState::Base,
             current_payloads: vec![PayloadConfig {
@@ -26,14 +26,16 @@ impl Config {
             }],
         }
     }
+}
 
-    pub fn title(&self) -> &str {
-        match self.state {
-            ConfigState::Base => "Config",
-            ConfigState::NewConfig(..) => "Config/New",
-            ConfigState::EditConfig(..) => "Config/Edit",
-        }
-    }
+impl Config {
+    // pub fn title(&self) -> &str {
+    //     match self.state {
+    //         ConfigState::Base => "Config",
+    //         ConfigState::NewConfig(..) => "Config/New",
+    //         ConfigState::EditConfig(..) => "Config/Edit",
+    //     }
+    // }
 
     pub fn update(&mut self, ui: &mut Ui) {
         match &mut self.state {

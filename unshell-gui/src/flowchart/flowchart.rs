@@ -1,8 +1,4 @@
-use egui::Scene;
-use egui::Shape;
-use egui::Ui;
-use egui::Vec2;
-use egui::{Color32, Painter, Pos2, Rect};
+use egui::{Color32, Painter, Pos2, Rect, Scene, Shape, Ui};
 
 use crate::flowchart::CONNECTION_STROKE;
 use crate::flowchart::GROUP_BORDER_MARGIN;
@@ -19,8 +15,8 @@ pub struct FlowChart {
     pub groups: Vec<Vec<usize>>,
 }
 
-impl FlowChart {
-    pub fn new() -> Self {
+impl Default for FlowChart {
+    fn default() -> Self {
         let mut this = Self {
             scene_rect: Rect::ZERO,
             containers: vec![
@@ -41,7 +37,9 @@ impl FlowChart {
 
         this
     }
+}
 
+impl FlowChart {
     fn paint_bg(rect: &Rect, painter: &Painter) {
         let h_start = (rect.min.x / TARGET_LINE_GAP).round() as i32;
         let h_end = ((rect.min.x + rect.width()) / TARGET_LINE_GAP).round() as i32 + 1;
@@ -56,19 +54,13 @@ impl FlowChart {
         }
     }
 
-    fn paint_groups(
-        rect: &Rect,
-        groups: &Vec<Vec<usize>>,
-        containers: &Vec<DraggableContainer>,
-        ui: &mut Ui,
-    ) {
-        let center = rect.center();
+    fn paint_groups(groups: &Vec<Vec<usize>>, containers: &Vec<DraggableContainer>, ui: &mut Ui) {
         for group in groups {
             let mut points = Vec::new();
 
             for n in group {
                 let container = &containers[*n];
-                let pos = container.get_pos(&Pos2::ZERO);
+                let pos = container.pos.to_pos2();
                 let size = container.size;
                 points.append(&mut vec![
                     Pos2 {
@@ -114,16 +106,11 @@ impl FlowChart {
         let response = scene
             .show(ui, &mut self.scene_rect, |mut ui| {
                 Self::paint_bg(rect, ui.painter());
-                Self::paint_groups(rect, groups, containers, &mut ui);
-
-                let center = Pos2::ZERO;
+                Self::paint_groups(groups, containers, &mut ui);
 
                 for (a, b) in &self.connections {
                     ui.painter().line_segment(
-                        [
-                            containers[*a].get_pos(&center),
-                            containers[*b].get_pos(&center),
-                        ],
+                        [containers[*a].pos.to_pos2(), containers[*b].pos.to_pos2()],
                         CONNECTION_STROKE,
                     );
                 }

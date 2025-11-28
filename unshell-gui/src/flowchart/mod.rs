@@ -23,6 +23,6 @@ const GROUP_BORDER_MARGIN: f32 = 20.;
 static REPULSION_STRENGTH: f32 = 100000.0; // repulsion_strength
 static ATTRACTION_STRENGTH: f32 = 0.01; // attraction_strength
 static CENTER_ATTRACTION_STRENGTH: f32 = 0.01; // attraction_strength
-static GROUP_ATTRACTION_STRENGTH: f32 = 0.001; // attraction_strength
+static GROUP_ATTRACTION_STRENGTH: f32 = 0.01; // attraction_strength
 static REST_LENGTH: f32 = 50.0; // rest_length
 static DAMPING: f32 = 0.9; // damping

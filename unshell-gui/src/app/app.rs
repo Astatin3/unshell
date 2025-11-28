@@ -1,30 +1,37 @@
-use crate::{config::Config, flowchart::FlowChart};
+use egui::Frame;
+use egui_tiles::Tree;
+
+use crate::app::{AppState, windows::WindowWrapper};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
-    tab: Tab,
-
-    flowchart: FlowChart,
-    config: Config,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq)]
-pub enum Tab {
-    Flowchart,
-    Test,
+    // tab: Tab,
+    state: AppState,
+    tree: Tree<WindowWrapper>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
+        // let mut tiles = egui_tiles::Tiles::default();
+
+        // let invis_1 = tiles.insert_pane(WindowWrapper {
+        //     nr: 0,
+        //     window: AppWindow::None,
+        // });
+        // let invis_2 = tiles.insert_pane(WindowWrapper {
+        //     nr: 0,
+        //     window: AppWindow::None,
+        // });
+
+        // tiles.set_visible(invis_1, false);
+        // tiles.set_visible(invis_2, false);
+        // let root = tiles.insert_horizontal_tile(vec![invis_1]);
+
         Self {
-            tab: Tab::Flowchart,
-            // Example stuff:
-            // label: "Hello World!".to_owned(),
-            // value: 2.7,
-            flowchart: FlowChart::new(),
-            config: Config::new(),
+            state: AppState::default(),
+            tree: egui_tiles::Tree::new_horizontal("tree_root", Vec::new()),
         }
     }
 }
@@ -67,24 +74,14 @@ impl eframe::App for TemplateApp {
                 ui.menu_button("View", |ui| {
                     ui.label("View");
 
-                    if ui
-                        .selectable_label(self.tab == Tab::Flowchart, "Network")
-                        .clicked()
-                    {
-                        self.tab = Tab::Flowchart;
-                    }
-
-                    if ui
-                        .selectable_label(self.tab == Tab::Test, self.config.title())
-                        .clicked()
-                    {
-                        self.tab = Tab::Test;
-                    }
+                    self.state.labels(&mut self.tree, ui);
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     egui::widgets::global_theme_preference_switch(ui);
                 });
+
+                // ui.style
             });
         });
 
@@ -95,13 +92,8 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| match self.tab {
-            Tab::Flowchart => {
-                self.flowchart.paint(ui);
-            }
-            Tab::Test => {
-                self.config.update(ui);
-            }
-        });
+        egui::CentralPanel::default()
+            .frame(Frame::central_panel(&ctx.style()).inner_margin(0))
+            .show(ctx, |ui| self.tree.ui(&mut self.state, ui));
     }
 }

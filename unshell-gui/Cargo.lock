@@ -752,6 +752,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_tiles"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebfac3ca35f5e4fe217d3b03312111b234fe55ce059faf62b4cb47f7cf6d54f1"
+dependencies = [
+ "ahash",
+ "egui",
+ "itertools",
+ "log",
+ "serde",
+]
+
+[[package]]
+name = "either"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
+
+[[package]]
 name = "emath"
 version = "0.33.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1298,6 +1317,15 @@ dependencies = [
  "hermit-abi",
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -2686,6 +2714,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "egui_tiles",
  "log",
  "pretty_env_logger",
  "rand 0.9.2",

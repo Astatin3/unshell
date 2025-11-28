@@ -3,9 +3,6 @@
 #[allow(unused_extern_crates)]
 extern crate log;
 
-mod app;
-pub use app::TemplateApp;
-
+pub mod app;
 mod config;
-
 mod flowchart;

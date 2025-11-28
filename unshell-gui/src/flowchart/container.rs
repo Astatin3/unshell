@@ -35,10 +35,6 @@ impl DraggableContainer {
         }
     }
 
-    pub fn get_pos(&self, center: &Pos2) -> Pos2 {
-        center.clone() + self.pos
-    }
-
     pub fn show<R>(
         &mut self,
         ui: &mut egui::Ui,
@@ -82,17 +78,6 @@ impl DraggableContainer {
                 let new_center = pointer_pos + self.drag_offset;
                 self.pos = new_center - clip_center;
             }
-
-            // egui::Frame::default()
-            //     .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
-            //     .corner_radius(ui.visuals().widgets.noninteractive.corner_radius)
-            //     .show(ui, |ui| {
-            //         ui.label(egui::RichText::new("Content").color(egui::Color32::WHITE));
-            //         // self.frame.show(ui, |ui| {
-            //         //     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-            //         //     ui.label(egui::RichText::new("Content").color(egui::Color32::WHITE));
-            //         // });
-            //     });
         }
 
         if response.drag_stopped() {
