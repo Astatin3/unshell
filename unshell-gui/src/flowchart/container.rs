@@ -4,6 +4,7 @@ use egui::{Pos2, Rect, UiBuilder, Vec2};
 pub struct DraggableContainer {
     pub pos: egui::Vec2, // Offset from center of clip_rect
     pub size: egui::Vec2,
+
     is_dragging: bool,
     drag_offset: egui::Vec2,
     drag_id: String,
@@ -34,42 +35,6 @@ impl DraggableContainer {
         }
     }
 
-    // pub fn show<R>(
-    //     &mut self,
-    //     ui: &mut egui::Ui,
-    //     add_contents: impl FnOnce(&mut egui::Ui, &Rect) -> R,
-    // ) -> R {
-    //     let rect = egui::Rect::from_min_size(self.pos, self.size);
-
-    //     // Handle dragging logic
-    //     let response = ui.interact(rect, ui.id().with(&self.drag_id), egui::Sense::drag());
-
-    //     if response.drag_started() {
-    //         self.is_dragging = true;
-    //         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-    //             self.drag_offset = self.pos - pointer_pos;
-    //         }
-    //     }
-
-    //     if response.dragged() && self.is_dragging {
-    //         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-    //             self.pos = pointer_pos + self.drag_offset;
-    //         }
-    //     }
-
-    //     if response.drag_stopped() {
-    //         self.is_dragging = false;
-    //     }
-
-    //     // Create a child UI at the specified position
-    //     // let mut child_ui = ui.child_ui(rect, egui::Layout::top_down(egui::Align::LEFT), None);
-
-    //     let mut child_ui = ui.new_child(UiBuilder::new().max_rect(rect));
-
-    //     // Add contents
-    //     add_contents(&mut child_ui, &rect)
-    // }
-
     pub fn get_pos(&self, center: &Pos2) -> Pos2 {
         center.clone() + self.pos
     }
@@ -80,7 +45,7 @@ impl DraggableContainer {
         add_contents: impl FnOnce(&mut egui::Ui, &Rect) -> R,
     ) -> R {
         // Calculate center of the clip rect
-        let clip_center = ui.clip_rect().center();
+        let clip_center = Pos2::ZERO;
 
         // Calculate actual position from center offset
         let center_pos = clip_center + self.pos;
@@ -90,18 +55,44 @@ impl DraggableContainer {
         // Handle dragging logic
         let response = ui.interact(rect, ui.id().with(&self.drag_id), egui::Sense::drag());
 
+        // if response.secondary_clicked() {
+
+        // }
+
         if response.drag_started() {
             self.is_dragging = true;
-            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+            if let Some(pointer_pos) = ui.input(|i| i.pointer.latest_pos()) {
+                let pointer_pos = ui
+                    .ctx()
+                    .layer_transform_from_global(ui.painter().layer_id())
+                    .unwrap_or_default()
+                    * pointer_pos;
                 self.drag_offset = center_pos - pointer_pos;
             }
         }
 
         if response.dragged() && self.is_dragging {
-            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+            // Pointer code from https://github.com/emilk/egui/pull/7149
+            if let Some(pointer_pos) = ui.input(|i| i.pointer.latest_pos()) {
+                let pointer_pos = ui
+                    .ctx()
+                    .layer_transform_from_global(ui.painter().layer_id())
+                    .unwrap_or_default()
+                    * pointer_pos;
                 let new_center = pointer_pos + self.drag_offset;
                 self.pos = new_center - clip_center;
             }
+
+            // egui::Frame::default()
+            //     .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+            //     .corner_radius(ui.visuals().widgets.noninteractive.corner_radius)
+            //     .show(ui, |ui| {
+            //         ui.label(egui::RichText::new("Content").color(egui::Color32::WHITE));
+            //         // self.frame.show(ui, |ui| {
+            //         //     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            //         //     ui.label(egui::RichText::new("Content").color(egui::Color32::WHITE));
+            //         // });
+            //     });
         }
 
         if response.drag_stopped() {

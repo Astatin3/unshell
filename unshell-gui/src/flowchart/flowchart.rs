@@ -1,5 +1,7 @@
+use egui::Scene;
 use egui::Shape;
 use egui::Ui;
+use egui::Vec2;
 use egui::{Color32, Painter, Pos2, Rect};
 
 use crate::flowchart::CONNECTION_STROKE;
@@ -11,6 +13,7 @@ use crate::flowchart::{BG_STROKE, TARGET_LINE_GAP};
 #[derive(serde::Deserialize, serde::Serialize)]
 
 pub struct FlowChart {
+    scene_rect: Rect,
     pub containers: Vec<DraggableContainer>,
     pub connections: Vec<(usize, usize)>,
     pub groups: Vec<Vec<usize>>,
@@ -19,6 +22,7 @@ pub struct FlowChart {
 impl FlowChart {
     pub fn new() -> Self {
         let mut this = Self {
+            scene_rect: Rect::ZERO,
             containers: vec![
                 DraggableContainer::new_zero(0),
                 DraggableContainer::new_zero(1),
@@ -30,7 +34,7 @@ impl FlowChart {
                 DraggableContainer::new_zero(7),
             ],
             connections: vec![(0, 1), (1, 2), (1, 3), (1, 4), (3, 5), (3, 6), (3, 7)],
-            groups: vec![],
+            groups: vec![vec![1, 3, 5, 7]],
         };
 
         this.arrange_circle();
@@ -38,28 +42,33 @@ impl FlowChart {
         this
     }
 
-    fn paint_bg(&self, rect: &Rect, painter: &Painter) {
-        let h_count = (rect.width() / TARGET_LINE_GAP).round() as usize;
-        let h_spacing = rect.width() / h_count as f32;
-        for n in 0..h_count {
-            painter.vline(rect.min.x + n as f32 * h_spacing, rect.y_range(), BG_STROKE);
+    fn paint_bg(rect: &Rect, painter: &Painter) {
+        let h_start = (rect.min.x / TARGET_LINE_GAP).round() as i32;
+        let h_end = ((rect.min.x + rect.width()) / TARGET_LINE_GAP).round() as i32 + 1;
+        for n in h_start..h_end {
+            painter.vline(n as f32 * TARGET_LINE_GAP, rect.y_range(), BG_STROKE);
         }
 
-        let v_count = (rect.height() / TARGET_LINE_GAP).round() as usize;
-        let v_spacing = rect.height() / v_count as f32;
-        for n in 0..v_count {
-            painter.hline(rect.x_range(), rect.min.y + n as f32 * v_spacing, BG_STROKE);
+        let v_start = (rect.min.y / TARGET_LINE_GAP).round() as i32;
+        let v_end = ((rect.min.y + rect.height()) / TARGET_LINE_GAP).round() as i32 + 1;
+        for n in v_start..v_end {
+            painter.hline(rect.x_range(), n as f32 * TARGET_LINE_GAP, BG_STROKE);
         }
     }
 
-    fn paint_groups(&self, ui: &mut Ui) {
-        let center = ui.clip_rect().center();
-        for group in &self.groups {
+    fn paint_groups(
+        rect: &Rect,
+        groups: &Vec<Vec<usize>>,
+        containers: &Vec<DraggableContainer>,
+        ui: &mut Ui,
+    ) {
+        let center = rect.center();
+        for group in groups {
             let mut points = Vec::new();
 
             for n in group {
-                let container = &self.containers[*n];
-                let pos = container.get_pos(&center);
+                let container = &containers[*n];
+                let pos = container.get_pos(&Pos2::ZERO);
                 let size = container.size;
                 points.append(&mut vec![
                     Pos2 {
@@ -92,58 +101,55 @@ impl FlowChart {
     }
 
     pub fn paint(&mut self, ui: &mut Ui) {
-        self.paint_bg(&ui.clip_rect(), ui.painter());
-        self.paint_groups(ui);
+        let scene = Scene::new()
+            // .max_inner_size([350.0, 1000.0])
+            .zoom_range(0.1..=2.0);
 
-        let center = ui.clip_rect().center();
+        let containers = &mut self.containers;
+        let groups = &self.groups;
 
-        for (a, b) in &self.connections {
-            ui.painter().line_segment(
-                [
-                    self.containers[*a].get_pos(&center),
-                    self.containers[*b].get_pos(&center),
-                ],
-                CONNECTION_STROKE,
-            );
+        let mut inner_rect = Rect::NAN;
+        let rect = &self.scene_rect.clone();
 
-            // let start = self.containers[m.clone()];
-            // let end = self.containers[n.clone()];
-        }
+        let response = scene
+            .show(ui, &mut self.scene_rect, |mut ui| {
+                Self::paint_bg(rect, ui.painter());
+                Self::paint_groups(rect, groups, containers, &mut ui);
 
-        for container in &mut self.containers {
-            container.show(ui, |ui, rect| {
-                ui.painter().rect(
-                    // ui.top
-                    *rect,
-                    0.,
-                    Color32::PURPLE,
-                    BG_STROKE,
-                    egui::StrokeKind::Outside,
-                );
-                // ui.label("Tests");
-                // let _ = ui.button("Test");
-            });
+                let center = Pos2::ZERO;
+
+                for (a, b) in &self.connections {
+                    ui.painter().line_segment(
+                        [
+                            containers[*a].get_pos(&center),
+                            containers[*b].get_pos(&center),
+                        ],
+                        CONNECTION_STROKE,
+                    );
+                }
+
+                for container in containers {
+                    container.show(&mut ui, |ui, rect| {
+                        ui.painter().rect(
+                            // ui.top
+                            *rect,
+                            0.,
+                            Color32::PURPLE,
+                            BG_STROKE,
+                            egui::StrokeKind::Outside,
+                        );
+                    });
+                }
+
+                inner_rect = ui.min_rect();
+            })
+            .response;
+
+        if response.double_clicked() {
+            self.scene_rect = inner_rect;
         }
 
         if ui.button("Arrange").clicked() {
-            // let positions: Vec<Vec2> = (0..num_nodes)
-            //     .map(|i| {
-            //         let angle = (i as f32) * 2.0 * std::f32::consts::PI / (num_nodes as f32);
-            //         Vec2::new(angle.cos() * 100.0, angle.sin() * 100.0)
-            //     })
-            //     .collect();
-
-            // let node_count = self.containers.len() as f32;
-
-            // for (i, m) in self.containers.iter_mut().enumerate() {
-            //     let ang = -(i as f32 / node_count) * PI * 2.;
-            //     m.pos = Vec2 {
-            //         x: 1000. * ang.sin(),
-            //         y: 1000. * ang.cos(),
-            //     };
-            //     m.vel = Vec2::ZERO;
-            // }
-
             for _ in 0..1_000 {
                 self.force(0.1);
             }

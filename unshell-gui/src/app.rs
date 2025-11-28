@@ -60,19 +60,27 @@ impl eframe::App for TemplateApp {
             // The top panel is often a good place for a menu bar:
 
             egui::MenuBar::new().ui(ui, |ui| {
-                if ui
-                    .selectable_label(self.tab == Tab::Flowchart, "Network")
-                    .clicked()
-                {
-                    self.tab = Tab::Flowchart;
-                }
+                ui.menu_button("File", |ui| {
+                    ui.label("File");
+                });
 
-                if ui
-                    .selectable_label(self.tab == Tab::Test, self.config.title())
-                    .clicked()
-                {
-                    self.tab = Tab::Test;
-                }
+                ui.menu_button("View", |ui| {
+                    ui.label("View");
+
+                    if ui
+                        .selectable_label(self.tab == Tab::Flowchart, "Network")
+                        .clicked()
+                    {
+                        self.tab = Tab::Flowchart;
+                    }
+
+                    if ui
+                        .selectable_label(self.tab == Tab::Test, self.config.title())
+                        .clicked()
+                    {
+                        self.tab = Tab::Test;
+                    }
+                });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     egui::widgets::global_theme_preference_switch(ui);
