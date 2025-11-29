@@ -103,9 +103,6 @@ impl Auth {
 
                     ui.horizontal(|ui| {
                         if ui.button("Login").clicked() {
-                            // Try to
-                            ui.ctx().request_repaint_after(Duration::from_millis(500));
-
                             let state = self.auth_state.clone();
 
                             crate::httpPost(

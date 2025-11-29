@@ -10,7 +10,7 @@ use jsonwebtoken::{Header, TokenData, Validation, decode, encode};
 use serde_json::{Value, json};
 use unshell_lib::info;
 
-use crate::{
+use crate::api::{
     EXPIRE_DURATION, JWT_DECODING_KEY, JWT_ENCODING_KEY,
     structs::{AuthError, Cliams, CurrentUser, SignInData},
 };
@@ -57,7 +57,7 @@ pub async fn authorize(mut req: Request, next: Next) -> Result<Response<Body>, A
 
     let (_, token) = (header.next(), header.next());
 
-    let token_data = match decode_jwt(token.unwrap().to_string()) {
+    let token_data: TokenData<Cliams> = match decode_jwt(token.unwrap().to_string()) {
         Ok(data) => data,
         Err(_) => {
             return Err(AuthError {

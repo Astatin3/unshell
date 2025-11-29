@@ -1,4 +1,3 @@
-use crate::{auth, structs::CurrentUser};
 use axum::{
     Extension, Router,
     extract::Path,
@@ -6,13 +5,26 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use tokio::net::TcpListener;
 use unshell_lib::info;
 
-pub async fn app() -> Router {
-    Router::new().route("/auth", post(auth::sign_in)).route(
+use crate::api::{auth, structs::CurrentUser};
+
+pub async fn start_api(address: &str) {
+    let listener = TcpListener::bind(address)
+        .await
+        .expect("Unable to start listener");
+
+    info!("Listening on {}", listener.local_addr().unwrap());
+
+    let app = Router::new().route("/auth", post(auth::sign_in)).route(
         "/api/{*path}",
         get(protected).layer(middleware::from_fn(auth::authorize)),
-    )
+    );
+
+    axum::serve(listener, app)
+        .await
+        .expect("Error serving application");
 }
 
 pub async fn protected(
