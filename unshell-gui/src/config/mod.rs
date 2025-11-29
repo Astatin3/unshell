@@ -1,6 +1,5 @@
 use egui::{TextStyle, Ui};
 use egui_extras::{Column, TableBuilder};
-use unshell_lib::config::RuntimeConfig;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Config {
@@ -22,7 +21,7 @@ impl Default for Config {
             current_payloads: vec![PayloadConfig {
                 name: "Test".to_string(),
                 components: vec!["server".to_string()],
-                runtimes: Vec::new(),
+                // runtimes: Vec::new(),
             }],
         }
     }
@@ -217,7 +216,7 @@ impl Config {
 struct PayloadConfig {
     name: String,
     components: Vec<String>,
-    runtimes: Vec<RuntimeConfig>,
+    // runtimes: Vec<RuntimeConfig>,
 }
 
 impl PayloadConfig {
@@ -225,7 +224,7 @@ impl PayloadConfig {
         Self {
             name: "New Payload".to_string(),
             components: Vec::new(),
-            runtimes: Vec::new(),
+            // runtimes: Vec::new(),
         }
     }
 }

@@ -23,3 +23,42 @@ self.addEventListener("fetch", function (e) {
     }),
   );
 });
+
+// export function httpGet(theUrl) {
+//   var xmlHttp = new XMLHttpRequest();
+//   xmlHttp.open("GET", theUrl, false); // false for synchronous request
+//   xmlHttp.send(null);
+//   return xmlHttp.responseText;
+// }
+
+export function httpGet(theUrl, callback) {
+  var xmlHttp = new XMLHttpRequest();
+  xmlHttp.onreadystatechange = function () {
+    if (xmlHttp.readyState !== 4) return;
+
+    if (xmlHttp.status == 200) callback(xmlHttp.responseText);
+    else alert("Error " + xmlHttp.status + ", " + xmlHttp.responseText);
+  };
+  xmlHttp.open("GET", theUrl, true); // true for asynchronous
+  xmlHttp.setRequestHeader("Content-Type", "application/json");
+  xmlHttp.send(null);
+}
+
+export function httpPost(url, body, callback) {
+  var xmlHttp = new XMLHttpRequest();
+  xmlHttp.onreadystatechange = function () {
+    if (xmlHttp.readyState !== 4) return;
+
+    if (xmlHttp.status === 200) {
+      // var json = JSON.parse(xhr.responseText);
+      callback(xmlHttp.responseText);
+    } else {
+      alert("Error " + xmlHttp.status + ", " + xmlHttp.responseText);
+    }
+  };
+
+  xmlHttp.open("POST", url, true);
+  xmlHttp.setRequestHeader("Content-Type", "application/json");
+  // var data = JSON.stringify({ email: "[email protected]", password: "101010" });
+  xmlHttp.send(body);
+}
