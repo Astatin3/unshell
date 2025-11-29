@@ -1,5 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use serde_json::json;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use chrono::Utc;
 use egui::{Align2, Area, Frame, Order, Sense, UiKind, Vec2, mutex::Mutex};
 use wasm_bindgen::prelude::Closure;
 
@@ -12,18 +14,20 @@ pub struct Auth {
 
     // UI Stuff
     username: String,
+    #[serde(skip)]
     password: String,
     show_password: bool,
 }
 
-#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
 struct Token {
-    access_token: String,
-    token_type: String,
+    expiration: u128,
+    token: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum AuthState {
+    Unset,
     NotLoggedIn,
     RequestSent,
     Authorised(Token),
@@ -32,25 +36,40 @@ enum AuthState {
 
 impl Default for AuthState {
     fn default() -> Self {
-        Self::NotLoggedIn
+        Self::Unset
     }
 }
 
 impl Auth {
+    /// Refresh the authentication state
     pub fn logged_in(&mut self) -> bool {
-        if self.token.is_some() {
-            true
-        } else {
-            match *self.auth_state.lock() {
-                AuthState::Authorised(ref token) => {
-                    self.token = Some(token.clone());
-                    true
-                }
-                _ => false,
-            }
-        }
+        match (self.token.is_some(), &*self.auth_state.lock()) {
+            // The client is actually authorized
+            (true, AuthState::Authorised(_)) => true,
 
-        // self.auth_state.lock().eq(&AuthState::Authorised)
+            // If the user has just reloaded the session,
+            // the AuthState is not automatically set by any other process
+            (true, AuthState::Unset) => true,
+
+            // If the authentication state has been updated to unauthorized, delete the token
+            (true, _) => {
+                self.token = None;
+                false
+            }
+
+            // If the authentication state has been updated to authorized, set the token
+            (false, AuthState::Authorised(token)) => {
+                self.token = Some(token.clone());
+
+                // Also clear the password because it is bad to store it
+                self.password.clear();
+
+                true
+            }
+
+            // The client is actually unauthorized
+            (false, _) => false,
+        }
     }
 
     pub fn update(&mut self, ui: &mut egui::Ui) {
@@ -82,37 +101,60 @@ impl Auth {
                         // ui.toggle_value(&mut self.show_password, "Show");
                     });
 
-                    if ui.button("Login").clicked() {
-                        let json = serde_json::to_string(&HashMap::from([
-                            ("client_id", self.username.clone()),
-                            ("client_secret", self.password.clone()),
-                        ]))
-                        .unwrap();
+                    ui.horizontal(|ui| {
+                        if ui.button("Login").clicked() {
+                            // Try to
+                            ui.ctx().request_repaint_after(Duration::from_millis(500));
 
-                        let state = self.auth_state.clone();
-                        *(state.lock()) = AuthState::RequestSent;
+                            let state = self.auth_state.clone();
 
-                        crate::httpPost(
-                            "/auth",
-                            &json,
-                            Closure::once_into_js(move |response: String| {
-                                *(state.lock()) =
-                                    if let Ok(token) = serde_json::from_str::<Token>(&response) {
-                                        AuthState::Authorised(token)
+                            crate::httpPost(
+                                "/auth",
+                                &json!({
+                                    "username": self.username.clone(),
+                                    "password": self.password.clone()
+                                })
+                                .to_string(),
+                                Closure::once_into_js(move |ok: bool, response: String| {
+                                    *(state.lock()) = if ok {
+                                        if let Ok(token) = serde_json::from_str::<Token>(&response)
+                                        {
+                                            AuthState::Authorised(token)
+                                        } else {
+                                            AuthState::Error("Malformed Response".into())
+                                        }
                                     } else {
-                                        AuthState::Error("Malformed Response".into())
+                                        AuthState::Error(response)
                                     }
+                                }),
+                            );
 
-                                // self.logged_in
-                                //     .store(true, std::sync::atomic::Ordering::Relaxed);
-                                // self.logged_in();
-                            }),
-                        );
-                    }
+                            *(self.auth_state.lock()) = AuthState::RequestSent;
+                        }
+
+                        ui.label(format!("{:?}", self.auth_state.lock()));
+                    });
                 });
             });
         //     });
         // });
+    }
+
+    pub fn test(&self) {
+        if let Some(ref token) = self.token {
+            let state = self.auth_state.clone();
+            crate::httpGetAuth(
+                "/api/test1234/kjhejwer/kwherjwer/iuwehrhiwer/wiuerhjwer",
+                format!("Bearer {}", token.token),
+                Closure::once_into_js(move |ok: bool, response: String| {
+                    if ok {
+                        crate::log(&response);
+                    } else {
+                        *(state.lock()) = AuthState::Error(response);
+                    }
+                }),
+            );
+        }
     }
 }
 

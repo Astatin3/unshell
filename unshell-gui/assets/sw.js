@@ -31,34 +31,45 @@ self.addEventListener("fetch", function (e) {
 //   return xmlHttp.responseText;
 // }
 
-export function httpGet(theUrl, callback) {
+function startHttpRequest(callback) {
   var xmlHttp = new XMLHttpRequest();
   xmlHttp.onreadystatechange = function () {
     if (xmlHttp.readyState !== 4) return;
 
-    if (xmlHttp.status == 200) callback(xmlHttp.responseText);
-    else alert("Error " + xmlHttp.status + ", " + xmlHttp.responseText);
+    if (xmlHttp.status == 200) callback(true, xmlHttp.responseText);
+    else callback(false, xmlHttp.responseText);
   };
+  return xmlHttp;
+}
+
+export function httpGet(theUrl, callback) {
+  var xmlHttp = startHttpRequest(callback);
   xmlHttp.open("GET", theUrl, true); // true for asynchronous
   xmlHttp.setRequestHeader("Content-Type", "application/json");
   xmlHttp.send(null);
 }
 
 export function httpPost(url, body, callback) {
-  var xmlHttp = new XMLHttpRequest();
-  xmlHttp.onreadystatechange = function () {
-    if (xmlHttp.readyState !== 4) return;
-
-    if (xmlHttp.status === 200) {
-      // var json = JSON.parse(xhr.responseText);
-      callback(xmlHttp.responseText);
-    } else {
-      alert("Error " + xmlHttp.status + ", " + xmlHttp.responseText);
-    }
-  };
-
+  var xmlHttp = startHttpRequest(callback);
   xmlHttp.open("POST", url, true);
   xmlHttp.setRequestHeader("Content-Type", "application/json");
+  // var data = JSON.stringify({ email: "[email protected]", password: "101010" });
+  xmlHttp.send(body);
+}
+
+export function httpGetAuth(theUrl, auth, callback) {
+  var xmlHttp = startHttpRequest(callback);
+  xmlHttp.open("GET", theUrl, true); // true for asynchronous
+  xmlHttp.setRequestHeader("Content-Type", "application/json");
+  xmlHttp.setRequestHeader("authorization", auth);
+  xmlHttp.send(null);
+}
+
+export function httpPostAuth(url, auth, body, callback) {
+  var xmlHttp = startHttpRequest(callback);
+  xmlHttp.open("POST", url, true);
+  xmlHttp.setRequestHeader("Content-Type", "application/json");
+  xmlHttp.setRequestHeader("authorization", auth);
   // var data = JSON.stringify({ email: "[email protected]", password: "101010" });
   xmlHttp.send(body);
 }

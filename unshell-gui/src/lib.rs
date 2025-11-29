@@ -21,8 +21,10 @@ extern "C" {
 
 #[wasm_bindgen(module = "/assets/sw.js")]
 extern "C" {
-    pub fn httpGet(url: &str, callback: JsValue);
-    pub fn httpPost(url: &str, data: &str, callback: JsValue);
+    pub fn httpGet(url: &str, ok_callback: JsValue);
+    pub fn httpPost(url: &str, data: &str, ok_callback: JsValue);
+    pub fn httpGetAuth(url: &str, auth: String, ok_callback: JsValue);
+    pub fn httpPostAuth(url: &str, auth: String, data: &str, ok_callback: JsValue);
 }
 
 // }

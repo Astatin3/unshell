@@ -1,16 +1,12 @@
 use egui::Frame;
 use egui_tiles::Tree;
 
-use crate::{
-    app::{AppState, windows::WindowWrapper},
-    auth::Auth,
-};
+use crate::app::{AppState, windows::WindowWrapper};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
-    auth: Auth,
     // tab: Tab,
     state: AppState,
     tree: Tree<WindowWrapper>,
@@ -19,7 +15,6 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            auth: Auth::default(),
             state: AppState::default(),
             tree: egui_tiles::Tree::new_horizontal("tree_root", Vec::new()),
         }
@@ -50,10 +45,10 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if !self.auth.logged_in() {
+        if !self.state.auth.logged_in() {
             egui::CentralPanel::default()
                 .frame(Frame::central_panel(&ctx.style()).inner_margin(0))
-                .show(ctx, |ui| self.auth.update(ui));
+                .show(ctx, |ui| self.state.auth.update(ui));
         } else {
             egui::TopBottomPanel::top("tab_panel").show(ctx, |ui| {
                 // The top panel is often a good place for a menu bar:

@@ -3,12 +3,14 @@ mod windows;
 
 use std::collections::HashMap;
 
-use crate::{app::windows::WindowWrapper, config::Config, flowchart::FlowChart};
+use crate::{app::windows::WindowWrapper, auth::Auth, config::Config, flowchart::FlowChart};
 pub use app::TemplateApp;
 use egui_tiles::{TileId, Tree};
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
-struct AppState {
+pub struct AppState {
+    pub auth: Auth,
+
     pub open_windows: HashMap<AppWindow, TileId>,
 
     pub flowchart: FlowChart,
@@ -64,7 +66,7 @@ impl AppState {
 }
 
 #[derive(Clone, Copy, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
-enum AppWindow {
+pub enum AppWindow {
     Flowchart,
     Config,
 }
@@ -73,7 +75,7 @@ impl AppWindow {
     fn update(&self, state: &mut AppState, ui: &mut egui::Ui) {
         match self {
             AppWindow::Flowchart => state.flowchart.paint(ui),
-            AppWindow::Config => state.config.update(ui),
+            AppWindow::Config => state.config.update(&mut state.auth, ui),
         }
     }
 }

@@ -93,6 +93,12 @@ impl FlowChart {
     }
 
     pub fn paint(&mut self, ui: &mut Ui) {
+        if ui.button("Arrange").clicked() {
+            for _ in 0..1_000 {
+                self.force(0.1);
+            }
+        }
+
         let scene = Scene::new()
             // .max_inner_size([350.0, 1000.0])
             .zoom_range(0.1..=2.0);
@@ -134,12 +140,6 @@ impl FlowChart {
 
         if response.double_clicked() {
             self.scene_rect = inner_rect;
-        }
-
-        if ui.button("Arrange").clicked() {
-            for _ in 0..1_000 {
-                self.force(0.1);
-            }
         }
     }
 }
