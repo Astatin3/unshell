@@ -2,6 +2,8 @@ use egui::{Color32, Painter, Pos2, Rect, Scene, Shape, Ui};
 
 use crate::flowchart::CONNECTION_STROKE;
 use crate::flowchart::GROUP_BORDER_MARGIN;
+use crate::flowchart::ITERATIONS;
+use crate::flowchart::RESOLUTION;
 use crate::flowchart::container::DraggableContainer;
 use crate::flowchart::group::convex_hull;
 use crate::flowchart::{BG_STROKE, TARGET_LINE_GAP};
@@ -34,12 +36,19 @@ impl Default for FlowChart {
         };
 
         this.arrange_circle();
+        this.arrange();
 
         this
     }
 }
 
 impl FlowChart {
+    pub fn arrange(&mut self) {
+        for _ in 0..ITERATIONS {
+            self.force(RESOLUTION);
+        }
+    }
+
     fn paint_bg(rect: &Rect, painter: &Painter) {
         let h_start = (rect.min.x / TARGET_LINE_GAP).round() as i32;
         let h_end = ((rect.min.x + rect.width()) / TARGET_LINE_GAP).round() as i32 + 1;
@@ -93,12 +102,6 @@ impl FlowChart {
     }
 
     pub fn paint(&mut self, ui: &mut Ui) {
-        if ui.button("Arrange").clicked() {
-            for _ in 0..1_000 {
-                self.force(0.1);
-            }
-        }
-
         let scene = Scene::new()
             // .max_inner_size([350.0, 1000.0])
             .zoom_range(0.1..=2.0);

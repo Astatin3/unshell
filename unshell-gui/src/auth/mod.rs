@@ -1,8 +1,6 @@
-use serde_json::json;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
-use chrono::Utc;
 use egui::{Align2, Area, Frame, Order, Sense, UiKind, Vec2, mutex::Mutex};
+use serde_json::json;
+use std::sync::Arc;
 use wasm_bindgen::prelude::Closure;
 
 #[derive(serde::Deserialize, serde::Serialize)]

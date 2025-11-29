@@ -1,14 +1,16 @@
+use egui::Rect;
+
 use crate::app::{AppState, AppWindow};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct WindowWrapper {
-    pub nr: usize,
+    pub name: String,
     pub window: AppWindow,
 }
 
 impl egui_tiles::Behavior<WindowWrapper> for AppState {
     fn tab_title_for_pane(&mut self, pane: &WindowWrapper) -> egui::WidgetText {
-        format!("Pane {}", pane.nr).into()
+        format!("{}", pane.name).into()
     }
 
     fn pane_ui(
@@ -19,28 +21,49 @@ impl egui_tiles::Behavior<WindowWrapper> for AppState {
     ) -> egui_tiles::UiResponse {
         let mut ret = egui_tiles::UiResponse::None;
 
+        let mut rect = Rect::NOTHING;
+
         ui.horizontal(|ui| {
-            let titlebar = ui.interact(
-                ui.max_rect(),
-                ui.id().with(&format!("Pane_{}_sense", pane.nr)),
-                egui::Sense::drag(),
-            );
+            rect = ui.max_rect();
 
-            if titlebar.drag_started() {
-                ret = egui_tiles::UiResponse::DragStarted;
-            }
-            if titlebar.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-            }
+            let bg_color = ui.style().visuals.extreme_bg_color;
 
-            let color = egui::epaint::Hsva::new(0.103 * pane.nr as f32, 0.5, 0.5, 1.0);
-            ui.painter().rect_filled(ui.max_rect(), 0.0, color);
+            ui.painter().rect_filled(rect, 0.0, bg_color);
 
-            ui.label("Test");
+            ui.vertical_centered(|ui| {
+                ui.label(&pane.name);
+            });
         });
+
+        let mut open_space = Rect::NOTHING;
+
+        #[allow(deprecated)]
+        ui.allocate_ui_at_rect(rect, |ui| {
+            ui.horizontal(|ui| {
+                pane.window.render_title_buttons(self, ui);
+                open_space = ui.available_rect_before_wrap();
+            })
+        });
+
+        let drag_sense = ui.interact(
+            open_space,
+            ui.id().with(&format!("Pane_{}_sense", pane.name)),
+            egui::Sense::drag(),
+        );
+
+        if drag_sense.drag_started() {
+            ret = egui_tiles::UiResponse::DragStarted;
+        }
+        if drag_sense.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        }
 
         pane.window.update(self, ui);
 
         ret
+    }
+
+    fn tab_bar_color(&self, visuals: &egui::Visuals) -> egui::Color32 {
+        visuals.panel_fill // same as the tab contents
     }
 }

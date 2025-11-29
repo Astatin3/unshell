@@ -6,6 +6,9 @@ mod group;
 use egui::{Color32, Stroke};
 pub use flowchart::FlowChart;
 
+const ITERATIONS: usize = 1_000;
+const RESOLUTION: f32 = 0.6;
+
 const TARGET_LINE_GAP: f32 = 80.;
 
 const BG_STROKE: Stroke = Stroke {

@@ -8,6 +8,9 @@ mod auth;
 mod config;
 mod flowchart;
 
+use std::time::Duration;
+const FORCE_REDRAW_DELAY: Duration = Duration::from_millis(300);
+
 // mod JsFunc {
 // use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;

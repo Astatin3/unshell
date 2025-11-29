@@ -1,7 +1,10 @@
 use egui::Frame;
 use egui_tiles::Tree;
 
-use crate::app::{AppState, windows::WindowWrapper};
+use crate::{
+    FORCE_REDRAW_DELAY,
+    app::{AppState, windows::WindowWrapper},
+};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -83,5 +86,7 @@ impl eframe::App for TemplateApp {
                 .frame(Frame::central_panel(&ctx.style()).inner_margin(0))
                 .show(ctx, |ui| self.tree.ui(&mut self.state, ui));
         }
+
+        ctx.request_repaint_after(FORCE_REDRAW_DELAY);
     }
 }

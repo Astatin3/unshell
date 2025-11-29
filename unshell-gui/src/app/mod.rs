@@ -19,7 +19,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn labels(&mut self, tree: &mut Tree<WindowWrapper>, ui: &mut egui::Ui) {
-        for (i, (key, name)) in (vec![
+        for (_, (key, name)) in (vec![
             (AppWindow::Flowchart, "Flowchart"),
             (AppWindow::Config, "Config"),
         ])
@@ -38,7 +38,7 @@ impl AppState {
                     // if self.open_windows.is_empty()
                 } else {
                     let tid = tree.tiles.insert_pane(WindowWrapper {
-                        nr: i + 1,
+                        name: name.to_string(),
                         window: *key,
                     });
 
@@ -76,6 +76,19 @@ impl AppWindow {
         match self {
             AppWindow::Flowchart => state.flowchart.paint(ui),
             AppWindow::Config => state.config.update(&mut state.auth, ui),
+        }
+    }
+
+    fn render_title_buttons(&self, state: &mut AppState, ui: &mut egui::Ui) {
+        match self {
+            AppWindow::Flowchart => {
+                if ui.button("Arrange").clicked() {
+                    state.flowchart.arrange();
+                }
+            }
+            _ => {
+                ui.label("");
+            }
         }
     }
 }
