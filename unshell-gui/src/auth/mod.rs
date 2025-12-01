@@ -1,4 +1,4 @@
-use egui::{Align2, Area, Frame, Order, Sense, UiKind, Vec2, mutex::Mutex};
+use egui::{Align2, Area, Color32, Frame, Order, Sense, UiKind, Vec2, mutex::Mutex};
 use serde_json::json;
 use std::sync::Arc;
 use wasm_bindgen::prelude::Closure;
@@ -100,34 +100,48 @@ impl Auth {
                     });
 
                     ui.horizontal(|ui| {
-                        if ui.button("Login").clicked() {
-                            let state = self.auth_state.clone();
+                        let (show_spinner, err_text) = match *self.auth_state.lock() {
+                            AuthState::Error(ref e) => {
+                                // self.login_button(ui);
+                                (false, e.clone())
+                            }
+                            AuthState::RequestSent => (true, "".into()),
+                            _ => (false, "".into()),
+                        };
 
-                            crate::httpPost(
-                                "/auth",
-                                &json!({
-                                    "username": self.username.clone(),
-                                    "password": self.password.clone()
-                                })
-                                .to_string(),
-                                Closure::once_into_js(move |ok: bool, response: String| {
-                                    *(state.lock()) = if ok {
-                                        if let Ok(token) = serde_json::from_str::<Token>(&response)
-                                        {
-                                            AuthState::Authorised(token)
+                        if !show_spinner {
+                            if ui.button("Login").clicked() {
+                                let state = self.auth_state.clone();
+
+                                crate::httpPost(
+                                    "/auth",
+                                    &json!({
+                                        "username": self.username.clone(),
+                                        "password": self.password.clone()
+                                    })
+                                    .to_string(),
+                                    Closure::once_into_js(move |ok: bool, response: String| {
+                                        *(state.lock()) = if ok {
+                                            if let Ok(token) =
+                                                serde_json::from_str::<Token>(&response)
+                                            {
+                                                AuthState::Authorised(token)
+                                            } else {
+                                                AuthState::Error("Malformed Response".into())
+                                            }
                                         } else {
-                                            AuthState::Error("Malformed Response".into())
+                                            AuthState::Error(response)
                                         }
-                                    } else {
-                                        AuthState::Error(response)
-                                    }
-                                }),
-                            );
+                                    }),
+                                );
 
-                            *(self.auth_state.lock()) = AuthState::RequestSent;
+                                *(self.auth_state.lock()) = AuthState::RequestSent;
+                            }
+                        } else {
+                            ui.spinner();
                         }
 
-                        ui.label(format!("{:?}", self.auth_state.lock()));
+                        ui.colored_label(Color32::RED, err_text);
                     });
                 });
             });

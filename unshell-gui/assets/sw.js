@@ -37,6 +37,8 @@ function startHttpRequest(callback) {
     if (xmlHttp.readyState !== 4) return;
 
     if (xmlHttp.status == 200) callback(true, xmlHttp.responseText);
+    else if (xmlHttp.status == 401) callback(false, "Unauthorized");
+    else if (xmlHttp.status == 500) callback(false, "Internal Server Error");
     else callback(false, xmlHttp.responseText);
   };
   return xmlHttp;
