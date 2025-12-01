@@ -29,7 +29,7 @@ pub async fn start_api(address: &str) {
 
 pub async fn protected(
     Path(path): Path<String>,
-    Extension(currentUser): Extension<CurrentUser>,
+    Extension(_currentUser): Extension<CurrentUser>,
 ) -> impl IntoResponse {
     info!("{}", path);
     // Json(UserResponse {

@@ -8,7 +8,7 @@ use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::Utc;
 use jsonwebtoken::{Header, TokenData, Validation, decode, encode};
 use serde_json::{Value, json};
-use unshell_lib::info;
+use unshell_lib::{debug, info};
 
 use crate::api::{
     EXPIRE_DURATION, JWT_DECODING_KEY, JWT_ENCODING_KEY,
@@ -86,7 +86,13 @@ pub async fn sign_in(Json(user_data): Json<SignInData>) -> Result<Json<Value>, S
     // 1. Retrieve user from the database
     let user = match retrieve_user_by_email(&user_data.username) {
         Some(user) => user,
-        None => return Err(StatusCode::UNAUTHORIZED), // User not found
+        None => {
+            debug!(
+                "Denied user {}: Could not find user data",
+                user_data.username
+            );
+            return Err(StatusCode::UNAUTHORIZED);
+        } // User not found
     };
 
     // 2. Compare the password
@@ -94,6 +100,7 @@ pub async fn sign_in(Json(user_data): Json<SignInData>) -> Result<Json<Value>, S
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     // Handle bcrypt errors
     {
+        debug!("Denied user {}: Incorrect password hash", user.username);
         return Err(StatusCode::UNAUTHORIZED); // Wrong password
     }
 
@@ -104,7 +111,7 @@ pub async fn sign_in(Json(user_data): Json<SignInData>) -> Result<Json<Value>, S
 
     // 3. Generate JWT
     let (token, experation) =
-        encode_jwt(user.email).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        encode_jwt(user.username).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // 4. Return the token
     Ok(Json(json!({
@@ -115,9 +122,7 @@ pub async fn sign_in(Json(user_data): Json<SignInData>) -> Result<Json<Value>, S
 
 fn retrieve_user_by_email(_email: &str) -> Option<CurrentUser> {
     let current_user: CurrentUser = CurrentUser {
-        email: "foo".to_string(),
-        first_name: "Eze".to_string(),
-        last_name: "Sunday".to_string(),
+        username: "foo".to_string(),
         password_hash: hash_password("bar").unwrap(),
     };
     Some(current_user)

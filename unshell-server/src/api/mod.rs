@@ -6,7 +6,6 @@ extern crate unshell_lib;
 pub mod app;
 mod auth;
 mod structs;
-mod userdata;
 
 static EXPIRE_DURATION: Duration = Duration::hours(12);
 
