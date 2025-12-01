@@ -23,6 +23,7 @@ bcrypt = "0.17.1"
 chrono = "0.4.42"
 static_init = "1.0.4"
 clap = {version = "4.5.53", features = ["derive"]}
+sled = "0.34.7"
 
 # tracing = "0.1.43"
 # tracing-subscriber = {version="0.3.22", features = ["env-filter"] }

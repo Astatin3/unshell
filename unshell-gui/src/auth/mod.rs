@@ -1,6 +1,7 @@
 use egui::{Align2, Area, Color32, Frame, Order, Sense, UiKind, Vec2, mutex::Mutex};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::json;
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 use wasm_bindgen::prelude::Closure;
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -114,7 +115,7 @@ impl Auth {
                                 let state = self.auth_state.clone();
 
                                 crate::httpPost(
-                                    "/auth",
+                                    "/api/auth",
                                     &json!({
                                         "username": self.username.clone(),
                                         "password": self.password.clone()
@@ -149,15 +150,24 @@ impl Auth {
         // });
     }
 
-    pub fn test(&self) {
+    pub fn get<T, F>(&self, path: &str, ret: F)
+    where
+        F: FnOnce(Result<T, String>) + 'static,
+        T: DeserializeOwned,
+    {
         if let Some(ref token) = self.token {
             let state = self.auth_state.clone();
             crate::httpGetAuth(
-                "/api/test1234/kjhejwer/kwherjwer/iuwehrhiwer/wiuerhjwer",
+                path,
                 format!("Bearer {}", token.token),
                 Closure::once_into_js(move |ok: bool, response: String| {
                     if ok {
                         crate::log(&response);
+                        if let Ok(value) = serde_json::from_str::<Result<T, String>>(&response) {
+                            ret(value)
+                        } else {
+                            *(state.lock()) = AuthState::Error("Malformed Response".into());
+                        }
                     } else {
                         *(state.lock()) = AuthState::Error(response);
                     }
