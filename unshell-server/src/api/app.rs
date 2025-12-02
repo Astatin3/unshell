@@ -21,7 +21,8 @@ pub async fn start_api(address: &str, database: Database) {
 
     let mut router = Router::new().route("/api/auth", post(auth::sign_in));
     router = route_get_trees(router);
-    router = route_get_keys(router);
+    router = route_get_all_tree_values(router);
+    router = route_get_tree_keys(router);
     router = route_trees(router);
 
     axum::serve(listener, router.with_state(database))
@@ -46,7 +47,7 @@ fn route_get_trees(router: Router<Database>) -> Router<Database> {
 }
 
 // Route the "keys" api for each tree
-fn route_get_keys(router: Router<Database>) -> Router<Database> {
+fn route_get_tree_keys(router: Router<Database>) -> Router<Database> {
     router.route(
         "/api/keys/{*path}",
         get(
@@ -55,6 +56,24 @@ fn route_get_keys(router: Router<Database>) -> Router<Database> {
                    Extension(_): Extension<CurrentUser>| {
                 debug!("GET /api/keys/{}", path);
                 let result = database.get_keys(&path);
+
+                Json(serde_json::to_value(result).unwrap())
+            },
+        )
+        .layer(middleware::from_fn(auth::authorize)),
+    )
+}
+
+// Route the "values" api to get all the values for each tree
+fn route_get_all_tree_values(router: Router<Database>) -> Router<Database> {
+    router.route(
+        "/api/values/{*path}",
+        get(
+            async |State(database): State<Database>,
+                   Path(path): Path<String>,
+                   Extension(_): Extension<CurrentUser>| {
+                debug!("GET /api/values/{}", path);
+                let result = database.all_tree_values(&path);
 
                 Json(serde_json::to_value(result).unwrap())
             },

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use sled::Tree;
 use unshell_lib::error;
 
@@ -28,17 +30,6 @@ impl Database {
             .collect::<Vec<String>>()
     }
 
-    pub fn get_keys(&self, tree_name: &str) -> Result<Vec<String>, String> {
-        Ok(self
-            .get_tree(tree_name)?
-            .iter()
-            .keys()
-            .map(|key| {
-                String::from_utf8_lossy(&key.expect("This key should exist").to_vec()).to_string()
-            })
-            .collect::<Vec<String>>())
-    }
-
     pub fn put_value(&self, tree_name: &str, key: &str, value: &str) -> Result<(), String> {
         match self.get_tree(tree_name)?.insert(key, value) {
             Ok(_) => Ok(()),
@@ -61,6 +52,29 @@ impl Database {
                 // Err(e.to_string())
             }
         }
+    }
+
+    pub fn get_keys(&self, tree_name: &str) -> Result<Vec<String>, String> {
+        Ok(self
+            .get_tree(tree_name)?
+            .iter()
+            .keys()
+            .map(|key| {
+                String::from_utf8_lossy(&key.expect("This key should exist").to_vec()).to_string()
+            })
+            .collect::<Vec<String>>())
+    }
+
+    pub fn all_tree_values(&self, tree_name: &str) -> Result<HashMap<String, String>, String> {
+        Ok(self
+            .get_keys(tree_name)?
+            .iter()
+            .map(|key| -> Result<(String, String), String> {
+                Ok((key.clone(), self.get_value(tree_name, &key)?))
+            })
+            .collect::<Result<Vec<(String, String)>, String>>()?
+            .into_iter()
+            .collect::<HashMap<String, String>>())
     }
 }
 
