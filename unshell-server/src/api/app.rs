@@ -2,11 +2,10 @@ use axum::{
     Extension, Json, Router,
     extract::{Path, State},
     middleware,
-    response::IntoResponse,
     routing::{get, post},
 };
 use tokio::net::TcpListener;
-use unshell_lib::info;
+use unshell_lib::{debug, info};
 
 use crate::{
     api::{auth, structs::CurrentUser},
@@ -20,47 +19,85 @@ pub async fn start_api(address: &str, database: Database) {
 
     info!("Listening on {}", listener.local_addr().unwrap());
 
-    let app = Router::new()
-        .route("/api/auth", post(auth::sign_in))
-        .route(
-            "/api/{*path}",
-            get(get_data).layer(middleware::from_fn(auth::authorize)),
-        )
-        .route(
-            "/api/{*path}",
-            post(post_data).layer(middleware::from_fn(auth::authorize)),
-        )
-        .with_state(database);
+    let mut router = Router::new().route("/api/auth", post(auth::sign_in));
+    router = route_get_trees(router);
+    router = route_get_keys(router);
+    router = route_trees(router);
 
-    axum::serve(listener, app)
+    axum::serve(listener, router.with_state(database))
         .await
         .expect("Error serving application");
 }
 
-pub async fn get_data(
-    State(database): State<Database>,
-    Path(path): Path<String>,
-    Extension(_): Extension<CurrentUser>,
-) -> impl IntoResponse {
-    let result = database.get_value(&path);
+// Route the "keys" api for each tree
+fn route_get_trees(router: Router<Database>) -> Router<Database> {
+    router.route(
+        "/api/trees",
+        get(
+            async |State(database): State<Database>, Extension(_): Extension<CurrentUser>| {
+                debug!("GET /api/trees");
+                let result = database.get_trees();
 
-    Json(serde_json::to_value(result).unwrap())
+                Json(serde_json::to_value(result).unwrap())
+            },
+        )
+        .layer(middleware::from_fn(auth::authorize)),
+    )
 }
 
-pub async fn post_data(
-    State(database): State<Database>,
-    Path(path): Path<String>,
-    Extension(_): Extension<CurrentUser>,
-    body: String,
-) -> impl IntoResponse {
-    let result = database.put_value(&path, &body);
+// Route the "keys" api for each tree
+fn route_get_keys(router: Router<Database>) -> Router<Database> {
+    router.route(
+        "/api/keys/{*path}",
+        get(
+            async |State(database): State<Database>,
+                   Path(path): Path<String>,
+                   Extension(_): Extension<CurrentUser>| {
+                debug!("GET /api/keys/{}", path);
+                let result = database.get_keys(&path);
 
-    Json(serde_json::to_value(result).unwrap())
+                Json(serde_json::to_value(result).unwrap())
+            },
+        )
+        .layer(middleware::from_fn(auth::authorize)),
+    )
 }
 
-// impl IntoResponse for Option<StrW> {
-//     // impl IntoResponse for Option<String> {
-//     fn into_response(self) -> axum::response::Response {
-//         todo!()
-//     }
-// }
+// Loop through all trees and add /api/<tree>/<path> POST aand GET listeners for them
+fn route_trees(mut router: Router<Database>) -> Router<Database> {
+    for tree in crate::DATABASE_TREES.iter() {
+        router = router
+            // Route GET requests to this tree
+            .route(
+                &format!("/api/{}/{{*path}}", tree),
+                get(
+                    async |State(database): State<Database>,
+                           Path(path): Path<String>,
+                           Extension(_): Extension<CurrentUser>| {
+                        let result = database.get_value(tree, &path);
+                        debug!("GET /api/{}/{}", tree.to_string(), path);
+
+                        Json(serde_json::to_value(result).unwrap())
+                    },
+                )
+                .layer(middleware::from_fn(auth::authorize)),
+            )
+            // Route POST requests to this tree
+            .route(
+                &format!("/api/{}/{{*path}}", tree),
+                post(
+                    async |State(database): State<Database>,
+                           Path(path): Path<String>,
+                           Extension(_): Extension<CurrentUser>,
+                           body: String| {
+                        let result = database.put_value(tree, &path, &body);
+                        debug!("POST /api/{}/{}", tree.to_string(), path);
+
+                        Json(serde_json::to_value(result).unwrap())
+                    },
+                )
+                .layer(middleware::from_fn(auth::authorize)),
+            );
+    }
+    router
+}
