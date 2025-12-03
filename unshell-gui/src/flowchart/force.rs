@@ -103,38 +103,4 @@ impl FlowChart {
             m.vel = Vec2::ZERO;
         }
     }
-
-    // pub fn get_positions(&self) -> &[Vec2] {
-    //     &self.positions
-    // }
-
-    // pub fn get_connections(&self) -> &[(usize, usize)] {
-    //     &self.connections
-    // }
 }
-
-// fn main() {
-//     // Example usage: Create a simple triangle graph
-//     let connections = vec![(0, 1), (1, 2), (2, 0)];
-//     let mut graph = ForceDirectedGraph::new(
-//         3,
-//         connections,
-//         1000.0, // repulsion_strength
-//         0.1,    // attraction_strength
-//         50.0,   // rest_length
-//         0.9,    // damping
-//     );
-
-//     // Simulate 100 frames at 60 FPS
-//     let delta_time = 1.0 / 60.0;
-//     for frame in 0..100 {
-//         graph.update(delta_time);
-
-//         if frame % 20 == 0 {
-//             println!("Frame {}: ", frame);
-//             for (i, pos) in graph.get_positions().iter().enumerate() {
-//                 println!("  Node {}: ({:.2}, {:.2})", i, pos.x, pos.y);
-//             }
-//         }
-//     }
-// }

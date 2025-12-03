@@ -1,12 +1,7 @@
-use unshell_server::{database::Database, start_api};
+use unshell_server::{Server, start_api};
 
 use clap::Parser;
-use static_init::dynamic;
-
-#[dynamic]
-static DEFAULT_HOST: String = "localhost".to_string();
-#[dynamic]
-static DATABASE_NAME: String = "database".to_string();
+use unshell_server::{DATABASE_NAME, DEFAULT_HOST};
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)]
@@ -32,7 +27,7 @@ async fn main() {
 
     unshell_lib::logger::PrettyLogger::init();
 
-    let database = Database::new(args.database_name);
+    let database = Server::new(args.database_name);
 
     start_api(&format!("{}:{}", args.host, args.port), database).await;
 }

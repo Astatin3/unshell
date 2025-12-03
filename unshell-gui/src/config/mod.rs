@@ -3,7 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use egui::ComboBox;
 use egui_extras::{Column, TableBuilder};
 
 use crate::auth::Auth;

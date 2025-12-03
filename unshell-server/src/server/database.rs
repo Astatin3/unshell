@@ -3,18 +3,14 @@ use std::collections::HashMap;
 use sled::Tree;
 use unshell_lib::error;
 
-#[derive(Clone)]
-pub struct Database {
-    db: sled::Db,
-}
+use crate::server::Server;
 
-impl Database {
-    pub fn new(database: String) -> Self {
-        Self {
-            db: sled::open(database).expect("Failed to open database"),
-        }
-    }
+// #[derive(Clone)]
+// pub struct Database {
+//     db: sled::Db,
+// }
 
+impl Server {
     fn get_tree(&self, tree_name: &str) -> Result<Tree, String> {
         self.db.open_tree(tree_name).map_err(|e| {
             error!("DB Failed to open tree: {}", e);
@@ -75,11 +71,5 @@ impl Database {
             .collect::<Result<Vec<(String, String)>, String>>()?
             .into_iter()
             .collect::<HashMap<String, String>>())
-    }
-}
-
-impl Drop for Database {
-    fn drop(&mut self) {
-        self.db.flush().expect("Failed to flush database on drop");
     }
 }
