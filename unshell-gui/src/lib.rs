@@ -7,6 +7,7 @@ pub mod app;
 mod auth;
 mod config;
 mod flowchart;
+mod payload_config;
 
 use std::time::Duration;
 const FORCE_REDRAW_DELAY: Duration = Duration::from_millis(300);

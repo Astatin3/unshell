@@ -145,4 +145,10 @@ impl FlowChart {
             self.scene_rect = inner_rect;
         }
     }
+
+    pub fn titlebar_buttons(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Arrange").clicked() {
+            self.arrange();
+        }
+    }
 }

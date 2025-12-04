@@ -3,7 +3,10 @@ mod windows;
 
 use std::collections::HashMap;
 
-use crate::{app::windows::WindowWrapper, auth::Auth, config::Config, flowchart::FlowChart};
+use crate::{
+    app::windows::WindowWrapper, auth::Auth, config::Config, flowchart::FlowChart,
+    payload_config::PayloadConfig,
+};
 pub use app::TemplateApp;
 use egui_tiles::{TileId, Tree};
 
@@ -15,12 +18,14 @@ pub struct AppState {
 
     pub flowchart: FlowChart,
     pub config: Config,
+    pub payload_config: PayloadConfig,
 }
 
 impl AppState {
     pub fn labels(&mut self, tree: &mut Tree<WindowWrapper>, ui: &mut egui::Ui) {
         for (_, (key, name)) in (vec![
             (AppWindow::Flowchart, "Flowchart"),
+            (AppWindow::PayloadConfig, "Payload Config"),
             (AppWindow::Config, "Config"),
         ])
         .iter()
@@ -69,6 +74,7 @@ impl AppState {
 pub enum AppWindow {
     Flowchart,
     Config,
+    PayloadConfig,
 }
 
 impl AppWindow {
@@ -76,15 +82,17 @@ impl AppWindow {
         match self {
             AppWindow::Flowchart => state.flowchart.paint(ui),
             AppWindow::Config => state.config.update(&mut state.auth, ui),
+            AppWindow::PayloadConfig => state.payload_config.update(ui),
         }
     }
 
     fn render_title_buttons(&self, state: &mut AppState, ui: &mut egui::Ui) {
         match self {
             AppWindow::Flowchart => {
-                if ui.button("Arrange").clicked() {
-                    state.flowchart.arrange();
-                }
+                state.flowchart.titlebar_buttons(ui);
+            }
+            AppWindow::Config => {
+                state.config.titlebar_buttons(ui);
             }
             _ => {
                 ui.label("");

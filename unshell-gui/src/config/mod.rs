@@ -58,17 +58,6 @@ impl Config {
         drop(state_lock);
 
         ui.horizontal(|ui| {
-            if ui.button("Refresh").clicked() {
-                // self.tree_option.clear();
-                let mut state_lock = self.state.lock().unwrap();
-                (*state_lock).trees = None;
-                (*state_lock).tree_keys = None;
-                drop(state_lock);
-
-                tree_list_none = true;
-                key_list_none = true;
-            }
-
             if tree_list_none && !is_requesting {
                 self.state.lock().unwrap().is_requesting = true;
                 let state_clone = self.state.clone();
@@ -83,28 +72,9 @@ impl Config {
                 ui.spinner();
             }
 
-            let state_lock = self.state.lock().unwrap();
-            // This might have changed since the above api call
-            tree_list_none = state_lock.trees.is_none();
-
-            if !tree_list_none {
-                let trees = state_lock.trees.as_ref().unwrap().clone();
-                drop(state_lock);
-
-                let before = &self.tree_option.clone();
-                egui::ComboBox::from_id_salt("Select Tree")
-                    .selected_text(&self.tree_option)
-                    .show_ui(ui, |ui| {
-                        for tree in trees {
-                            ui.selectable_value(&mut self.tree_option, tree.clone(), tree);
-                        }
-                    });
-
-                if before.ne(&self.tree_option) {
-                    (*self.state.lock().unwrap()).tree_keys = None;
-                    key_list_none = true;
-                }
-            }
+            // let state_lock = self.state.lock().unwrap();
+            // // This might have changed since the above api call
+            // tree_list_none = state_lock.trees.is_none();
 
             if !self.tree_option.is_empty() && !tree_list_none {
                 // ui.horizontal(|ui| {
@@ -177,6 +147,45 @@ impl Config {
             });
             //     });
             // });
+        }
+    }
+
+    pub fn titlebar_buttons(&mut self, ui: &mut egui::Ui) {
+        let state_lock = self.state.lock().unwrap();
+        let mut tree_list_none = state_lock.trees.is_none();
+        let mut key_list_none = state_lock.tree_keys.is_none();
+        let is_requesting = state_lock.is_requesting;
+        drop(state_lock);
+
+        if ui.button("Refresh").clicked() {
+            let mut state_lock = self.state.lock().unwrap();
+
+            (*state_lock).trees = None;
+            (*state_lock).tree_keys = None;
+            drop(state_lock);
+
+            tree_list_none = true;
+            key_list_none = true;
+        }
+
+        if !tree_list_none {
+            let state_lock = self.state.lock().unwrap();
+            let trees = state_lock.trees.as_ref().unwrap().clone();
+            drop(state_lock);
+
+            let before = &self.tree_option.clone();
+            egui::ComboBox::from_id_salt("Select Tree")
+                .selected_text(&self.tree_option)
+                .show_ui(ui, |ui| {
+                    for tree in trees {
+                        ui.selectable_value(&mut self.tree_option, tree.clone(), tree);
+                    }
+                });
+
+            if before.ne(&self.tree_option) {
+                (*self.state.lock().unwrap()).tree_keys = None;
+                key_list_none = true;
+            }
         }
     }
 }
