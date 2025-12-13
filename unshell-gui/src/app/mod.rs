@@ -35,50 +35,49 @@ impl AppState {
 
             if ui.selectable_label(enabled, *name).clicked() {
                 if enabled {
-                    // if let Some(tid) = Self::find_pane_id(*key, tree) {
-                    //     tree.remove_recursively(*tid);
-                    //     tree.tiles.remove(*tid);
-                    //     self.open_windows.remove(&key);
-                    // }
-                    // let tid = *self.open_windows.get(&key).unwrap();
-
-                    match Self::find_pane_id(*key, tree) {
-                        Some(tid) => {
-                            let tid = tid.clone();
-                            tree.remove_recursively(tid);
-                            tree.tiles.remove(tid);
-                            self.open_windows.remove(&key);
-                        }
-                        None => unreachable!(),
-                    }
-
-                    // if self.open_windows.is_empty()
+                    self.close_window(tree, key);
                 } else {
-                    let tid = tree.tiles.insert_pane(WindowWrapper {
-                        name: name.to_string(),
-                        window: *key,
-                    });
-
-                    match self.open_windows.len() {
-                        0 => {
-                            tree.root = Some(tid);
-                        }
-                        1 => {
-                            let old_root = tree.root.unwrap();
-                            let tab_id = tree.tiles.insert_tab_tile(vec![old_root, tid]);
-                            tree.root = Some(tab_id);
-                            tree.make_active(|t, _| t == tid);
-                        }
-                        _ => {
-                            let root = tree.root().unwrap();
-                            let n = tree.tiles.get_container(root).unwrap().num_children();
-                            tree.move_tile_to_container(tid, tree.root.unwrap().clone(), n, true);
-                        }
-                    }
-                    self.open_windows.insert(key.clone());
+                    self.open_window(tree, key, name);
                 }
             }
         }
+    }
+
+    pub fn close_window(&mut self, tree: &mut Tree<WindowWrapper>, key: &AppWindow) {
+        match Self::find_pane_id(*key, tree) {
+            Some(tid) => {
+                let tid = tid.clone();
+                tree.remove_recursively(tid);
+                tree.tiles.remove(tid);
+                self.open_windows.remove(&key);
+            }
+            None => unreachable!(),
+        }
+    }
+
+    pub fn open_window(&mut self, tree: &mut Tree<WindowWrapper>, key: &AppWindow, name: &str) {
+        let tid = tree.tiles.insert_pane(WindowWrapper {
+            name: name.to_string(),
+            window: *key,
+        });
+
+        match self.open_windows.len() {
+            0 => {
+                tree.root = Some(tid);
+            }
+            1 => {
+                let old_root = tree.root.unwrap();
+                let tab_id = tree.tiles.insert_tab_tile(vec![old_root, tid]);
+                tree.root = Some(tab_id);
+                tree.make_active(|t, _| t == tid);
+            }
+            _ => {
+                let root = tree.root().unwrap();
+                let n = tree.tiles.get_container(root).unwrap().num_children();
+                tree.move_tile_to_container(tid, tree.root.unwrap().clone(), n, true);
+            }
+        }
+        self.open_windows.insert(key.clone());
     }
 
     fn find_pane_id(window_type: AppWindow, tree: &Tree<WindowWrapper>) -> Option<&TileId> {
