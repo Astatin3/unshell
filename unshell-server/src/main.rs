@@ -25,7 +25,9 @@ pub struct Args {
 async fn main() {
     let args = Args::parse();
 
-    unshell_lib::logger::PrettyLogger::init();
+    unshell_lib::logger::PrettyLogger::init_output(|message| {
+        unshell_server::logger::Logger::log(format!("{message:?}"));
+    });
 
     let database = Server::new(args.database_name);
 

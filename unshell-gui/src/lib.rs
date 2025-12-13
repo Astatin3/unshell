@@ -7,6 +7,7 @@ pub mod app;
 mod auth;
 mod config;
 mod flowchart;
+mod log_viewer;
 mod payload_config;
 
 use std::time::Duration;

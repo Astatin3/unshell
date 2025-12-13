@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 
 use crate::logger::{LogLevel, Logger, Record};
 
-pub struct PrettyLogger;
+pub struct PrettyLogger {
+    output: Option<Box<dyn Fn(&Record)>>,
+}
 
 // static TRACE_COLOR: &str = "\x1b[34m";
 static DEBUG_COLOR: &str = "\x1b[36m";
@@ -17,6 +19,10 @@ static GREY: &str = "\x1b[90m";
 
 impl Logger for PrettyLogger {
     fn log(&self, message: Record) {
+        if let Some(ref func) = self.output {
+            (*func)(&message)
+        }
+
         let log_level = match message.log_level {
             LogLevel::Debug => format!("{DEBUG_COLOR}DBUG"),
             LogLevel::Info => format!("{INFO_COLOR}INFO"),
@@ -38,6 +44,15 @@ impl Logger for PrettyLogger {
 
 impl PrettyLogger {
     pub fn init() {
-        crate::logger::set_logger_box(Box::new(PrettyLogger));
+        crate::logger::set_logger_box(Box::new(PrettyLogger { output: None }));
+    }
+
+    pub fn init_output<T>(output: T)
+    where
+        T: Fn(&Record) + 'static,
+    {
+        crate::logger::set_logger_box(Box::new(PrettyLogger {
+            output: Some(Box::new(output)),
+        }));
     }
 }

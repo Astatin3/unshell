@@ -162,7 +162,6 @@ impl Auth {
                 format!("Bearer {}", token.token),
                 Closure::once_into_js(move |ok: bool, response: String| {
                     if ok {
-                        crate::log(&response);
                         if let Ok(value) = serde_json::from_str::<T>(&response) {
                             ret(value)
                         } else {

@@ -1,6 +1,7 @@
 // #![macro_use]
 
 mod api;
+pub mod logger;
 mod server;
 pub use api::app::start_api;
 

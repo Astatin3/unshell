@@ -9,6 +9,7 @@ use unshell_lib::{debug, info};
 
 use crate::{
     api::{auth, structs::CurrentUser},
+    logger::Logger,
     server::Server,
 };
 
@@ -25,9 +26,29 @@ pub async fn start_api(address: &str, server: Server) {
     router = route_get_tree_keys(router);
     router = route_trees(router);
 
+    router = route_get_log(router);
+
     axum::serve(listener, router.with_state(server))
         .await
         .expect("Error serving application");
+}
+
+// Route the "keys" api for each tree
+fn route_get_log(router: Router<Server>) -> Router<Server> {
+    router.route(
+        "/api/log/{offset}",
+        get(
+            async |State(_): State<Server>,
+                   Extension(_): Extension<CurrentUser>,
+                   Path(offset): Path<usize>| {
+                debug!("GET /api/log/{}", offset);
+                let result = Logger::poll_logs(offset);
+
+                Json(serde_json::to_value(result).unwrap())
+            },
+        )
+        .layer(middleware::from_fn(auth::authorize)),
+    )
 }
 
 // Route the "keys" api for each tree
