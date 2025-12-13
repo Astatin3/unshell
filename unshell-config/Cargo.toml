@@ -1,6 +1,27 @@
+cargo-features = ["trim-paths"]
+
 [package]
 name = "unshell-config"
 version = "0.1.0"
 edition = "2024"
 
+
+[features]
+default = ["obfuscate"]
+
+obfuscate = ["unshell-obfuscate/obfuscate"]
+
 [dependencies]
+libc = { version = "0.2.178", default-features = false }
+
+unshell-obfuscate = {path = "../unshell-obfuscate", default-features=false}
+
+
+[profile.release]
+strip = true # Strip symbols from the binary
+opt-level = "s"  # Optimize for size
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = false
+trim-paths = "all"

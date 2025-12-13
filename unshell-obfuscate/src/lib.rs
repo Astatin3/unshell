@@ -3,171 +3,47 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn, parse_macro_input};
+use syn::parse_macro_input;
 
 mod format_helper;
 use format_helper::*;
 
-use syn::LitStr;
+mod junk_asm;
 
-// Put all encrypt-related dependencies in a module, so they are easier to use with the feature flag
+#[allow(dead_code)]
+mod no_obfuscate;
+
+#[allow(dead_code)]
+mod obfuscate;
+
+#[cfg(not(feature = "obfuscate"))]
+use no_obfuscate as obs;
 #[cfg(feature = "obfuscate")]
-mod obs_deps {
-    pub use unshell_crypt::BACKUP_ENV_KEY;
-    pub use unshell_crypt::ENV_KEY_NAME;
-    pub use unshell_crypt::STATIC_IV;
-    pub use unshell_crypt::aes::encrypt_aes_lines;
-    pub use unshell_crypt::fill;
-}
-#[cfg(feature = "obfuscate")]
-use obs_deps::*;
+use obfuscate as obs;
+
+// String obfuscation
 
 #[proc_macro]
-#[cfg(not(feature = "obfuscate"))]
 pub fn obs(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as LitStr);
-
-    (quote::quote! {
-        String::from(#input)
-    })
-    .into()
+    obs::obs(input)
 }
 
 #[proc_macro_attribute]
-#[cfg(not(feature = "obfuscate"))]
 pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let func = parse_macro_input!(item as ItemFn);
-    TokenStream::from(quote! {
-        #[unsafe(no_mangle)]
-        #func
-    })
+    obs::obfuscated_symbol(_attr, item)
 }
 
 #[proc_macro]
-#[cfg(not(feature = "obfuscate"))]
 pub fn symbol(input: TokenStream) -> TokenStream {
-    input
-}
-
-#[proc_macro_attribute]
-#[cfg(feature = "obfuscate")]
-pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    // Parse the input function
-
-    let func = parse_macro_input!(item as ItemFn);
-
-    // Get the original function name
-    let fn_name = func.sig.ident.to_string();
-
-    // get the encryption key
-    let key_str = std::env::var(ENV_KEY_NAME).unwrap_or(BACKUP_ENV_KEY.to_owned());
-
-    // Generate the new, obfuscated name
-    let obfuscated_name = encrypt_aes_lines(&fn_name, &key_str, STATIC_IV);
-
-    // Create a new string literal for the name
-    let new_name_lit = LitStr::new(&obfuscated_name, func.sig.ident.span());
-
-    // Re-build the function, but add #[no_mangle]
-    // and rename the *exported* symbol via #[export_name]
-    TokenStream::from(quote! {
-        #[unsafe(export_name = #new_name_lit)]
-        #func
-    })
-}
-
-// --- NEW MACRO 2: The macro for the loader ---
-
-#[proc_macro]
-#[cfg(feature = "obfuscate")]
-pub fn symbol(input: TokenStream) -> TokenStream {
-    // Parse the input as a string literal
-    let lit_str = parse_macro_input!(input as LitStr);
-    let original_name = lit_str.value();
-
-    // get the encryption key
-    let key_str = std::env::var(ENV_KEY_NAME).unwrap_or(BACKUP_ENV_KEY.to_owned());
-
-    // Generate the exact same obfuscated name
-    let obfuscated_name = encrypt_aes_lines(&original_name, &key_str, STATIC_IV);
-
-    // Expand to a static string literal
-    TokenStream::from(quote! {
-        #obfuscated_name
-    })
+    obs::symbol(input)
 }
 
 #[proc_macro]
-#[cfg(feature = "obfuscate")]
-pub fn obs(input: TokenStream) -> TokenStream {
-    // Parse the input as a string literal
-    let lit_str = parse_macro_input!(input as LitStr);
-    let original_str = lit_str.value();
-
-    // Handle empty strings explicitly
-    if original_str.is_empty() {
-        return TokenStream::from(quote! { String::new() });
-    }
-
-    // --- Obfuscated Branch Logic ---
-    // This code runs at compile-time
-
-    let str_bytes = original_str.as_bytes();
-    let len = str_bytes.len();
-
-    // 1. Generate a unique, random key for this string
-    let mut key = vec![0u8; len];
-    fill(&mut key).expect("Failed to get random bytes for XOR key");
-
-    // 2. XOR the string with the key
-    let mut obfuscated = Vec::with_capacity(len);
-    for i in 0..len {
-        obfuscated.push(str_bytes[i] ^ key[i]);
-    }
-
-    // 3. This is the code that will be injected into the user's binary
-    //    It runs at *runtime* to decrypt the string.
-    let obfuscated_expansion = quote! {
-        {
-            // These static arrays are stored directly in your binary
-            static OBFUSCATED_DATA: [u8; #len] = [ #( #obfuscated ),* ];
-            static KEY_DATA: [u8; #len] = [ #( #key ),* ];
-
-            let mut decrypted = Vec::with_capacity(#len);
-            for i in 0..#len {
-                decrypted.push(OBFUSCATED_DATA[i] ^ KEY_DATA[i]);
-            }
-
-            // We can trust this since the source was a valid String literal
-            String::from_utf8(decrypted).unwrap()
-        }
-    };
-
-    TokenStream::from(obfuscated_expansion)
+pub fn junk_asm(input: TokenStream) -> TokenStream {
+    junk_asm::junk_asm(input)
 }
 
-// #[proc_macro]
-// pub fn file_literal(_input: TokenStream) -> TokenStream {
-//     // let input = input.into_iter().collect::<Vec<_>>();
-//     // if input.len() != 1 {
-//     //     let msg = format!("expected exactly one input token, got {}", input.len());
-//     //     return quote! { compile_error!(#msg) }.into();
-//     // }
-
-//     let string = file!();
-//     let lit_str = LitStr::new(string, proc_macro2::Span::call_site());
-
-//     // let string_lit = match LitStr::try_from(&input) {
-//     //     // Error if the token is not a string literal
-//     //     Err(e) => return e.to_compile_error(),
-//     //     Ok(lit) => lit,
-//     // };
-
-//     (quote! {
-//         #lit_str
-//     })
-//     .into()
-// }
+//
 
 #[proc_macro]
 pub fn file_symbol(_input: TokenStream) -> TokenStream {
