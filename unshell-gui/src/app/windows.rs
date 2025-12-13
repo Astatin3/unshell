@@ -63,6 +63,28 @@ impl egui_tiles::Behavior<WindowWrapper> for AppState {
         ret
     }
 
+    fn is_tab_closable(
+        &self,
+        tiles: &egui_tiles::Tiles<WindowWrapper>,
+        tile_id: egui_tiles::TileId,
+    ) -> bool {
+        match tiles.get(tile_id).unwrap() {
+            egui_tiles::Tile::Pane(_) => true,
+            egui_tiles::Tile::Container(_) => false,
+        }
+    }
+
+    fn on_tab_close(
+        &mut self,
+        tiles: &mut egui_tiles::Tiles<WindowWrapper>,
+        tile_id: egui_tiles::TileId,
+    ) -> bool {
+        match tiles.get(tile_id).unwrap() {
+            egui_tiles::Tile::Pane(pane) => self.open_windows.remove(&pane.window),
+            egui_tiles::Tile::Container(_) => false,
+        }
+    }
+
     fn tab_bar_color(&self, visuals: &egui::Visuals) -> egui::Color32 {
         visuals.panel_fill // same as the tab contents
     }

@@ -1,7 +1,7 @@
 mod app;
 mod windows;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use crate::{
     app::windows::WindowWrapper, auth::Auth, config::Config, flowchart::FlowChart,
@@ -14,7 +14,7 @@ use egui_tiles::{TileId, Tree};
 pub struct AppState {
     pub auth: Auth,
 
-    pub open_windows: HashMap<AppWindow, TileId>,
+    pub open_windows: HashSet<AppWindow>,
 
     pub flowchart: FlowChart,
     pub config: Config,
@@ -31,14 +31,26 @@ impl AppState {
         .iter()
         .enumerate()
         {
-            let enabled = self.open_windows.contains_key(&key);
+            let enabled = self.open_windows.contains(&key);
 
             if ui.selectable_label(enabled, *name).clicked() {
                 if enabled {
-                    let tid = *self.open_windows.get(&key).unwrap();
-                    tree.remove_recursively(tid);
-                    tree.tiles.remove(tid);
-                    self.open_windows.remove(&key);
+                    // if let Some(tid) = Self::find_pane_id(*key, tree) {
+                    //     tree.remove_recursively(*tid);
+                    //     tree.tiles.remove(*tid);
+                    //     self.open_windows.remove(&key);
+                    // }
+                    // let tid = *self.open_windows.get(&key).unwrap();
+
+                    match Self::find_pane_id(*key, tree) {
+                        Some(tid) => {
+                            let tid = tid.clone();
+                            tree.remove_recursively(tid);
+                            tree.tiles.remove(tid);
+                            self.open_windows.remove(&key);
+                        }
+                        None => unreachable!(),
+                    }
 
                     // if self.open_windows.is_empty()
                 } else {
@@ -63,10 +75,24 @@ impl AppState {
                             tree.move_tile_to_container(tid, tree.root.unwrap().clone(), n, true);
                         }
                     }
-                    self.open_windows.insert(key.clone(), tid);
+                    self.open_windows.insert(key.clone());
                 }
             }
         }
+    }
+
+    fn find_pane_id(window_type: AppWindow, tree: &Tree<WindowWrapper>) -> Option<&TileId> {
+        for (tid, window) in tree.tiles.iter() {
+            match window {
+                egui_tiles::Tile::Pane(pane) => {
+                    if pane.window == window_type {
+                        return Some(tid);
+                    }
+                }
+                egui_tiles::Tile::Container(_) => {}
+            }
+        }
+        None
     }
 }
 

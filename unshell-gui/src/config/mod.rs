@@ -41,8 +41,8 @@ impl Default for Config {
 impl Config {
     pub fn update(&mut self, auth: &mut Auth, ui: &mut egui::Ui) {
         let state_lock = self.state.lock().unwrap();
-        let mut tree_list_none = state_lock.trees.is_none();
-        let mut key_list_none = state_lock.tree_keys.is_none();
+        let tree_list_none = state_lock.trees.is_none();
+        let key_list_none = state_lock.tree_keys.is_none();
         let is_requesting = state_lock.is_requesting;
 
         if !tree_list_none
@@ -153,8 +153,7 @@ impl Config {
     pub fn titlebar_buttons(&mut self, ui: &mut egui::Ui) {
         let state_lock = self.state.lock().unwrap();
         let mut tree_list_none = state_lock.trees.is_none();
-        let mut key_list_none = state_lock.tree_keys.is_none();
-        let is_requesting = state_lock.is_requesting;
+
         drop(state_lock);
 
         if ui.button("Refresh").clicked() {
@@ -165,7 +164,6 @@ impl Config {
             drop(state_lock);
 
             tree_list_none = true;
-            key_list_none = true;
         }
 
         if !tree_list_none {
@@ -184,7 +182,6 @@ impl Config {
 
             if before.ne(&self.tree_option) {
                 (*self.state.lock().unwrap()).tree_keys = None;
-                key_list_none = true;
             }
         }
     }
