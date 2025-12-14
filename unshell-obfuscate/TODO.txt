@@ -1,0 +1,3 @@
+- Automate adding obfuscation to code
+- Make random assembly use a distribution, not a random range, for more realistic code.
+- Make the symbolic obfuscation actually symbolic, by creating a symbol table, not AES encryption.

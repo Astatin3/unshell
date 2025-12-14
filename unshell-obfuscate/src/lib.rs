@@ -8,12 +8,10 @@ use syn::parse_macro_input;
 mod format_helper;
 use format_helper::*;
 
-mod junk_asm;
-
-#[allow(dead_code)]
+#[allow(dead_code, unused_imports)]
 mod no_obfuscate;
 
-#[allow(dead_code)]
+#[allow(dead_code, unused_imports)]
 mod obfuscate;
 
 #[cfg(not(feature = "obfuscate"))]
@@ -40,7 +38,7 @@ pub fn symbol(input: TokenStream) -> TokenStream {
 
 #[proc_macro]
 pub fn junk_asm(input: TokenStream) -> TokenStream {
-    junk_asm::junk_asm(input)
+    obs::junk_asm(input)
 }
 
 //

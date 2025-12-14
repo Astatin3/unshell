@@ -21,3 +21,7 @@ pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn symbol(input: TokenStream) -> TokenStream {
     input
 }
+
+pub fn junk_asm(_input: TokenStream) -> TokenStream {
+    TokenStream::new()
+}

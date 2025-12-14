@@ -1,11 +1,22 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use rand::rngs::SmallRng;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use syn::{LitFloat, parse_macro_input};
 
-const MAX_INSTRUCTIONS: u32 = 20; // Maximum instructions per recursive block
-const MIN_LENGTH: f64 = 10.; // Min length per 1/weight
+// const MIN_TAGS: u32 = 1; // Maximum instructions per recursive block
+// const MAX_TAGS: u32 = 22; // Maximum instructions per recursive block
+
+// const MIN_INSTRUCTIONS: u32 = 1; // Maximum instructions per recursive block
+// const MAX_INSTRUCTIONS: u32 = 22; // Maximum instructions per recursive block
+
+// const MIN_JUMPS: u32 = 1;
+// const MAX_JUMPS: u32 = 5;
+
+const CHAIN_WEIGHT: f64 = 1.0;
+const TAG_WEIGHT: f64 = 1.0;
+const INST_WEIGHT: f64 = 3.0;
+const JUMP_WEIGHT: f64 = 2.0;
 
 // The full list of 64-bit registers in AT&T syntax (used by default in asm!)
 const REGISTERS: &[&str] = &[
@@ -24,8 +35,8 @@ const ARITHITHMETIC_OPS: &[&str] = &["addq", "subq", "xorq", "andq", "orq"];
 // --- Helper Functions for Modular Generation ---
 
 /// Generates a unique label name for the given depth and ID.
-fn generate_label(prefix: &str, depth: u32, block_id: u32, id: u32) -> String {
-    format!(".L_{}_{}_{}_{}", prefix, depth, block_id, id)
+fn generate_label(prefix: &str, depth: usize, id: usize) -> String {
+    format!(".L_{}_{}_{}", prefix, depth, id)
 }
 /// Generates a highly randomized, complex instruction using different addressing modes.
 fn generate_complex_mutation(rng: &mut SmallRng) -> String {
@@ -74,72 +85,80 @@ fn generate_conditional_jump(rng: &mut SmallRng, label: &str) -> String {
 
 // --- The Core DAG Recursive Algorithm ---
 
-fn generate_dag_block(weight: f64, rng: &mut SmallRng, depth: u32, id_counter: &mut u32) -> String {
-    // 1. Termination Check
-
-    if rng.random_bool(weight) {
-        return String::new(); // Stop recursion
-    }
-
-    let block_id = *id_counter;
-    *id_counter += 1;
-
-    // 2. Randomize Block Length: The length is now based on WEIGHT.
-    // If rng < WEIGHT, stop growing the block. Otherwise, continue.
-    let mut num_labels: u32 = 0;
-    while !rng.random_bool(weight) && num_labels < MAX_INSTRUCTIONS {
-        num_labels += 1;
-    }
-
-    // Ensure at least one instruction/label exists if we entered the block
-    if num_labels == 0 {
-        num_labels = 1;
-    }
-
-    // Generate all labels for this block (L0 to Ln-1)
-    let labels: Vec<String> = (0..num_labels)
-        .map(|i| generate_label("dag", depth, block_id, i))
-        .collect();
+fn generate_dag_block(weight: f64, rng: &mut SmallRng, total_count: usize) -> String {
+    let labels = (0..total_count)
+        .map(|i| {
+            (0..{
+                let mut n = 1;
+                while !rng.random_bool((weight.sqrt() * TAG_WEIGHT).min(1.)) {
+                    n += 1;
+                }
+                n
+            })
+                .map(|j| generate_label("dag", i, j))
+                .collect::<Vec<String>>()
+        })
+        // .flatten()
+        .collect::<Vec<Vec<String>>>();
 
     let mut assembly_block = String::new();
 
     // 3. Instruction Loop and DAG construction
-    for i in 0..num_labels {
-        let current_label = &labels[i as usize];
-        assembly_block.push_str(&format!("{}:\n", current_label));
+    for i in 0..total_count {
+        let chain_labels = &labels[i];
+        let num_labels = chain_labels.len();
+        for j in 0..num_labels {
+            let current_label = &chain_labels[j];
+            assembly_block.push_str(&format!("{}:\n", current_label));
 
-        let mut instruction_count = 0;
+            let mut inst_count = 1;
+            while !rng.random_bool((weight * INST_WEIGHT).min(1.)) {
+                inst_count += 1;
+            }
 
-        // Generate a random number of mutations based on WEIGHT
-        while !rng.random_bool(weight.powi(2)) && instruction_count < MAX_INSTRUCTIONS * 2 {
-            assembly_block.push_str(&format!("{}\n", generate_complex_mutation(rng)));
-            instruction_count += 1;
-        }
+            for _ in 0..inst_count {
+                assembly_block.push_str(&format!("{}\n", generate_complex_mutation(rng)));
+            }
 
-        // Conditional Forward Jump (Creates DAG edges)
-        if i < num_labels - 1 && !rng.random_bool(weight * 0.5) {
-            // Jump to a random label strictly ahead of the current one
-            let target_index = rng.random_range(i as usize + 1..num_labels as usize);
-            let target_label = &labels[target_index];
-            assembly_block.push_str(&generate_conditional_jump(rng, target_label));
-        }
+            // Conditional Forward Jump (Creates DAG edges)
+            if i < total_count - 1 {
+                let mut jump_count = 1;
+                while !rng.random_bool((weight.sqrt() * JUMP_WEIGHT).min(1.)) {
+                    jump_count += 1;
+                }
 
-        // Recursive Call (Nesting)
-        if depth < 2 {
-            // Lower probability for deep nesting
-            assembly_block.push_str(&generate_dag_block(weight, rng, depth + 1, id_counter));
+                for _ in 0..jump_count {
+                    // Jump to a random label strictly ahead of the current one
+                    let target_chain = if j + 1 < num_labels {
+                        rng.random_range(i..total_count)
+                    } else {
+                        rng.random_range(i + 1..total_count)
+                    };
+                    let chain_labels = &labels[target_chain];
+
+                    let target_index = if target_chain == i {
+                        rng.random_range((j + 1)..num_labels)
+                    } else {
+                        rng.random_range(0..chain_labels.len())
+                    };
+
+                    let target_label = &chain_labels[target_index];
+                    assembly_block.push_str(&generate_conditional_jump(rng, target_label));
+                }
+                // }
+            }
         }
     }
 
     // 4. Backward Conditional Jump (Adds controlled cycles)
     // Only at the end of the block, allowing a chance to loop back to an earlier instruction.
-    if num_labels > 1 && rng.random_bool(weight) {
-        let target_index = rng.random_range(0..num_labels as usize - 1);
-        let target_label = &labels[target_index];
-        assembly_block.push_str(&format!("{}\n", generate_complex_mutation(rng)));
-        assembly_block.push_str(&generate_conditional_jump(rng, target_label));
-        assembly_block.push_str("// Backward Conditional Jump to maintain short execution\n");
-    }
+    // if num_labels > 1 && rng.random_bool(weight * 3.) {
+    //     let target_index = rng.random_range(0..num_labels as usize - 1);
+    //     let target_label = &labels[target_index];
+    //     assembly_block.push_str(&format!("{}\n", generate_complex_mutation(rng)));
+    //     assembly_block.push_str(&generate_conditional_jump(rng, target_label));
+    //     assembly_block.push_str("// Backward Conditional Jump to maintain short execution\n");
+    // }
 
     assembly_block
 }
@@ -150,7 +169,7 @@ pub fn junk_asm(input: TokenStream) -> TokenStream {
         None
     } else {
         match parse_macro_input!(input as LitFloat).base10_parse::<f64>() {
-            Ok(w) => Some(w), // Clamp to a sensible range
+            Ok(w) => Some(1. / (w + 1.)), // Move weight variable to be more
             Err(_) => None,
         }
     }
@@ -159,20 +178,26 @@ pub fn junk_asm(input: TokenStream) -> TokenStream {
 
     // 2. Setup
     let mut rng = SmallRng::from_os_rng();
-    let mut id_counter = 0;
-    // let random_u64_addr: u64 = rng.next_u64(); // The simulated external address
 
-    // 3. Generate Assembly
-    let main_assembly = {
-        loop {
-            let res = generate_dag_block(weight, &mut rng, 0, &mut id_counter);
-            if res.len() as f64 > weight * MIN_LENGTH {
-                break res;
-            }
+    let count = {
+        let mut n = 1;
+        while !rng.random_bool((weight.sqrt() * CHAIN_WEIGHT).min(1.)) {
+            n += 1;
         }
+        n
     };
 
-    println!("{}", main_assembly);
+    // eeeeeeeeeeee
+
+    // 3. Generate Assembly
+    // let main_assembly = (0..count)
+    //     .map(|i| generate_dag_block(weight, &mut rng, i, count))
+    //     .into_iter()
+    //     .collect::<String>();
+
+    let main_assembly = generate_dag_block(weight, &mut rng, count);
+
+    // println!("{}", main_assembly);
 
     // 4. Wrap in `asm!`
     let expanded = quote! {
