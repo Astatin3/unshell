@@ -1,0 +1,9 @@
+name="Server"
+version="0.1"
+description="Test server module for unshell"
+authors=["astatin3"]
+
+
+[config]
+header1 = { Header = "Header123" }
+integer1 = { Integer = {}}

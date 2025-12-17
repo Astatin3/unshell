@@ -1,0 +1,11 @@
+name="Client"
+version="0.1"
+description="Test Client module"
+authors=["astatin3"]
+
+
+[config]
+header1 = { Header = "Header123" }
+integer1 = { Integer = {}}
+
+[build_config]

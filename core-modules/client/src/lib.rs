@@ -2,20 +2,18 @@ mod client_runtime;
 
 pub const MODULE_NAME: &'static str = "client";
 
-// pub use unshell_modules::setup_logger;
-
-// use unshell_modules::{Manager, ModuleRuntime, module_interface};
-
 use std::any::TypeId;
 
-use crate::{
+use unshell_lib::{
     ModuleError,
     ModuleRuntime,
-    client::client_runtime::ClientRuntime,
+    // client::client_runtime::ClientRuntime,
     config::{InterfaceWrapper, NamedComponent, RuntimeConfig},
     module_interface,
     warn, // module_interface,
 };
+
+use crate::client_runtime::ClientRuntime;
 
 pub extern "C" fn test1() {
     warn!("Test1 called xxxxxxxxxxx");

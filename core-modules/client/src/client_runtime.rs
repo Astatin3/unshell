@@ -1,17 +1,22 @@
 use std::{
-    net::TcpStream,
+    net,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
     time::Duration,
 };
 
-use crate::{config::RuntimeConfig, network::Stream, *};
+use unshell_lib::{
+    config::RuntimeConfig,
+    module::Manager,
+    network::{Stream, TcpStream},
+    *,
+};
 // use unshell_modules::{Manager, ModuleRuntime};
 
-use crate::ModuleRuntime;
+use unshell_lib::ModuleRuntime;
 
 pub struct ClientRuntime {
     config: &'static RuntimeConfig,
@@ -86,7 +91,7 @@ impl ModuleRuntime for ClientRuntime {
             debug!("Connecting to server...");
 
             loop {
-                let stream = match TcpStream::connect(host) {
+                let stream = match net::TcpStream::connect(host) {
                     Ok(stream) => stream,
                     Err(e) => {
                         error!("Failed to connect to server: {}", e);
@@ -99,7 +104,7 @@ impl ModuleRuntime for ClientRuntime {
                 thread::sleep(Duration::from_millis(100));
                 // Duration::from_millis(100);
 
-                let stream = crate::network::TcpStream::new(stream);
+                let stream = TcpStream::new(stream);
                 let stream_clone = stream.try_clone().unwrap();
 
                 manager.lock().unwrap().add_connection(stream_clone);

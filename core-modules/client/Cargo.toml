@@ -1,21 +1,20 @@
 cargo-features = ["trim-paths"]
 
 [package]
-name = "unshell-config"
+name = "client"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib"]
 
 [features]
-default = ["obfuscate"]
-
-obfuscate = ["unshell-obfuscate/obfuscate"]
+log_debug = ["unshell-lib/log_debug"]
+obfuscate = ["unshell-lib/obfuscate"]
 
 [dependencies]
-libc = { version = "0.2.178", default-features = false }
-
-unshell-obfuscate = {path = "../unshell-obfuscate", default-features=false}
-
+unshell-lib = {path = "../../unshell-lib", default-featues = false}
+unshell-obfuscate = {path = "../../unshell-obfuscate", default-featues = false}
 
 [profile.release]
 strip = true # Strip symbols from the binary

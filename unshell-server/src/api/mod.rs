@@ -7,6 +7,8 @@ pub mod app;
 mod auth;
 mod structs;
 
+pub use structs::CurrentUser;
+
 static EXPIRE_DURATION: Duration = Duration::hours(12);
 
 #[dynamic]

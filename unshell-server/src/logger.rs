@@ -1,8 +1,14 @@
+use axum::extract::{Path, State};
+use axum::{Extension, Json};
 use chrono::Local;
+use unshell_lib::debug;
 // use lazy_static::lazy_static;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+
+use crate::Server;
+use crate::api::CurrentUser;
 
 // --- Constants ---
 /// The directory where log files will be stored.
@@ -124,6 +130,18 @@ impl Logger {
                 Vec::new()
             }
         }
+    }
+
+    // Route the "keys" api for each tree
+    pub async fn poll_logs_api(
+        State(_): State<Server>,
+        Extension(_): Extension<CurrentUser>,
+        Path(offset): Path<usize>,
+    ) -> axum::Json<serde_json::Value> {
+        debug!("GET /api/log/{}", offset);
+        let result = Self::poll_logs(offset);
+
+        Json(serde_json::to_value(result).unwrap())
     }
 }
 

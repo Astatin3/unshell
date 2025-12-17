@@ -1,3 +1,7 @@
+mod blob;
+
+pub use blob::Blob;
+
 use std::{
     collections::HashMap,
     error::Error,
@@ -67,7 +71,7 @@ pub struct ComponentState {
 
 pub fn load_config(path: &PathBuf) -> Result<Vec<ComponentState>, Box<dyn Error>> {
     let path_absolute = fs::canonicalize(path.clone())?;
-    debug!("Loading data from path: `{}`", path_absolute);
+    debug!("Loading data from path: `{:?}`", path_absolute);
 
     // Read string as path
     let config_str = fs::read_to_string(path.clone())?;

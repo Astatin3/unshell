@@ -1,5 +1,6 @@
 use std::{error::Error, path::PathBuf};
 
+mod blobs;
 mod database;
 mod manager;
 

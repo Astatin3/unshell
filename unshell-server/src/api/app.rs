@@ -7,11 +7,35 @@ use axum::{
 use tokio::net::TcpListener;
 use unshell_lib::{debug, info};
 
+// axum_extra::
+
 use crate::{
     api::{auth, structs::CurrentUser},
     logger::Logger,
     server::Server,
 };
+
+macro_rules! route_get {
+    ($router:expr, $path:expr, $func:expr) => {{
+        {
+            $router.route(
+                $path,
+                get($func).layer(middleware::from_fn(auth::authorize)),
+            )
+        }
+    }};
+}
+
+// macro_rules! route_post {
+//     ($router:expr, $path:expr, $func:expr) => {{
+//         {
+//             $router.route(
+//                 $path,
+//                 post($func).layer(middleware::from_fn(auth::authorize)),
+//             )
+//         }
+//     }};
+// }
 
 pub async fn start_api(address: &str, server: Server) {
     let listener = TcpListener::bind(address)
@@ -21,86 +45,19 @@ pub async fn start_api(address: &str, server: Server) {
     info!("Listening on {}", listener.local_addr().unwrap());
 
     let mut router = Router::new().route("/api/auth", post(auth::sign_in));
-    router = route_get_trees(router);
-    router = route_get_all_tree_values(router);
-    router = route_get_tree_keys(router);
+
     router = route_trees(router);
 
-    router = route_get_log(router);
+    router = route_get!(router, "/api/log/{*offset}", Logger::poll_logs_api);
+    router = route_get!(router, "/api/trees", Server::get_trees_api);
+    router = route_get!(router, "/api/keys/{*path}", Server::all_tree_keys_api);
+    router = route_get!(router, "/api/values/{*path}", Server::all_tree_values_api);
+
+    // router = route_get_log(router);
 
     axum::serve(listener, router.with_state(server))
         .await
         .expect("Error serving application");
-}
-
-// Route the "keys" api for each tree
-fn route_get_log(router: Router<Server>) -> Router<Server> {
-    router.route(
-        "/api/log/{offset}",
-        get(
-            async |State(_): State<Server>,
-                   Extension(_): Extension<CurrentUser>,
-                   Path(offset): Path<usize>| {
-                debug!("GET /api/log/{}", offset);
-                let result = Logger::poll_logs(offset);
-
-                Json(serde_json::to_value(result).unwrap())
-            },
-        )
-        .layer(middleware::from_fn(auth::authorize)),
-    )
-}
-
-// Route the "keys" api for each tree
-fn route_get_trees(router: Router<Server>) -> Router<Server> {
-    router.route(
-        "/api/trees",
-        get(
-            async |State(server): State<Server>, Extension(_): Extension<CurrentUser>| {
-                debug!("GET /api/trees");
-                let result = server.get_trees();
-
-                Json(serde_json::to_value(result).unwrap())
-            },
-        )
-        .layer(middleware::from_fn(auth::authorize)),
-    )
-}
-
-// Route the "keys" api for each tree
-fn route_get_tree_keys(router: Router<Server>) -> Router<Server> {
-    router.route(
-        "/api/keys/{*path}",
-        get(
-            async |State(server): State<Server>,
-                   Path(path): Path<String>,
-                   Extension(_): Extension<CurrentUser>| {
-                debug!("GET /api/keys/{}", path);
-                let result = server.get_keys(&path);
-
-                Json(serde_json::to_value(result).unwrap())
-            },
-        )
-        .layer(middleware::from_fn(auth::authorize)),
-    )
-}
-
-// Route the "values" api to get all the values for each tree
-fn route_get_all_tree_values(router: Router<Server>) -> Router<Server> {
-    router.route(
-        "/api/values/{*path}",
-        get(
-            async |State(server): State<Server>,
-                   Path(path): Path<String>,
-                   Extension(_): Extension<CurrentUser>| {
-                debug!("GET /api/values/{}", path);
-                let result = server.all_tree_values(&path);
-
-                Json(serde_json::to_value(result).unwrap())
-            },
-        )
-        .layer(middleware::from_fn(auth::authorize)),
-    )
 }
 
 // Loop through all trees and add /api/<tree>/<path> POST aand GET listeners for them
