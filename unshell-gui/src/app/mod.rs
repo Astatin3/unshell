@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use crate::{
     app::windows::WindowWrapper, auth::Auth, config::Config, flowchart::FlowChart,
-    log_viewer::LogViewer, payload_config::PayloadConfig,
+    interface::InterfaceWindow, log_viewer::LogViewer, payload_config::PayloadConfig,
 };
 pub use app::TemplateApp;
 use egui_tiles::{TileId, Tree};
@@ -20,6 +20,7 @@ pub struct AppState {
     pub config: Config,
     pub payload_config: PayloadConfig,
     pub log_viewer: LogViewer,
+    pub interface: InterfaceWindow,
 }
 
 impl AppState {
@@ -29,6 +30,7 @@ impl AppState {
             (AppWindow::PayloadConfig, "Payload Config"),
             (AppWindow::Config, "Config"),
             (AppWindow::LogViewer, "Log Viewer"),
+            (AppWindow::InterfaceWindow, "Tree Test"),
         ])
         .iter()
         .enumerate()
@@ -103,6 +105,7 @@ pub enum AppWindow {
     Config,
     PayloadConfig,
     LogViewer,
+    InterfaceWindow,
 }
 
 impl AppWindow {
@@ -112,6 +115,7 @@ impl AppWindow {
             AppWindow::Config => state.config.update(&mut state.auth, ui),
             AppWindow::PayloadConfig => state.payload_config.update(ui),
             AppWindow::LogViewer => state.log_viewer.update(&mut state.auth, ui),
+            AppWindow::InterfaceWindow => state.interface.update(&mut state.auth, ui),
         }
     }
 

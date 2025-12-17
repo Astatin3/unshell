@@ -1,6 +1,8 @@
 mod blob;
+// pub mod interface;
 
 pub use blob::Blob;
+// pub use interface::InterfaceWrapper;
 
 use std::{
     collections::HashMap,
@@ -37,7 +39,7 @@ struct BuildConfig {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-enum ConfigStructField {
+pub enum ConfigStructField {
     Header(String),
     Text(String),
     String {

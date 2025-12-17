@@ -5,6 +5,7 @@ mod config;
 pub mod logger;
 mod modules;
 mod server;
+
 pub use api::app::start_api;
 
 pub use server::Server;

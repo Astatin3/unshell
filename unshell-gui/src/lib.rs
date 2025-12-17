@@ -5,8 +5,10 @@ extern crate log;
 
 pub mod app;
 mod auth;
+mod blobs;
 mod config;
 mod flowchart;
+mod interface;
 mod log_viewer;
 mod payload_config;
 

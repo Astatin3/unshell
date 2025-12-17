@@ -1,0 +1,3 @@
+GET /api/interface/*/some_config -> Returns the interface and struct at that location
+
+GET /api/interface/*/some_folder -> Returns the list of sub-folders and interfaces at that location

@@ -53,6 +53,9 @@ pub async fn start_api(address: &str, server: Server) {
     router = route_get!(router, "/api/keys/{*path}", Server::all_tree_keys_api);
     router = route_get!(router, "/api/values/{*path}", Server::all_tree_values_api);
 
+    router = route_get!(router, "/api/interface/", Server::get_tree2_root);
+    router = route_get!(router, "/api/interface/{*path}", Server::get_tree2);
+
     // router = route_get_log(router);
 
     axum::serve(listener, router.with_state(server))

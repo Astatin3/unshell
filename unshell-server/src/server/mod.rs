@@ -1,14 +1,18 @@
 use std::{error::Error, path::PathBuf};
 
+use crate::server::tree2::Tree2;
+
 mod blobs;
 mod database;
-mod manager;
+mod tree2;
 
 #[derive(Clone)]
 pub struct Server {
     pub component_configs: Vec<crate::config::ComponentState>,
+    // pub interface: InterfaceWrapper,
     // pub manager: Arc<Mutex<Manager>>,
     pub db: sled::Db,
+    pub tree: Tree2,
 }
 
 impl Server {
@@ -23,6 +27,8 @@ impl Server {
             component_configs,
             // manager: Manager::start(&SERVER_CONFIG, Vec::new()),
             db: sled::open(database)?,
+            tree: Tree2::default(),
+            // interface: get_test_interface(),
         })
     }
 }
