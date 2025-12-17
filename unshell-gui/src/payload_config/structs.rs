@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use egui::TextEdit;
+use serde_json::Value;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 enum ConfigStructField {
@@ -13,27 +14,20 @@ enum ConfigStructField {
     },
     Integer {
         default: i32,
-        min: Option<usize>,
-        max: Option<usize>,
+        min: Option<i32>,
+        max: Option<i32>,
     },
+    // Checkbox
+    // Dropdown
+    // Collapsing header
+    // Slider
+    // ...
 }
-
-#[derive(serde::Deserialize, serde::Serialize)]
-enum ConfigStructValue {
-    String(String),
-    Integer(i32),
-}
-
-// #[derive(serde::Deserialize, serde::Serialize)]
-// struct ConfigStruct {
-//     id: String,
-//     field: ConfigStructField,
-// }
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Config {
     config: Vec<(String, ConfigStructField)>,
-    state: HashMap<String, ConfigStructValue>,
+    state: HashMap<String, Value>,
 }
 
 impl Config {
@@ -58,20 +52,19 @@ impl Config {
                     max_length,
                     protected,
                 } => {
-                    let value =
-                        if let Some(ConfigStructValue::String(value)) = self.state.get_mut(id) {
+                    let value = if let Some(Value::String(value)) = self.state.get_mut(id) {
+                        value
+                    } else {
+                        self.state.insert(
+                            id.clone(),
+                            Value::String(default.clone().unwrap_or(String::new())),
+                        );
+                        if let Some(Value::String(value)) = self.state.get_mut(id) {
                             value
                         } else {
-                            self.state.insert(
-                                id.clone(),
-                                ConfigStructValue::String(default.clone().unwrap_or(String::new())),
-                            );
-                            if let Some(ConfigStructValue::String(value)) = self.state.get_mut(id) {
-                                value
-                            } else {
-                                unreachable!()
-                            }
-                        };
+                            unreachable!()
+                        }
+                    };
 
                     let mut widget = TextEdit::singleline(value).password(*protected);
 
@@ -99,6 +92,10 @@ impl Config {
         //     } => ui.text_edit_singleline(),
         //     ConfigStructField::Integer { default, min, max } => todo!(),
         // }
+    }
+
+    pub fn export(&self) -> String {
+        serde_json::to_string(&self.config).unwrap()
     }
 }
 

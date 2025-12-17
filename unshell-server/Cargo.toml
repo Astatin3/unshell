@@ -22,3 +22,4 @@ chrono = "0.4.42"
 static_init = "1.0.4"
 clap = {version = "4.5.53", features = ["derive"]}
 sled = "0.34.7"
+toml = "0.9.9"

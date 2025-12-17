@@ -13,6 +13,9 @@ pub struct PayloadConfig {
 
 impl PayloadConfig {
     pub fn update(&mut self, ui: &mut egui::Ui) {
+        if ui.button("export").clicked() {
+            crate::log(&self.config_struct.export());
+        }
         // ui.heading("Test");
         self.config_struct.update(ui);
     }

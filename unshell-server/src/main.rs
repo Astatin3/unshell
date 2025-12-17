@@ -19,6 +19,10 @@ pub struct Args {
     /// Name of database folder
     #[clap(short, long, default_value_t = DATABASE_NAME.clone())]
     database_name: String,
+
+    /// Load config from path
+    #[clap(short, long, value_parser)]
+    pub config: Option<Vec<String>>,
 }
 
 #[tokio::main]
