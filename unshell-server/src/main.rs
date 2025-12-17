@@ -1,3 +1,5 @@
+use std::{error::Error, path::PathBuf};
+
 use unshell_server::{Server, start_api};
 
 use clap::Parser;
@@ -22,11 +24,11 @@ pub struct Args {
 
     /// Load config from path
     #[clap(short, long, value_parser)]
-    pub config: Option<Vec<String>>,
+    pub config: Vec<PathBuf>,
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     unshell_lib::logger::PrettyLogger::init_output(|message| {
@@ -35,7 +37,9 @@ async fn main() {
         }
     });
 
-    let database = Server::new(args.database_name);
+    let database = Server::new(args.config, args.database_name)?;
 
     start_api(&format!("{}:{}", args.host, args.port), database).await;
+
+    Ok(())
 }

@@ -1,20 +1,28 @@
+use std::{error::Error, path::PathBuf};
+
 mod database;
 mod manager;
 
 #[derive(Clone)]
 pub struct Server {
-    pub config: Vec<crate::config::ComponentMetadata>,
+    pub component_configs: Vec<crate::config::ComponentState>,
     // pub manager: Arc<Mutex<Manager>>,
     pub db: sled::Db,
 }
 
 impl Server {
-    pub fn new(database: String) -> Self {
-        Self {
-            config: Vec::new(),
-            // manager: Manager::start(&SERVER_CONFIG, Vec::new()),
-            db: sled::open(database).expect("Failed to open database"),
+    pub fn new(config_paths: Vec<PathBuf>, database: String) -> Result<Self, Box<dyn Error>> {
+        let mut component_configs: Vec<crate::config::ComponentState> = Vec::new();
+
+        for config in &config_paths {
+            component_configs.extend(crate::config::load_config(config)?);
         }
+
+        Ok(Self {
+            component_configs,
+            // manager: Manager::start(&SERVER_CONFIG, Vec::new()),
+            db: sled::open(database)?,
+        })
     }
 }
 
