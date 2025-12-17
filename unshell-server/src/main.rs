@@ -26,7 +26,9 @@ async fn main() {
     let args = Args::parse();
 
     unshell_lib::logger::PrettyLogger::init_output(|message| {
-        unshell_server::logger::Logger::log(format!("{message:?}"));
+        if let Ok(json) = serde_json::to_string(message) {
+            unshell_server::logger::Logger::log(json);
+        }
     });
 
     let database = Server::new(args.database_name);

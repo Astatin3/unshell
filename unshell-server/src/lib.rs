@@ -2,6 +2,7 @@
 
 mod api;
 pub mod logger;
+mod modules;
 mod server;
 pub use api::app::start_api;
 

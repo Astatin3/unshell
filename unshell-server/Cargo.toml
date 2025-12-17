@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-log_debug = []
+log_debug = ["unshell-lib/log_debug"]
 
 
 

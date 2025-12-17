@@ -9,7 +9,7 @@ use std::path::PathBuf;
 const LOG_DIR: &str = "logs";
 
 /// The maximum number of logs to return in one call to `poll_logs`.
-const LOG_COUNT: usize = 10;
+const LOG_COUNT: usize = 100;
 
 /// The full path to the log file.
 /// Initialized once based on the startup time.
@@ -47,8 +47,7 @@ impl Logger {
     /// * `message` - The string content of the log entry.
     pub fn log(message: String) {
         // 1. Format the complete log line with timestamp
-        let now = Local::now();
-        let log_line = format!("[{}] {}\n", now.format("%Y-%m-%d %H:%M:%S%.3f"), message);
+        let log_line = format!("{}\n", message);
 
         // 2. Open the file in append mode, creating it if it doesn't exist.
         // The file path is guaranteed to be valid due to the `lazy_static` initialization.
@@ -117,9 +116,7 @@ impl Logger {
                 // Get the slice of the lines
                 let slice = &lines[start_index..end_index];
 
-                // The logs are currently in historical order (oldest to newest within the slice).
-                // We must reverse them to return the "most recent" logs in descending order.
-                slice.iter().rev().cloned().collect()
+                slice.iter().cloned().collect()
             }
             Err(e) => {
                 // Return an empty vector and print an error message if the file cannot be read

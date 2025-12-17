@@ -13,7 +13,7 @@ pub use pretty_logger::PrettyLogger;
 
 static mut LOGGER: &dyn Logger = &DefaultLogger;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum LogLevel {
     Debug,
     Info,
@@ -21,7 +21,7 @@ pub enum LogLevel {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Record {
     log_level: LogLevel,
     location: Option<String>,

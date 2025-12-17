@@ -3,7 +3,7 @@ name = "unshell-lib"
 edition = "2024"
 
 [features]
-default = ["client", "server", "log_debug"]
+default = ["client", "server", "log"]
 
 # Components
 client = []
