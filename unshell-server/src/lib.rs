@@ -1,6 +1,7 @@
 // #![macro_use]
 
 mod api;
+mod config;
 pub mod logger;
 mod modules;
 mod server;
