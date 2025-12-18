@@ -58,8 +58,6 @@ impl InterfaceWindow {
                     let mut state_lock = self.state.lock().unwrap();
 
                     state_lock.is_request = true;
-
-                    drop(state_lock)
                 }
 
                 let state_clone = self.state.clone();
