@@ -21,7 +21,7 @@ pub struct PayloadConfig {
     pub runtime_config: Vec<RuntimeConfig>,
 }
 
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct RuntimeConfig {
     pub parent_component: String,
     pub name: String,

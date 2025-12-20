@@ -2,7 +2,7 @@ mod server_runtime;
 
 pub use server_runtime::ListenerRuntime;
 
-use crate::{
+use unshell_lib::{
     ModuleError, ModuleRuntime,
     config::{InterfaceWrapper, NamedComponent, RuntimeConfig},
 };
@@ -17,6 +17,7 @@ fn start_runtime(config: &'static RuntimeConfig) -> Result<Box<dyn ModuleRuntime
     Ok(Box::new(ListenerRuntime::new(config)?))
 }
 
+#[unsafe(no_mangle)]
 pub const fn get_named_component() -> NamedComponent {
     NamedComponent {
         name: COMPONENT_NAME,

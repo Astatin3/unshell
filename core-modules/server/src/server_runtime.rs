@@ -4,7 +4,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{config::RuntimeConfig, module::Manager, *};
+use unshell_lib::{config::RuntimeConfig, module::Manager, *};
 
 pub struct ListenerRuntime {
     config: &'static RuntimeConfig,
@@ -80,7 +80,7 @@ impl ModuleRuntime for ListenerRuntime {
                 let stream = stream.unwrap();
                 debug!("New connection from {}", stream.peer_addr().unwrap());
 
-                let stream = crate::network::TcpStream::new(stream);
+                let stream = network::TcpStream::new(stream);
 
                 manager.lock().unwrap().add_connection(Box::new(stream));
 
