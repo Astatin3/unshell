@@ -6,12 +6,11 @@ use crate::config::RuntimeConfig;
 #[derive(Clone, Debug, Encode, Decode)]
 pub enum Announcement {
     TestAnnouncement(String),
+    // GetRuntimes,
+    // GetRuntimesAck(usize),
 
-    GetRuntimes,
-    GetRuntimesAck(usize),
-
-    StartRuntime(RuntimeConfig),
-    StartRuntimeAck(bool),
+    // StartRuntime(RuntimeConfig),
+    // StartRuntimeAck(bool),
 }
 
 const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();

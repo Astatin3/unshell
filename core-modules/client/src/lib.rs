@@ -58,10 +58,11 @@ fn start_runtime(config: &'static RuntimeConfig) -> Result<Box<dyn ModuleRuntime
     Ok(Box::new(ClientRuntime::new(config)?))
 }
 
-pub const fn get_named_component() -> NamedComponent {
-    NamedComponent {
+#[unsafe(no_mangle)]
+pub fn get_components() -> Vec<NamedComponent> {
+    vec![NamedComponent {
         name: MODULE_NAME,
         get_interface: &get_interface,
         start_runtime: &start_runtime,
-    }
+    }]
 }

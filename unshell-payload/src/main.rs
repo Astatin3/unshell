@@ -16,7 +16,7 @@ extern crate unshell_lib;
 #[dynamic]
 static PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
     id: symbol!("Test ID"),
-    components: unshell_lib::get_components(),
+    components: Vec::new(),
     runtime_config: vec![RuntimeConfig {
         parent_component: symbol!("client").to_string(),
         name: symbol!("client runtime").to_string(),
@@ -51,6 +51,8 @@ fn main() {
 
         //     // modules.push(Module::new(&arg)?)
         // }
+
+        // let modules = vec
 
         // Run the manager, this is blocking.
         let manager = Manager::start(&PAYLOAD_CONFIG, Vec::new());

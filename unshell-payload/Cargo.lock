@@ -667,6 +667,8 @@ version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "rand",
+ "static_init",
  "syn 2.0.109",
  "unshell-crypt",
 ]

@@ -1,4 +1,4 @@
-cargo-features = ["trim-paths"]
+cargo-features = ["trim-paths", "panic-immediate-abort"]
 
 [package]
 name = "client"
@@ -21,6 +21,6 @@ strip = true # Strip symbols from the binary
 opt-level = "s"  # Optimize for size
 lto = true
 codegen-units = 1
-panic = "abort"
+panic = "immediate-abort"
 debug = false
 trim-paths = "all"

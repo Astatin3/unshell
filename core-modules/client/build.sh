@@ -1,7 +1,7 @@
 OBFUSCATION_KEY=abc123abc \
 cargo build --release
 
-export BINARY=./target/release/libserver.so
+export BINARY=./target/release/libclient.so
 
 
 declare -a headers=(
@@ -14,8 +14,8 @@ declare -a headers=(
     ".gnu.hash" # Hash table for symbol lookup optimization
 )
 
-// TODO: Implement FAKE section header comments and information
-// Shuffle order of headers??
+# TODO: Implement FAKE section header comments and information
+# Shuffle order of headers??
 
 for section in "${headers[@]}"
 do
