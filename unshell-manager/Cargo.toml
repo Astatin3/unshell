@@ -1,0 +1,20 @@
+[package]
+name = "unshell-manager"
+edition = "2024"
+
+[features]
+obfuscate = ["unshell-obfuscate/obfuscate"]
+log = ["unshell-lib/log"]
+log_debug = ["unshell-lib/log_debug"]
+
+client = ["unshell-lib/client"]
+server = ["unshell-lib/server"]
+
+[dependencies]
+unshell-lib = {path = "../unshell-lib", default-features = false}
+unshell-obfuscate = {path = "../unshell-obfuscate", default-features = false}
+
+bincode = "2.0.1"
+libc = "0.2.178"
+libloading = "0.8.9"
+rand = "0.9.2"

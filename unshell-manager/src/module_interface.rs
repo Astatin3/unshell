@@ -1,17 +1,3 @@
-mod manager;
-mod manager_announcement;
-mod manager_connection;
-
-mod module;
-
-mod proc_load;
-
-// use std::any::Any;
-
-// pub use logger::setup_logger;
-pub use manager::Manager;
-pub use module::Module;
-
 /// "Module Interface" helper macro that creates a struct with function pointers
 /// Useful for defining and requiring modules' functions accross FFI boundry.
 #[macro_export]

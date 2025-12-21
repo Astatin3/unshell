@@ -2,19 +2,19 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 
 [package]
 name = "client"
-version = "0.1.0"
 edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [features]
-log_debug = ["unshell-lib/log_debug"]
-obfuscate = ["unshell-lib/obfuscate", "unshell-obfuscate/obfuscate"]
+log_debug = ["unshell-lib/log_debug", "unshell-manager/obfuscate"]
+obfuscate = ["unshell-lib/obfuscate", "unshell-obfuscate/obfuscate", "unshell-manager/obfuscate"]
 
 [dependencies]
 unshell-lib = {path = "../../unshell-lib", default-featues = false}
 unshell-obfuscate = {path = "../../unshell-obfuscate", default-featues = false}
+unshell-manager = {path = "../../unshell-manager", default-featues = false}
 
 [profile.release]
 strip = true # Strip symbols from the binary

@@ -1,4 +1,8 @@
-use crate::{Announcement, ModuleError, module::Manager, network::Stream};
+use unshell_lib::{Announcement, Result};
+
+use crate::network::Stream;
+
+use crate::Manager;
 
 impl Manager {
     pub fn add_connection(&mut self, connection: Box<dyn Stream<Announcement>>) {
@@ -23,7 +27,7 @@ impl Manager {
         }
     }
 
-    pub fn broadcast(&mut self, announcement: Announcement) -> Result<(), ModuleError> {
+    pub fn broadcast(&mut self, announcement: Announcement) -> Result<()> {
         for connection in &mut self.connections {
             connection.write(announcement.clone())?;
         }

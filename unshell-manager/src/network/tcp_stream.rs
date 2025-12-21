@@ -7,7 +7,9 @@ use std::{
     },
 };
 
-use crate::{Announcement, ModuleError, debug, network::Stream};
+use unshell_lib::{Announcement, ModuleError, Result, debug};
+
+use crate::network::Stream;
 
 pub struct TcpStream(Arc<AtomicBool>, net::TcpStream);
 
@@ -96,7 +98,7 @@ impl Stream<Announcement> for TcpStream {
         ret
     }
 
-    fn write(&mut self, announcement: Announcement) -> Result<(), crate::ModuleError> {
+    fn write(&mut self, announcement: Announcement) -> Result<()> {
         let bytes = announcement.encode();
 
         // Write length of bytes
@@ -115,7 +117,7 @@ impl Stream<Announcement> for TcpStream {
         Ok(())
     }
 
-    fn try_clone(&self) -> Result<Box<dyn Stream<Announcement> + Send + Sync>, crate::ModuleError> {
+    fn try_clone(&self) -> Result<Box<dyn Stream<Announcement> + Send + Sync>> {
         Ok(Box::new(Self(
             self.0.clone(),
             self.1

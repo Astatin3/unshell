@@ -1,3 +1,6 @@
+mod announcement;
+mod connection;
+
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -5,13 +8,15 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    config::{NamedComponent, PayloadConfig, RuntimeConfig},
-    network::Stream,
-    *,
-};
-use module::Module;
+use unshell_lib::{Announcement, Result, config::RuntimeConfig, debug, warn};
 use unshell_obfuscate::symbol;
+
+use crate::{
+    ModuleRuntime,
+    interface::{NamedComponent, PayloadConfig},
+    module::Module,
+    network::Stream,
+};
 
 // #[derive(Debug)]
 pub struct Manager {
@@ -175,10 +180,7 @@ impl Manager {
         this_lock.active_runtimes.push(runtime);
     }
 
-    pub fn add_runtime(
-        this: Arc<Mutex<Self>>,
-        runtime: &'static RuntimeConfig,
-    ) -> Result<(), ModuleError> {
+    pub fn add_runtime(this: Arc<Mutex<Self>>, runtime: &'static RuntimeConfig) -> Result<()> {
         Self::create_runtime(this.clone(), runtime);
 
         this.lock()

@@ -1,4 +1,5 @@
-use crate::{Announcement, module::Manager};
+use crate::Manager;
+use unshell_lib::Announcement;
 
 impl Manager {
     pub fn recv_announcement(&mut self, announcement: &Announcement) {

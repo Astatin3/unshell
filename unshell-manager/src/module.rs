@@ -1,22 +1,25 @@
 use libloading::{Library, Symbol};
+use unshell_lib::{
+    ModuleError, Result,
+    logger::{self, SetupLogger, logger},
+    warn,
+};
 
-use crate::module::proc_load::memfd_create_dlopen;
-use crate::{ModuleError, logger::SetupLogger, logger::logger};
-
-use crate::*;
+use crate::proc_load::memfd_create_dlopen;
 
 pub struct Module {
     lib: Library,
 }
 
 impl Module {
-    pub fn new(path: &str) -> Result<Self, ModuleError> {
-        let lib = unsafe { Library::new(&path) }.map_err(|e| ModuleError::LibLoadingError(e))?;
+    pub fn new(path: &str) -> Result<Self> {
+        let lib = unsafe { Library::new(&path) }
+            .map_err(|e| ModuleError::LibLoadingError(e.to_string()))?;
 
         let this = Self { lib };
 
         if let Ok(setup_logger) = this.get_symbol::<SetupLogger>(b"setup_logger") {
-            setup_logger(logger());
+            setup_logger(logger::logger());
         } else {
             warn!("setup_logger not found");
         }
@@ -26,7 +29,7 @@ impl Module {
 
     // TODO: Implement actual reflective ELF loading (possibly even custom format)
     // Look at https://github.com/weizhiao/rust-elfloader
-    pub fn new_bytes(bytes: &[u8]) -> Result<Self, ModuleError> {
+    pub fn new_bytes(bytes: &[u8]) -> Result<Self> {
         let lib =
             memfd_create_dlopen(bytes).map_err(|e| ModuleError::Error(e.to_string().into()))?;
 
@@ -40,7 +43,7 @@ impl Module {
 
         Ok(this)
     }
-    pub fn get_symbol<T>(&self, symbol: &[u8]) -> Result<Symbol<'_, T>, ModuleError> {
+    pub fn get_symbol<T>(&self, symbol: &[u8]) -> Result<Symbol<'_, T>> {
         let symbol = unsafe { self.lib.get::<T>(symbol) }
             .map_err(|e| ModuleError::LinkError(format!("Failed to load symbol: {}", e)))?;
 

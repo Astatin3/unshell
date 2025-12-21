@@ -1,10 +1,9 @@
 // mod connection;
 mod tcp_stream;
+
 pub use tcp_stream::TcpStream;
 
-// pub use connection::Connection;
-
-use crate::ModuleError;
+use unshell_lib::ModuleError;
 
 /// This is the data transmission type
 pub trait Stream<T>: Send + Sync {

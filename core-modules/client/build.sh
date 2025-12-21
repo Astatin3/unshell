@@ -1,4 +1,4 @@
-cargo clean
+# cargo clean
 
 OBFUSCATION_KEY=abc123abc \
 cargo build --release

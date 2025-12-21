@@ -164,9 +164,10 @@ dependencies = [
 
 [[package]]
 name = "client"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "unshell-lib",
+ "unshell-manager",
  "unshell-obfuscate",
 ]
 
@@ -662,10 +663,21 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "libc",
- "libloading",
  "rand",
  "serde",
  "serde_json",
+ "unshell-obfuscate",
+]
+
+[[package]]
+name = "unshell-manager"
+version = "0.0.0"
+dependencies = [
+ "bincode",
+ "libc",
+ "libloading",
+ "rand",
+ "unshell-lib",
  "unshell-obfuscate",
 ]
 

@@ -8,15 +8,13 @@ use std::{
     time::Duration,
 };
 
-use unshell_lib::{
-    config::RuntimeConfig,
-    module::Manager,
-    network::{Stream, TcpStream},
-    *,
-};
+use unshell_lib::{ModuleError, Result, config::RuntimeConfig, debug, error, info};
 // use unshell_modules::{Manager, ModuleRuntime};
 
-use unshell_lib::ModuleRuntime;
+use unshell_manager::{
+    Manager, ModuleRuntime,
+    network::{Stream, TcpStream},
+};
 
 pub struct ClientRuntime {
     config: &'static RuntimeConfig,
@@ -25,7 +23,7 @@ pub struct ClientRuntime {
 }
 
 impl ClientRuntime {
-    pub fn new(config: &'static RuntimeConfig) -> Result<ClientRuntime, ModuleError> {
+    pub fn new(config: &'static RuntimeConfig) -> Result<ClientRuntime> {
         let join_signal = Arc::new(AtomicBool::new(false));
 
         Ok(Self {
@@ -66,7 +64,7 @@ impl ModuleRuntime for ClientRuntime {
         }
     }
 
-    fn init(&mut self, manager: Arc<Mutex<Manager>>) -> Result<(), ModuleError> {
+    fn init(&mut self, manager: Arc<Mutex<Manager>>) -> Result<()> {
         let host = match self.config.config.get("host") {
             Some(host) => host,
             None => {

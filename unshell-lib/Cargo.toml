@@ -16,7 +16,7 @@ obfuscate = ["unshell-obfuscate/obfuscate"]
 
 [dependencies]
 # Base dependencies
-libloading = {version = "0.8.9"}
+# libloading = {version = "0.8.9"}
 bincode = "2.0.1"
 unshell-obfuscate = {path = "../unshell-obfuscate"}
 chrono = "0.4.42"

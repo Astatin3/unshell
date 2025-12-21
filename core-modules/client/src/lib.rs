@@ -6,12 +6,12 @@ use std::any::TypeId;
 
 use unshell_lib::{
     ModuleError,
-    ModuleRuntime,
     // client::client_runtime::ClientRuntime,
-    config::{InterfaceWrapper, NamedComponent, RuntimeConfig},
-    module_interface,
-    warn, // module_interface,
+    config::RuntimeConfig,
+    warn, // module_interface
 };
+
+use unshell_manager::{InterfaceWrapper, ModuleRuntime, NamedComponent, module_interface};
 
 use crate::client_runtime::ClientRuntime;
 

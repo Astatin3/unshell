@@ -1,27 +1,30 @@
 // Load a shared object by saving bytes to a filesystem in /proc
 
-use std::{error::Error, ffi::CString, io}; // 0.8
+use std::{ffi::CString, io};
 
 use libloading::Library;
-
-use crate::debug;
+use unshell_lib::{ModuleError, Result, warn};
 
 // The `memfd_create` syscall flags (MFD_CLOEXEC is common and good practice)
 const MFD_CLOEXEC: u32 = 0x0001;
 const MFD_ALLOW_SEALING: u32 = 0x0002;
 
-pub fn memfd_create_dlopen(payload: &[u8]) -> Result<Library, Box<dyn Error>> {
+pub fn memfd_create_dlopen(payload: &[u8]) -> Result<Library> {
     use rand::distr::{Alphanumeric, SampleString};
 
     let string = Alphanumeric.sample_string(&mut rand::rng(), 16);
 
     // 1. Create the anonymous in-memory file descriptor using the raw syscall
-    let c_name = CString::new(string).expect("CString conversion failed");
+    let c_name = CString::new(string)
+        .map_err(|e| ModuleError::LibLoadingError(format!("CString conversion failed: {e:?}")))?;
 
     let fd = unsafe { libc::memfd_create(c_name.as_ptr(), MFD_CLOEXEC | MFD_ALLOW_SEALING) };
 
     if fd < 0 {
-        return Err(io::Error::last_os_error().to_string().into());
+        return Err(ModuleError::LibLoadingError(format!(
+            "IO Error {:?}",
+            io::Error::last_os_error().to_string()
+        )));
     }
 
     // 2. Write the payload bytes to the in-memory file
@@ -33,7 +36,9 @@ pub fn memfd_create_dlopen(payload: &[u8]) -> Result<Library, Box<dyn Error>> {
         unsafe {
             libc::close(fd);
         }
-        return Err("Failed to write full payload to memfd".into());
+        return Err(ModuleError::LibLoadingError(
+            "Failed to write full payload to memfd".into(),
+        ));
     }
 
     // Optional: Seal the file to prevent modification, common for security/integrity
@@ -41,7 +46,7 @@ pub fn memfd_create_dlopen(payload: &[u8]) -> Result<Library, Box<dyn Error>> {
     let seals = libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_WRITE;
     if unsafe { libc::fcntl(fd, libc::F_ADD_SEALS, seals) } == -1 {
         // Log a warning but continue if sealing fails (e.g., due to permissions)
-        debug!(
+        warn!(
             "memfd_create_dlopen: Failed to apply seals. Error: {}",
             io::Error::last_os_error()
         );
@@ -52,5 +57,8 @@ pub fn memfd_create_dlopen(payload: &[u8]) -> Result<Library, Box<dyn Error>> {
     let dl_path = format!("/proc/self/fd/{}", fd);
 
     // 4. Use dlopen (via libloading) on the virtual path
-    Ok(unsafe { Library::new(&dl_path)? })
+    Ok(unsafe {
+        Library::new(&dl_path)
+            .map_err(|e| ModuleError::LibLoadingError(format!("Failed to import library: {}", e)))?
+    })
 }
