@@ -1,5 +1,5 @@
 mod announcement;
-mod connection;
+// mod connection;
 
 use std::{
     collections::HashMap,
@@ -15,7 +15,7 @@ use crate::{
     ModuleRuntime,
     interface::{NamedComponent, PayloadConfig},
     module::Module,
-    network::Stream,
+    // network::Stream,
 };
 
 // #[derive(Debug)]
@@ -28,8 +28,7 @@ pub struct Manager {
 
     components: HashMap<String, NamedComponent>,
     active_runtimes: Vec<Box<dyn ModuleRuntime>>,
-
-    pub connections: Vec<Box<dyn Stream<Announcement>>>,
+    // pub connections: Vec<Box<dyn Stream<Announcement>>>,
 }
 
 // static mut MANAGER_RUNTIME: Option<Arc<Mutex<Manager>>> = None;
@@ -46,8 +45,7 @@ impl Manager {
                 .map(|c| (c.name.to_string(), c))
                 .collect(),
             active_runtimes: Vec::new(),
-
-            connections: Vec::new(),
+            // connections: Vec::new(),
         }
     }
 
@@ -130,11 +128,11 @@ impl Manager {
                     }
                 });
 
-                // Read announcements
-                this_lock.recv_connection_announcements();
+                // // Read announcements
+                // this_lock.recv_connection_announcements();
 
-                // Prune dead connections
-                this_lock.prune_connections();
+                // // Prune dead connections
+                // this_lock.prune_connections();
 
                 drop(this_lock)
             }

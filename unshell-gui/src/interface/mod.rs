@@ -1,11 +1,14 @@
-mod config;
+mod render_interface;
 
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use crate::{auth::Auth, interface::config::Tree2Repr};
+use unshell_lib::Result;
+use unshell_lib::config::TreeMessage;
+
+use crate::auth::Auth;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct InterfaceWindow {
@@ -18,7 +21,7 @@ pub struct InterfaceWindow {
 pub struct InterfaceWindowState {
     is_request: bool,
     is_error: bool,
-    branch: Option<Tree2Repr>,
+    branch: Option<TreeMessage>,
 }
 
 impl InterfaceWindow {
@@ -63,7 +66,7 @@ impl InterfaceWindow {
                 let state_clone = self.state.clone();
                 auth.get(
                     &format!("/api/interface{}", self.path.display()),
-                    move |response: Result<Tree2Repr, String>| {
+                    move |response: Result<TreeMessage>| {
                         let mut state_lock = state_clone.lock().unwrap();
 
                         match response {
@@ -79,20 +82,21 @@ impl InterfaceWindow {
 
                         drop(state_lock);
                     },
-                );
+                )
+                .unwrap();
             } else {
                 let state_clone = self.state.clone();
 
                 let mut state_lock = state_clone.lock().unwrap();
 
-                let branch = (state_lock.branch).as_ref().unwrap();
+                let mut branch = (state_lock.branch).as_mut().unwrap();
 
                 let clear = match branch {
-                    Tree2Repr::File(file) => {
-                        ui.label(&format!("File {}", file));
+                    TreeMessage::InterfaceAndValue(interface_struct, interface_data) => {
+                        render_interface::render(ui, interface_struct, interface_data);
                         false
                     }
-                    Tree2Repr::Folder(items) => {
+                    TreeMessage::Folder(items) => {
                         let mut clear = false;
                         for item in items {
                             if ui.button(&format!("Item {}", item)).clicked() {

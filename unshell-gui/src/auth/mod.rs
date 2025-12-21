@@ -1,8 +1,10 @@
 use egui::{Align2, Area, Color32, Frame, Order, Sense, UiKind, Vec2, mutex::Mutex};
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
 use std::sync::Arc;
 use wasm_bindgen::prelude::Closure;
+
+use unshell_lib::Result;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Auth {
@@ -150,10 +152,10 @@ impl Auth {
         // });
     }
 
-    pub fn get<T, F>(&self, path: &str, ret: F)
+    pub fn get<R, F>(&self, path: &str, ret: F) -> Result<()>
     where
-        F: FnOnce(T) + 'static,
-        T: DeserializeOwned,
+        F: FnOnce(R) + 'static,
+        R: DeserializeOwned,
     {
         if let Some(ref token) = self.token {
             let state = self.auth_state.clone();
@@ -162,7 +164,7 @@ impl Auth {
                 format!("Bearer {}", token.token),
                 Closure::once_into_js(move |ok: bool, response: String| {
                     if ok {
-                        if let Ok(value) = serde_json::from_str::<T>(&response) {
+                        if let Ok(value) = serde_json::from_str::<R>(&response) {
                             ret(value)
                         } else {
                             *(state.lock()) = AuthState::Error("Malformed Response".into());
@@ -173,6 +175,37 @@ impl Auth {
                 }),
             );
         }
+
+        Ok(())
+    }
+
+    pub fn post<R, T, F>(&self, path: &str, data: &T, ret: F) -> Result<()>
+    where
+        R: DeserializeOwned,
+        T: Serialize,
+        F: FnOnce(R) + 'static,
+    {
+        if let Some(ref token) = self.token {
+            let state = self.auth_state.clone();
+            crate::httpPostAuth(
+                path,
+                format!("Bearer {}", token.token),
+                &serde_json::to_string(data)?,
+                Closure::once_into_js(move |ok: bool, response: String| {
+                    if ok {
+                        if let Ok(value) = serde_json::from_str::<R>(&response) {
+                            ret(value)
+                        } else {
+                            *(state.lock()) = AuthState::Error("Malformed Response".into());
+                        }
+                    } else {
+                        *(state.lock()) = AuthState::Error(response);
+                    }
+                }),
+            );
+        }
+
+        Ok(())
     }
 }
 

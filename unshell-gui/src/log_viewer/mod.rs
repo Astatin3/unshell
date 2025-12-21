@@ -192,7 +192,8 @@ impl LogViewer {
             state_lock.requested_data = true;
 
             // crate::log(&format!("{e:?}"));
-        });
+        })
+        .unwrap();
     }
 }
 

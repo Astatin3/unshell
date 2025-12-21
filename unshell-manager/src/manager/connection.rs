@@ -1,6 +1,6 @@
 use unshell_lib::{Announcement, Result};
 
-use crate::network::Stream;
+// use crate::network::Stream;
 
 use crate::Manager;
 
@@ -27,10 +27,10 @@ impl Manager {
         }
     }
 
-    pub fn broadcast(&mut self, announcement: Announcement) -> Result<()> {
-        for connection in &mut self.connections {
-            connection.write(announcement.clone())?;
-        }
-        Ok(())
-    }
+    // pub fn broadcast(&mut self, announcement: Announcement) -> Result<()> {
+    //     for connection in &mut self.connections {
+    //         connection.write(announcement.clone())?;
+    //     }
+    //     Ok(())
+    // }
 }

@@ -1,12 +1,16 @@
 use std::{
-    error::Error,
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use unshell_lib::module::Manager;
-
-use crate::server::tree2::{Tree, Tree2Repr};
+use serde_json::Value;
+use unshell_lib::{
+    ModuleError,
+    config::{InterfaceData, Tree, TreeMessage, config_struct::ConfigStructField},
+};
+use unshell_lib::{Result, config::InterfaceStruct};
+use unshell_manager::Manager;
 
 mod blobs;
 mod database;
@@ -22,7 +26,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(config_paths: Vec<PathBuf>, database: String) -> Result<Self, Box<dyn Error>> {
+    pub fn new(config_paths: Vec<PathBuf>, database: String) -> Result<Self> {
         let mut component_configs: Vec<crate::config::ComponentState> = Vec::new();
 
         for config in &config_paths {
@@ -32,7 +36,7 @@ impl Server {
         Ok(Self {
             component_configs,
             manager: Manager::start(&crate::SERVER_CONFIG, Vec::new()),
-            db: sled::open(database)?,
+            db: sled::open(database).map_err(|e| ModuleError::DatabaseError(e.to_string()))?,
             // tree: Tree2::default(),
             // interface: get_test_interface(),
         })
@@ -48,12 +52,18 @@ impl Tree for Server {
         vec!["connection_count".into()]
     }
 
-    fn select_child(&self, child: &str) -> Result<Tree2Repr, String> {
+    fn select_child(&self, child: &str, _message: TreeMessage) -> Result<TreeMessage> {
         match child {
-            "connection_count" => Ok(Tree2Repr::File(format!(
-                "Connection count: {}",
-                self.manager.lock().unwrap().connections.len()
-            ))),
+            "connection_count" => {
+                let interface = vec![ConfigStructField::Header(format!("Test Heading!"))];
+
+                let value = vec![Value::Null];
+
+                Ok(TreeMessage::InterfaceAndValue(
+                    InterfaceStruct::ConfigStruct(interface),
+                    InterfaceData::ConfigStruct(value),
+                ))
+            }
             _ => Err("No such child".into()),
         }
     }

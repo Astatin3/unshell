@@ -1,3 +1,8 @@
+pub mod config_struct;
+mod tree;
+
+pub use tree::{InterfaceData, InterfaceStruct, Tree, TreeMessage};
+
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

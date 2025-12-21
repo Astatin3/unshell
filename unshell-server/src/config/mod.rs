@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use unshell_lib::{debug, info};
+use unshell_lib::{ModuleError, Result, debug, info};
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 struct ComponentMetadata {
@@ -66,15 +66,18 @@ pub struct ComponentState {
     path: PathBuf,
 }
 
-pub fn load_config(path: &PathBuf) -> Result<Vec<ComponentState>, Box<dyn Error>> {
-    let path_absolute = fs::canonicalize(path.clone())?;
+pub fn load_config(path: &PathBuf) -> Result<Vec<ComponentState>> {
+    let path_absolute =
+        fs::canonicalize(path.clone()).map_err(|e| ModuleError::Error(e.to_string()))?;
     debug!("Loading data from path: `{:?}`", path_absolute);
 
     // Read string as path
-    let config_str = fs::read_to_string(path.clone())?;
+    let config_str =
+        fs::read_to_string(path.clone()).map_err(|e| ModuleError::Error(e.to_string()))?;
 
     // Load config from String
-    let config = toml::from_str::<ComponentMetadata>(&config_str)?;
+    let config = toml::from_str::<ComponentMetadata>(&config_str)
+        .map_err(|e| ModuleError::Error(e.to_string()))?;
 
     info!("Loaded component `{}`", config.name);
 

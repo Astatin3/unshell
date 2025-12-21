@@ -2,7 +2,6 @@ mod api;
 mod auth;
 mod config;
 pub mod logger;
-mod modules;
 mod server;
 
 pub use server::Server;
@@ -18,7 +17,7 @@ pub static DEFAULT_HOST: String = "localhost".to_string();
 pub static DATABASE_NAME: String = "database".to_string();
 
 #[static_init::dynamic]
-pub static SERVER_CONFIG: unshell_lib::config::PayloadConfig = unshell_lib::config::PayloadConfig {
+pub static SERVER_CONFIG: unshell_manager::PayloadConfig = unshell_manager::PayloadConfig {
     id: "Server",
     components: Vec::new(),
     runtime_config: Vec::new(),

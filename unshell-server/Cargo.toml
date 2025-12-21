@@ -1,15 +1,16 @@
 [package]
 name = "unshell-server"
-version = "0.1.0"
+# version = "0.1.0"
 edition = "2024"
 
 [features]
-log_debug = ["unshell-lib/log_debug"]
+default=["log_debug"]
+log_debug = ["unshell-lib/log_debug", "unshell-manager/log_debug"]
 
 [dependencies]
-
-unshell-lib = {path = "../unshell-lib"}
-unshell-obfuscate = {path = "../unshell-obfuscate"}
+unshell-lib = {path = "../unshell-lib", default-featues = false}
+unshell-obfuscate = {path = "../unshell-obfuscate", default-featues = false}
+unshell-manager = {path = "../unshell-manager", default-featues = false}
 
 axum = "0.8.7"
 axum-extra = {version="0.12.2", features = ["typed-header"]}

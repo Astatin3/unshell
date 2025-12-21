@@ -1,24 +1,17 @@
 #![no_main]
 
 pub mod config;
+mod error;
 pub mod logger;
 
 mod announcement;
 use std::fmt::{self, Debug};
 
+pub use error::ModuleError;
+
 pub use announcement::Announcement;
 
 pub type Result<T> = std::result::Result<T, ModuleError>;
-
-///Generic error type for module-related operations.
-#[derive(Debug)]
-pub enum ModuleError {
-    LibLoadingError(String),
-    // LogError(log::SetLoggerError),
-    LinkError(String),
-    CryptError(String),
-    Error(String),
-}
 
 impl std::error::Error for ModuleError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {

@@ -1,20 +1,15 @@
-use std::collections::HashMap;
-
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
-pub enum Tree2Repr {
-    File(String),
-    Folder(Vec<String>),
+pub type ConfigStructKeys = Vec<ConfigStructField>;
+pub type ConfigStructValues = Vec<Value>;
+
+pub struct Config {
+    keys: ConfigStructKeys,
+    values: ConfigStructValues,
 }
 
-// #[derive(Clone, serde::Deserialize, serde::Serialize)]
-// pub struct InterfaceWrapper {
-//     pub name: String,
-//     pub interface: Interface,
-// }
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ConfigStructField {
     Header(String),
     Text(String),

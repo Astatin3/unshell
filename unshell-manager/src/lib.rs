@@ -1,7 +1,7 @@
 mod manager;
 mod module;
 mod module_interface;
-pub mod network;
+// pub mod network;
 mod proc_load;
 
 pub mod interface;
@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 pub use manager::Manager;
 pub use module::Module;
 
-pub use interface::{InterfaceWrapper, NamedComponent};
+pub use interface::{InterfaceWrapper, NamedComponent, PayloadConfig};
 
 extern crate unshell_lib;
 use unshell_lib::Result;
