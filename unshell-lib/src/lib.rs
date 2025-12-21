@@ -5,33 +5,10 @@ mod error;
 pub mod logger;
 
 mod announcement;
-use std::fmt::{self, Debug};
 
-pub use error::ModuleError;
+pub use error::{ModuleError, Result};
 
 pub use announcement::Announcement;
-
-pub type Result<T> = std::result::Result<T, ModuleError>;
-
-impl std::error::Error for ModuleError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        Some(self)
-    }
-}
-
-impl fmt::Display for ModuleError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(format!("{:?}", self).as_str())
-    }
-}
 
 // pub trait Component {
 //     fn name(&self) -> &'static str;

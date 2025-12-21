@@ -67,7 +67,8 @@ impl Config {
                     state_lock.trees = Some(response);
                     state_lock.is_requesting = false;
                     drop(state_lock);
-                });
+                })
+                .unwrap();
             } else if tree_list_none && is_requesting {
                 ui.spinner();
             }
@@ -92,7 +93,8 @@ impl Config {
                             state_lock.tree_keys = Some(response.unwrap());
                             state_lock.is_requesting = false;
                         },
-                    );
+                    )
+                    .unwrap();
                 } else if key_list_none && is_requesting {
                     ui.spinner();
                 }

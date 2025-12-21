@@ -1,3 +1,7 @@
+use std::fmt;
+
+pub type Result<T> = std::result::Result<T, ModuleError>;
+
 ///Generic error type for module-related operations.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum ModuleError {
@@ -28,5 +32,25 @@ impl From<serde_json::Error> for ModuleError {
 impl From<Box<dyn std::error::Error>> for ModuleError {
     fn from(value: Box<dyn std::error::Error>) -> Self {
         ModuleError::Error(value.to_string())
+    }
+}
+
+impl std::error::Error for ModuleError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+
+    fn description(&self) -> &str {
+        "description() is deprecated; use Display"
+    }
+
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        Some(self)
+    }
+}
+
+impl fmt::Display for ModuleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(format!("{:?}", self).as_str())
     }
 }

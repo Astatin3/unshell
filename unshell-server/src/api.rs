@@ -22,16 +22,16 @@ macro_rules! route_get {
     }};
 }
 
-// macro_rules! route_post {
-//     ($router:expr, $path:expr, $func:expr) => {{
-//         {
-//             $router.route(
-//                 $path,
-//                 post($func).layer(middleware::from_fn(auth::authorize)),
-//             )
-//         }
-//     }};
-// }
+macro_rules! route_post {
+    ($router:expr, $path:expr, $func:expr) => {{
+        {
+            $router.route(
+                $path,
+                post($func).layer(middleware::from_fn(auth::authorize)),
+            )
+        }
+    }};
+}
 
 pub async fn start_api(address: &str, server: Server) {
     let listener = TcpListener::bind(address)
@@ -51,6 +51,7 @@ pub async fn start_api(address: &str, server: Server) {
 
     router = route_get!(router, "/api/interface/", Server::get_tree2_root);
     router = route_get!(router, "/api/interface/{*path}", Server::get_tree2);
+    router = route_post!(router, "/api/interface/{*path}", Server::post_tree2);
 
     // router = route_get_log(router);
 

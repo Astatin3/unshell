@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{ModuleError, Result, config::config_struct};
 
@@ -12,13 +11,13 @@ pub trait Tree {
         unimplemented!();
     }
 
-    fn select_child(&self, child: &str, _message: TreeMessage) -> Result<TreeMessage>;
+    fn select_child(&mut self, child: &str, _message: TreeMessage) -> Result<TreeMessage>;
 
     fn get_value(&self, _message: TreeMessage) -> TreeMessage {
         unimplemented!()
     }
 
-    fn get_path(&self, elements: &mut Vec<&str>, message: TreeMessage) -> Result<TreeMessage> {
+    fn get_path(&mut self, elements: &mut Vec<&str>, message: TreeMessage) -> Result<TreeMessage> {
         if elements.is_empty() {
             return if Self::is_folder() {
                 Ok(TreeMessage::Folder(self.get_children_string()))
@@ -38,7 +37,7 @@ pub trait Tree {
         }
     }
 
-    fn get(&self, path: &str, message: TreeMessage) -> Result<TreeMessage> {
+    fn get(&mut self, path: &str, message: TreeMessage) -> Result<TreeMessage> {
         let mut path = if path.is_empty() {
             Vec::new()
         } else {
@@ -49,25 +48,28 @@ pub trait Tree {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TreeMessage {
     RequestState,
     RequestStruct,
     RequestStructAndValue,
 
-    State(Value),
+    State(InterfaceData),
     Interface(InterfaceStruct),
     InterfaceAndValue(InterfaceStruct, InterfaceData),
+
+    Success,
+    Failure,
 
     Folder(Vec<String>),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum InterfaceStruct {
     ConfigStruct(config_struct::ConfigStructKeys),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum InterfaceData {
     ConfigStruct(config_struct::ConfigStructValues),
 }

@@ -21,7 +21,7 @@ impl Server {
     }
 
     pub async fn get_tree2(
-        State(server): State<Server>,
+        State(mut server): State<Server>,
         Path(path): Path<String>,
         Extension(_): Extension<CurrentUser>,
     ) -> Json<Value> {
@@ -29,6 +29,21 @@ impl Server {
 
         let result = server
             .get(&path, TreeMessage::RequestStructAndValue)
+            .map_err(|e| ModuleError::CryptError(e.to_string()));
+
+        Json(serde_json::to_value(result).unwrap())
+    }
+
+    pub async fn post_tree2(
+        State(mut server): State<Server>,
+        Path(path): Path<String>,
+        Extension(_): Extension<CurrentUser>,
+        Json(tree_message): Json<TreeMessage>,
+    ) -> Json<Value> {
+        debug!("POST /api/interface/{}", path);
+
+        let result = server
+            .get(&path, tree_message)
             .map_err(|e| ModuleError::CryptError(e.to_string()));
 
         Json(serde_json::to_value(result).unwrap())

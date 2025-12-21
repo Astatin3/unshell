@@ -89,11 +89,23 @@ impl InterfaceWindow {
 
                 let mut state_lock = state_clone.lock().unwrap();
 
-                let mut branch = (state_lock.branch).as_mut().unwrap();
+                let branch = (state_lock.branch).as_mut().unwrap();
 
                 let clear = match branch {
                     TreeMessage::InterfaceAndValue(interface_struct, interface_data) => {
                         render_interface::render(ui, interface_struct, interface_data);
+
+                        if ui.button("Save").clicked() {
+                            auth.post(
+                                &format!("/api/interface{}", self.path.display()),
+                                &TreeMessage::State(interface_data.clone()),
+                                move |response: Result<TreeMessage>| {
+                                    crate::log(&format!("{response:?}"));
+                                },
+                            )
+                            .unwrap();
+                        }
+
                         false
                     }
                     TreeMessage::Folder(items) => {

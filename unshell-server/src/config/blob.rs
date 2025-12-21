@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::config::ConfigStructField;
+use unshell_lib::config::config_struct::ConfigStructField;
+
+// use crate::config::ConfigStructField;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Blob {
