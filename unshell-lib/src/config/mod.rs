@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Debug};
 // use bincode::{Decode, Encode};
 // use serde::{Deserialize, Serialize};
 
-use bincode::{Decode, Encode};
+// use bincode::{Decode, Encode};
 
 use crate::{ModuleError, ModuleRuntime};
 

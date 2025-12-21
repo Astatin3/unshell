@@ -1,7 +1,5 @@
 use bincode::{Decode, Encode};
 
-use crate::config::RuntimeConfig;
-
 /// Mostly temporary server message type
 #[derive(Clone, Debug, Encode, Decode)]
 pub enum Announcement {

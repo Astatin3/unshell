@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [features]
 log_debug = ["unshell-lib/log_debug"]
-obfuscate = ["unshell-lib/obfuscate"]
+obfuscate = ["unshell-lib/obfuscate", "unshell-obfuscate/obfuscate"]
 
 [dependencies]
 unshell-lib = {path = "../../unshell-lib", default-featues = false}

@@ -15,6 +15,8 @@ use unshell_lib::{
 
 use crate::client_runtime::ClientRuntime;
 
+pub use unshell_lib::logger::setup_logger;
+
 pub extern "C" fn test1() {
     warn!("Test1 called xxxxxxxxxxx");
 }

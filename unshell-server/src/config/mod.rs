@@ -1,8 +1,4 @@
 mod blob;
-// pub mod interface;
-
-pub use blob::Blob;
-// pub use interface::InterfaceWrapper;
 
 use std::{
     collections::HashMap,
@@ -27,7 +23,6 @@ struct ComponentMetadata {
     // Other components that can be pointed to by this component
     #[serde(default)]
     child_components: Vec<PathBuf>,
-    // config: Option<HashMap<String, ConfigStructField>>,
 }
 
 #[derive(Default, Debug, Clone, serde::Deserialize, serde::Serialize)]

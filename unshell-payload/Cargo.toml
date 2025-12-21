@@ -22,10 +22,10 @@ unshell-lib = {path = "../unshell-lib", default-features = false}
 unshell-obfuscate = {path = "../unshell-obfuscate"}
 
 [profile.release]
-strip = true # Strip symbols from the binary
-opt-level = "z"  # Optimize for size
-lto = true # Link tree optimization
-codegen-units = 1
-panic = "abort"
-debug = false # Remove debug
-trim-paths="all"
+# strip = true # Strip symbols from the binary
+# opt-level = "z"  # Optimize for size
+# lto = true # Link tree optimization
+# codegen-units = 1
+# panic = "abort"
+# debug = false # Remove debug
+# trim-paths="all"

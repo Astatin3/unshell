@@ -5,12 +5,11 @@ impl Manager {
         match announcement {
             Announcement::TestAnnouncement(str) => {
                 println!("Got test announcement: {}", str)
-            }
-            // Announcement::GetRuntimes => todo!(),
-            // Announcement::GetRuntimesAck(_) => todo!(),
-            // Announcement::StartRuntime(runtime_config) => todo!(),
-            // Announcement::StartRuntimeAck(_) => todo!(),
-            _ => {}
+            } // Announcement::GetRuntimes => todo!(),
+              // Announcement::GetRuntimesAck(_) => todo!(),
+              // Announcement::StartRuntime(runtime_config) => todo!(),
+              // Announcement::StartRuntimeAck(_) => todo!(),
+              // _ => {}
         }
     }
 }

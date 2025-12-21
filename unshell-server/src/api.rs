@@ -9,11 +9,7 @@ use unshell_lib::{debug, info};
 
 // axum_extra::
 
-use crate::{
-    api::{auth, structs::CurrentUser},
-    logger::Logger,
-    server::Server,
-};
+use crate::{auth, auth::structs::CurrentUser, logger::Logger, server::Server};
 
 macro_rules! route_get {
     ($router:expr, $path:expr, $func:expr) => {{

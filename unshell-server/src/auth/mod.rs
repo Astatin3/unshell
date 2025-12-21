@@ -1,3 +1,5 @@
+pub mod structs;
+
 use axum::{
     body::Body,
     extract::{Json, Request},
@@ -10,10 +12,9 @@ use jsonwebtoken::{Header, TokenData, Validation, decode, encode};
 use serde_json::{Value, json};
 use unshell_lib::{debug, info};
 
-use crate::api::{
-    EXPIRE_DURATION, JWT_DECODING_KEY, JWT_ENCODING_KEY,
-    structs::{AuthError, Cliams, CurrentUser, SignInData},
-};
+use crate::{EXPIRE_DURATION, JWT_DECODING_KEY, JWT_ENCODING_KEY};
+
+use structs::{AuthError, Cliams, CurrentUser, SignInData};
 
 pub fn hash_password(password: &str) -> Result<String, bcrypt::BcryptError> {
     let hash = hash(password, DEFAULT_COST)?;

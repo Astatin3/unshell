@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -8,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use unshell_lib::debug;
 
-use crate::{Server, api::CurrentUser};
+use crate::{Server, auth::structs::CurrentUser};
 
 pub trait Tree {
     fn is_folder() -> bool {

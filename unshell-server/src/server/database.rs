@@ -8,7 +8,7 @@ use serde_json::Value;
 use sled::Tree;
 use unshell_lib::{debug, error};
 
-use crate::{api::CurrentUser, server::Server};
+use crate::{auth::structs::CurrentUser, server::Server};
 
 impl Server {
     fn get_tree(&self, tree_name: &str) -> Result<Tree, String> {
