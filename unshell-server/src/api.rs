@@ -51,6 +51,11 @@ pub async fn start_api(address: &str, server: Server) {
 
     router = route_get!(router, "/api/interface/", Server::get_tree2_root);
     router = route_get!(router, "/api/interface/{*path}", Server::get_tree2);
+
+    // router = router.route("/api/interface", get(Server::get_tree2_root));
+
+    // router = router.route("/api/interface/{*path}", post(Server::post_tree2));
+
     router = route_post!(router, "/api/interface/{*path}", Server::post_tree2);
 
     // router = route_get_log(router);

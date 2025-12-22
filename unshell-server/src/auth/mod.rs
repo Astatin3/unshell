@@ -58,7 +58,7 @@ pub async fn authorize(mut req: Request, next: Next) -> Result<Response<Body>, A
 
     let (_, token) = (header.next(), header.next());
 
-    let token_data: TokenData<Cliams> = match decode_jwt(token.unwrap().to_string()) {
+    let _token_data: TokenData<Cliams> = match decode_jwt(token.unwrap().to_string()) {
         Ok(data) => data,
         Err(_) => {
             return Err(AuthError {
@@ -68,18 +68,18 @@ pub async fn authorize(mut req: Request, next: Next) -> Result<Response<Body>, A
         }
     };
 
-    // Fetch the user details from the database
-    let current_user = match retrieve_user_by_email(&token_data.claims.email) {
-        Some(user) => user,
-        None => {
-            return Err(AuthError {
-                message: "Unauthorized".to_string(),
-                status_code: StatusCode::UNAUTHORIZED,
-            });
-        }
-    };
+    // // Fetch the user details from the database
+    // let current_user = match retrieve_user_by_email(&token_data.claims.email) {
+    //     Some(user) => user,
+    //     None => {
+    //         return Err(AuthError {
+    //             message: "Unauthorized".to_string(),
+    //             status_code: StatusCode::UNAUTHORIZED,
+    //         });
+    //     }
+    // };
 
-    req.extensions_mut().insert(current_user);
+    // req.extensions_mut().insert(current_user);
     Ok(next.run(req).await)
 }
 

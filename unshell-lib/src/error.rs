@@ -3,7 +3,7 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, ModuleError>;
 
 ///Generic error type for module-related operations.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ModuleError {
     LibLoadingError(String),
     // LogError(log::SetLoggerError),
@@ -52,5 +52,11 @@ impl std::error::Error for ModuleError {
 impl fmt::Display for ModuleError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(format!("{:?}", self).as_str())
+    }
+}
+
+impl From<ModuleError> for std::string::String {
+    fn from(value: ModuleError) -> Self {
+        value.to_string()
     }
 }

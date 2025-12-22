@@ -48,6 +48,8 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
+
         if !self.state.auth.logged_in() {
             egui::CentralPanel::default()
                 .frame(Frame::central_panel(&ctx.style()).inner_margin(0))

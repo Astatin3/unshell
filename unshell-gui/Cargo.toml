@@ -7,13 +7,17 @@ authors = ["ASTATIN3"]
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 rust-version = "1.88"
 
-[package.metadata.docs.rs]
-all-features = true
-targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+[lib]
+crate-type = ["cdylib"]
+
+# [package.metadata.docs.rs]
+# all-features = true
+# targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
 unshell-lib = {path="../unshell-lib"}
 
+# Stuff for app functionality
 egui = "0.33.0"
 eframe = { version = "0.33.0", default-features = false, features = [
     # "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
@@ -23,27 +27,27 @@ eframe = { version = "0.33.0", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
+egui_extras = "0.33.2"
+egui_tiles = "0.14.0"
+egui-async = "0.2.6"
 log = "0.4.27"
+chrono = "0.4.42"
 
 # You only need serde if you want app persistence:
 serde = { version = "1.0.219", features = ["derive"] }
-egui_extras = "0.33.2"
-egui_tiles = "0.14.0"
+serde_json = "1.0.145"
 
-# native:
-# [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# pretty_env_logger = "0.5.0"
-
-# web:
-# [target.'cfg(target_arch = "wasm32")'.dependencies]
+# Web Stuff
 wasm-bindgen-futures = "0.4.50"
 wasm-bindgen = "0.2.106"
-web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
-serde_json = "1.0.145"
-chrono = "0.4.42"
+web-sys = {version = "0.3.70", features = ['Headers', 'Request', 'RequestInit', 'RequestMode', 'Response', 'Window']}
+
+reqwest = {version = "0.12.26", features=["json"]}
+# tokio = {version = "1.48.0", features = ["full"]}
 
 [profile.release]
 opt-level = 2 # fast and small wasm
+# lto = true
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]

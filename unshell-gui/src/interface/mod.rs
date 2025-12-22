@@ -1,21 +1,26 @@
-mod render_interface;
+mod interface;
 
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use unshell_lib::Result;
+use egui_async::Bind;
+use log::debug;
 use unshell_lib::config::TreeMessage;
+use unshell_lib::{ModuleError, Result};
 
 use crate::auth::Auth;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct InterfaceWindow {
     path: PathBuf,
-
+    // #[serde(skip)]
+    // data_bind: Bind<String, ModuleError>,
     #[serde(skip)]
     state: Arc<Mutex<InterfaceWindowState>>,
+    // #[serde(skip)]
+    // promise: Option<PromiseWrapper<Result<TreeMessage>>>,
 }
 
 pub struct InterfaceWindowState {
@@ -26,6 +31,8 @@ pub struct InterfaceWindowState {
 
 impl InterfaceWindow {
     pub fn update(&mut self, auth: &mut Auth, ui: &mut egui::Ui) {
+        // let data_bind = Bind::<InterfaceWindowState, ModuleError>::new(false);
+
         ui.heading("Interface");
         ui.label(self.path.to_string_lossy());
 
@@ -73,7 +80,8 @@ impl InterfaceWindow {
                             Ok(item) => {
                                 state_lock.branch = Some(item);
                             }
-                            Err(_) => {
+                            Err(err) => {
+                                crate::log(&format!("Got error {err:?}"));
                                 state_lock.is_error = true;
                             }
                         }
@@ -93,14 +101,14 @@ impl InterfaceWindow {
 
                 let clear = match branch {
                     TreeMessage::InterfaceAndValue(interface_struct, interface_data) => {
-                        render_interface::render(ui, interface_struct, interface_data);
+                        interface::render(ui, interface_struct, interface_data);
 
                         if ui.button("Save").clicked() {
                             auth.post(
                                 &format!("/api/interface{}", self.path.display()),
                                 &TreeMessage::State(interface_data.clone()),
                                 move |response: Result<TreeMessage>| {
-                                    crate::log(&format!("{response:?}"));
+                                    debug!("{response:?}");
                                 },
                             )
                             .unwrap();
@@ -129,6 +137,56 @@ impl InterfaceWindow {
                 drop(state_lock)
             }
         }
+
+        // if ui.button("Go Up").clicked() {
+        //     self.go_up();
+        //     // self.data_bind.clear();
+        // }
+
+        // match self.promise.as_mut() {
+        //     Some(promise) => {
+        //         if let Some(result) = promise.poll() {
+        //             crate::log(&format!("{result:?}"));
+        //         } else {
+        //             crate::log("Poll failed");
+        //         }
+        //     }
+        //     None => {
+        //         self.promise =
+        //             Some(auth.get_async(&format!("/api/interface{}", self.path.to_str().unwrap())));
+        //     }
+        // }
+
+        // let future = Auth::get_async::<String>("/api/test").await;
+        // future.;
+
+        // if let Some(res) = self.data_bind.read_or_request(async || {
+        //     // self.go_up();
+        //     // auth.get("", |e: String| {});
+
+        //     reqwest::get("https://icanhazip.com/")
+        //         .await
+        //         .map_err(|e| ModuleError::Error(e.to_string()))?
+        //         .text()
+        //         .await
+        //         .map_err(|e| ModuleError::Error(e.to_string()))
+        // }) {
+        //     match res {
+        //         Ok(ip) => {
+        //             ui.label(format!("OK {ip}"));
+        //         }
+        //         Err(err) => {
+        //             ui.label(format!("ERR {err}"));
+        //         }
+        //     }
+        // } else {
+        //     ui.spinner();
+        // };
+
+        // if ui.button("Refresh").clicked() {
+        //     Auth::get_async_callback::<String>("/api/interface");
+        //     // self.data_bind.clear();
+        // }
     }
 
     fn reset_path(&mut self) {
@@ -136,19 +194,25 @@ impl InterfaceWindow {
     }
 
     fn go_up(&mut self) {
-        self.path = PathBuf::from(self.path.parent().unwrap());
+        if let Some(parent) = self.path.parent() {
+            self.path = PathBuf::from(parent);
+        }
     }
 
     fn go_down(&mut self, path: String) {
         self.path = self.path.join(path);
     }
+
+    async fn get() {}
 }
 
 impl Default for InterfaceWindow {
     fn default() -> Self {
         Self {
             path: "/".into(),
+            // promise: None,
             state: Arc::new(Mutex::new(InterfaceWindowState::default())),
+            // data_bind: Bind::new(false),
         }
     }
 }

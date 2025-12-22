@@ -15,15 +15,15 @@ use crate::{Server, auth::structs::CurrentUser};
 impl Server {
     pub async fn get_tree2_root(
         State(server): State<Server>,
-        Extension(extension): Extension<CurrentUser>,
+        // Extension(extension): Extension<CurrentUser>,
     ) -> Json<Value> {
-        Self::get_tree2(State(server), Path("".into()), Extension(extension)).await
+        Self::get_tree2(State(server), Path("".into())).await
     }
 
     pub async fn get_tree2(
         State(mut server): State<Server>,
         Path(path): Path<String>,
-        Extension(_): Extension<CurrentUser>,
+        // Extension(_): Extension<CurrentUser>,
     ) -> Json<Value> {
         debug!("GET /api/interface/{}", path);
 
@@ -37,10 +37,12 @@ impl Server {
     pub async fn post_tree2(
         State(mut server): State<Server>,
         Path(path): Path<String>,
-        Extension(_): Extension<CurrentUser>,
+        // Extension(_): Extension<CurrentUser>,
         Json(tree_message): Json<TreeMessage>,
     ) -> Json<Value> {
-        debug!("POST /api/interface/{}", path);
+        debug!("POST /api/interface/");
+
+        // Json(Value::Null)
 
         let result = server
             .get(&path, tree_message)
