@@ -5,10 +5,7 @@ use std::{
 
 use unshell_lib::{
     ModuleError, Result,
-    config::{
-        Tree, TreeMessage,
-        config_struct::{Config, ConfigStructField},
-    },
+    config::{ConfigStructField, Tree, TreeMessage, config_struct::Config},
 };
 use unshell_manager::Manager;
 
@@ -28,7 +25,7 @@ pub struct Server {
 
 impl Server {
     pub fn new(_config_paths: Vec<PathBuf>, database: String) -> Result<Self> {
-        // let mut component_configs: Vec<crate::config::ComponentState> = Vec::new();
+        // let mut component_configs: Vec<crate::config::ComponentState> = Vec::new(1);
 
         // for config in &config_paths {
         //     component_configs.extend(crate::config::load_config(config)?);
@@ -45,12 +42,12 @@ impl Server {
                 ConfigStructField::String {
                     default: "Test Texttttttttttttttt".into(),
                     max_length: None,
-                    protected: None,
+                    protected: true,
                 },
                 ConfigStructField::String {
                     default: "Test ".into(),
-                    max_length: None,
-                    protected: None,
+                    max_length: Some(15),
+                    protected: false,
                 },
             ]))),
             // tree: Tree2::default(),

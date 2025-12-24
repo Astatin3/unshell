@@ -1,5 +1,5 @@
 use axum::{
-    Extension, Json,
+    Json,
     extract::{Path, State},
 };
 
@@ -10,7 +10,7 @@ use unshell_lib::{
     debug,
 };
 
-use crate::{Server, auth::structs::CurrentUser};
+use crate::Server;
 
 impl Server {
     pub async fn get_tree2_root(

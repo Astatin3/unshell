@@ -5,10 +5,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use egui_async::Bind;
 use log::debug;
-use unshell_lib::config::TreeMessage;
-use unshell_lib::{ModuleError, Result};
+use unshell_lib::{Result, config::TreeMessage};
 
 use crate::auth::Auth;
 
@@ -137,56 +135,6 @@ impl InterfaceWindow {
                 drop(state_lock)
             }
         }
-
-        // if ui.button("Go Up").clicked() {
-        //     self.go_up();
-        //     // self.data_bind.clear();
-        // }
-
-        // match self.promise.as_mut() {
-        //     Some(promise) => {
-        //         if let Some(result) = promise.poll() {
-        //             crate::log(&format!("{result:?}"));
-        //         } else {
-        //             crate::log("Poll failed");
-        //         }
-        //     }
-        //     None => {
-        //         self.promise =
-        //             Some(auth.get_async(&format!("/api/interface{}", self.path.to_str().unwrap())));
-        //     }
-        // }
-
-        // let future = Auth::get_async::<String>("/api/test").await;
-        // future.;
-
-        // if let Some(res) = self.data_bind.read_or_request(async || {
-        //     // self.go_up();
-        //     // auth.get("", |e: String| {});
-
-        //     reqwest::get("https://icanhazip.com/")
-        //         .await
-        //         .map_err(|e| ModuleError::Error(e.to_string()))?
-        //         .text()
-        //         .await
-        //         .map_err(|e| ModuleError::Error(e.to_string()))
-        // }) {
-        //     match res {
-        //         Ok(ip) => {
-        //             ui.label(format!("OK {ip}"));
-        //         }
-        //         Err(err) => {
-        //             ui.label(format!("ERR {err}"));
-        //         }
-        //     }
-        // } else {
-        //     ui.spinner();
-        // };
-
-        // if ui.button("Refresh").clicked() {
-        //     Auth::get_async_callback::<String>("/api/interface");
-        //     // self.data_bind.clear();
-        // }
     }
 
     fn reset_path(&mut self) {
@@ -202,8 +150,6 @@ impl InterfaceWindow {
     fn go_down(&mut self, path: String) {
         self.path = self.path.join(path);
     }
-
-    async fn get() {}
 }
 
 impl Default for InterfaceWindow {

@@ -2,7 +2,6 @@ mod blob;
 
 use std::{
     collections::HashMap,
-    error::Error,
     fs,
     path::{Path, PathBuf},
 };

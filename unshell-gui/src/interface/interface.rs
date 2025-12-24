@@ -36,17 +36,31 @@ fn render_config_struct(
                 },
                 serde_json::Value::String(value),
             ) => {
-                let mut widget = TextEdit::singleline(value);
+                ui.horizontal(|ui| {
+                    let mut widget = TextEdit::singleline(value);
 
-                if let Some(limit) = &max_length {
-                    widget = widget.char_limit(*limit);
-                }
+                    if let Some(limit) = &max_length {
+                        widget = widget.char_limit(*limit);
+                    }
 
-                if let Some(protected) = &protected {
-                    widget = widget.password(*protected);
-                }
+                    let password = *protected && !ui.button("👁").is_pointer_button_down_on();
 
-                ui.add(widget);
+                    widget = widget.password(password);
+
+                    // if protected
+                    // ui.selectable_label(show_plaintext, "👁")
+                    //     .on_hover_text("Show/hide password")
+                    //     .clicked();
+                    // {
+                    //     widget = widget.password(true);
+                    // }
+
+                    ui.add(widget);
+
+                    if let Some(limit) = max_length {
+                        ui.label(format!("{}/{}", value.len(), limit));
+                    }
+                });
             }
             (
                 config_struct::ConfigStructField::Integer { default, min, max },
