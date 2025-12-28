@@ -55,7 +55,7 @@ pub enum TreeMessage {
     RequestStructAndValue,
 
     State(InterfaceData),
-    Interface(InterfaceStruct),
+    // Interface(InterfaceStruct),
     InterfaceAndValue(InterfaceStruct, InterfaceData),
 
     Success,

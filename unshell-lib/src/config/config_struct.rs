@@ -36,9 +36,9 @@ impl Config {
                 Ok(TreeMessage::Success)
             }
 
-            TreeMessage::RequestStruct => Ok(TreeMessage::Interface(
-                InterfaceStruct::ConfigStruct(self.keys.clone()),
-            )),
+            // TreeMessage::RequestStruct => Ok(TreeMessage::Interface(
+            //     InterfaceStruct::ConfigStruct(self.keys.clone()),
+            // )),
             TreeMessage::RequestState => Ok(TreeMessage::State(InterfaceData::ConfigStruct(
                 self.values.clone(),
             ))),

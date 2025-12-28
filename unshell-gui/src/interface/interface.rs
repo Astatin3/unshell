@@ -1,5 +1,7 @@
 use egui::{Color32, TextEdit};
-use unshell_lib::config::{InterfaceData, InterfaceStruct, config_struct};
+use unshell_lib::config::{ConfigStructField, InterfaceData, InterfaceStruct, config_struct};
+
+struct ConfigInterface(Config)
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -20,16 +22,16 @@ fn render_config_struct(
 ) {
     for (interface, data) in interface.iter().zip(data) {
         match (interface, data) {
-            (config_struct::ConfigStructField::Header(text), serde_json::Value::Null) => {
+            (ConfigStructField::Header(text), serde_json::Value::Null) => {
                 ui.heading(text);
             }
 
-            (config_struct::ConfigStructField::Text(text), serde_json::Value::Null) => {
+            (ConfigStructField::Text(text), serde_json::Value::Null) => {
                 ui.label(text);
             }
 
             (
-                config_struct::ConfigStructField::String {
+                ConfigStructField::String {
                     default: _,
                     max_length,
                     protected,
@@ -63,7 +65,7 @@ fn render_config_struct(
                 });
             }
             (
-                config_struct::ConfigStructField::Integer { default, min, max },
+                ConfigStructField::Integer { default, min, max },
                 serde_json::Value::Number(number),
             ) => todo!(),
 
