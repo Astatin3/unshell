@@ -1,11 +1,6 @@
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{
-    ModuleError, Result,
-    config::{ConfigStructField, InterfaceData, InterfaceStruct, Tree, TreeMessage},
-    warn,
-};
+use crate::config::ConfigStructField;
 
 pub type ConfigStructListKeys = Vec<ConfigStructField>;
 pub type ConfigStructListValues = Vec<Vec<Value>>;

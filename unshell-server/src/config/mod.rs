@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use unshell_lib::{ModuleError, Result, debug, info};
+use unshell::{ModuleError, Result, debug, info};
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 struct ComponentMetadata {

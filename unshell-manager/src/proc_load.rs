@@ -3,7 +3,7 @@
 use std::{ffi::CString, io};
 
 use libloading::Library;
-use unshell_lib::{ModuleError, Result, warn};
+use unshell::{ModuleError, Result, warn};
 
 // The `memfd_create` syscall flags (MFD_CLOEXEC is common and good practice)
 const MFD_CLOEXEC: u32 = 0x0001;

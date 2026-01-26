@@ -10,7 +10,7 @@ use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::Utc;
 use jsonwebtoken::{Header, TokenData, Validation, decode, encode};
 use serde_json::{Value, json};
-use unshell_lib::{debug, info};
+use unshell::{debug, info};
 
 use crate::{EXPIRE_DURATION, JWT_DECODING_KEY, JWT_ENCODING_KEY};
 

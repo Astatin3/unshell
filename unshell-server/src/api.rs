@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use tokio::net::TcpListener;
-use unshell_lib::{debug, info};
+use unshell::{debug, info};
 
 // axum_extra::
 

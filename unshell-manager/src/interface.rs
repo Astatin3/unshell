@@ -1,7 +1,7 @@
 // use std::collections::HashMap;
 use std::fmt::Debug;
-use unshell_lib::Result;
-use unshell_lib::config::RuntimeConfig;
+use unshell::Result;
+use unshell::config::RuntimeConfig;
 
 use crate::ModuleRuntime;
 

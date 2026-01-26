@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::Value;
 use sled::Tree;
-use unshell_lib::{debug, error};
+use unshell::{debug, error};
 
 use crate::{auth::structs::CurrentUser, server::Server};
 

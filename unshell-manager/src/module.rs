@@ -1,5 +1,5 @@
 use libloading::{Library, Symbol};
-use unshell_lib::{
+use unshell::{
     ModuleError, Result,
     logger::{self, SetupLogger, logger},
     warn,

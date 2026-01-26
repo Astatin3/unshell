@@ -68,7 +68,7 @@ pub fn add_record(
     });
 }
 
-pub fn logger<'a>() -> &'static dyn Logger {
+pub fn logger() -> &'static dyn Logger {
     unsafe { LOGGER }
 }
 

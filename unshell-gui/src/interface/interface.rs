@@ -1,7 +1,9 @@
 use egui::{Color32, TextEdit};
-use unshell_lib::config::{ConfigStructField, InterfaceData, InterfaceStruct, config_struct};
+use unshell::config::{ConfigStructField, InterfaceData, InterfaceStruct, config_struct};
 
-struct ConfigInterface(Config)
+use crate::config::Config;
+
+struct ConfigInterface(Config);
 
 pub fn render(
     ui: &mut egui::Ui,

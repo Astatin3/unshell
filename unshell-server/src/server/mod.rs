@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use unshell_lib::{
+use unshell::{
     ModuleError, Result,
     config::{ConfigStructField, Tree, TreeMessage, config_struct::Config},
 };

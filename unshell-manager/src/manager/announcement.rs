@@ -1,5 +1,5 @@
 use crate::Manager;
-use unshell_lib::Announcement;
+use unshell::Announcement;
 
 impl Manager {
     pub fn recv_announcement(&mut self, announcement: &Announcement) {

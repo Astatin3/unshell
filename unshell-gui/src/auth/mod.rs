@@ -4,7 +4,7 @@ use serde_json::json;
 use std::sync::Arc;
 use wasm_bindgen::prelude::Closure;
 
-use unshell_lib::Result;
+use unshell::Result;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Auth {

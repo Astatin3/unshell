@@ -3,16 +3,17 @@ name = "unshell-manager"
 edition = "2024"
 
 [features]
-obfuscate = ["unshell-obfuscate/obfuscate"]
-log = ["unshell-lib/log"]
-log_debug = ["unshell-lib/log_debug"]
+log = ["unshell/log"]
+log_debug = ["log", "unshell/log_debug"]
 
-client = ["unshell-lib/client"]
-server = ["unshell-lib/server"]
+obfuscate = ["unshell-obfuscate/obfuscate"]
+
+# client = ["unshell-lib/client"]
+# server = ["unshell-lib/server"]
 
 [dependencies]
-unshell-lib = {path = "../unshell-lib", default-features = false}
-unshell-obfuscate = {path = "../unshell-obfuscate", default-features = false}
+unshell = {path = "../", default-features = false}
+unshell-obfuscate = {path = "../unshell-obfuscate"}
 
 bincode = "2.0.1"
 libc = "0.2.178"

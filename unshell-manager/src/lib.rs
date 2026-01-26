@@ -13,8 +13,8 @@ pub use module::Module;
 
 pub use interface::{InterfaceWrapper, NamedComponent, PayloadConfig};
 
-extern crate unshell_lib;
-use unshell_lib::Result;
+// extern crate unshell_lib;
+use unshell::Result;
 
 /// Trait for defining modules that have a runtime.
 pub trait ModuleRuntime: Send + Sync {

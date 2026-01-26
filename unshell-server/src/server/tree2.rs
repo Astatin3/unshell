@@ -4,7 +4,7 @@ use axum::{
 };
 
 use serde_json::Value;
-use unshell_lib::{
+use unshell::{
     ModuleError,
     config::{Tree, TreeMessage},
     debug,

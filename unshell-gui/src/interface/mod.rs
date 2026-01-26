@@ -5,8 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use log::debug;
-use unshell_lib::{Result, config::TreeMessage};
+use unshell::{Result, config::TreeMessage};
 
 use crate::auth::Auth;
 
@@ -106,7 +105,7 @@ impl InterfaceWindow {
                                 &format!("/api/interface{}", self.path.display()),
                                 &TreeMessage::State(interface_data.clone()),
                                 move |response: Result<TreeMessage>| {
-                                    debug!("{response:?}");
+                                    // debug!("{response:?}");
                                 },
                             )
                             .unwrap();

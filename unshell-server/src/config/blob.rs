@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use unshell_lib::config::ConfigStructField;
+use unshell::config::ConfigStructField;
 
 // use crate::config::ConfigStructField;
 

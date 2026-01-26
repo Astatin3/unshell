@@ -4,7 +4,7 @@ use chrono::Local;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use unshell_lib::debug;
+use unshell::debug;
 
 use crate::Server;
 use crate::auth::structs::CurrentUser;

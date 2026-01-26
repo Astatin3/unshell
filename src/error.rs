@@ -50,7 +50,7 @@ impl std::error::Error for ModuleError {
 }
 
 impl fmt::Display for ModuleError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(format!("{:?}", self).as_str())
     }
 }

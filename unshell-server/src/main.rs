@@ -31,7 +31,7 @@ pub struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    unshell_lib::logger::PrettyLogger::init_output(|message| {
+    unshell::logger::PrettyLogger::init_output(|message| {
         if let Ok(json) = serde_json::to_string(message) {
             unshell_server::logger::Logger::log(json);
         }
