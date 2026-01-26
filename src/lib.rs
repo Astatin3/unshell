@@ -10,6 +10,10 @@ pub use error::{ModuleError, Result};
 
 pub use announcement::Announcement;
 
+// Re-exports
+pub use unshell_crypt;
+pub use unshell_obfuscate;
+
 // pub trait Component {
 //     fn name(&self) -> &'static str;
 //     // fn start_runtime(&self, manager: Arc<Mutex<Manager>>) -> Option<Box<dyn ModuleRuntime>>;

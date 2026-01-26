@@ -6,14 +6,13 @@ edition = "2024"
 log = ["unshell/log"]
 log_debug = ["log", "unshell/log_debug"]
 
-obfuscate = ["unshell-obfuscate/obfuscate"]
+obfuscate = ["unshell/obfuscate"]
 
 # client = ["unshell-lib/client"]
 # server = ["unshell-lib/server"]
 
 [dependencies]
 unshell = {path = "../", default-features = false}
-unshell-obfuscate = {path = "../unshell-obfuscate"}
 
 bincode = "2.0.1"
 libc = "0.2.178"

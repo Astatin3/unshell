@@ -8,8 +8,8 @@ use std::{
     time::Duration,
 };
 
+use unshell::unshell_obfuscate::symbol;
 use unshell::{Result, config::RuntimeConfig, debug, warn};
-use unshell_obfuscate::symbol;
 
 use crate::{
     ModuleRuntime,

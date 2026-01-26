@@ -3928,6 +3928,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "unshell-crypt",
  "unshell-obfuscate",
 ]
 
@@ -3973,7 +3974,6 @@ dependencies = [
  "libloading",
  "rand 0.9.2",
  "unshell",
- "unshell-obfuscate",
 ]
 
 [[package]]
@@ -4006,7 +4006,6 @@ dependencies = [
  "toml",
  "unshell",
  "unshell-manager",
- "unshell-obfuscate",
 ]
 
 [[package]]
