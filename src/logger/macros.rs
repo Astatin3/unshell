@@ -2,6 +2,7 @@
 #[macro_export]
 macro_rules! debug {
     ($fmt:tt) => {{
+        use $crate::unshell_obfuscate;
         let log_result = unshell_obfuscate::format_obs!($fmt);
 
         $crate::logger::add_record(
@@ -17,6 +18,7 @@ macro_rules! debug {
         );
     }};
     ($fmt:tt, $($arg:expr),*) => {{
+        use $crate::unshell_obfuscate;
         let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
 
         $crate::logger::add_record(
@@ -48,6 +50,7 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! info {
     ($fmt:tt) => {{
+        use $crate::unshell_obfuscate;
         let log_result = unshell_obfuscate::format_obs!($fmt);
 
         $crate::logger::add_record(
@@ -63,6 +66,7 @@ macro_rules! info {
         );
     }};
     ($fmt:tt, $($arg:expr),*) => {{
+        use $crate::unshell_obfuscate;
         let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
 
         $crate::logger::add_record(
@@ -82,6 +86,8 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warn {
     ($fmt:tt) => {{
+        use $crate::unshell_obfuscate;
+
         let log_result = unshell_obfuscate::format_obs!($fmt);
 
         $crate::logger::add_record(
@@ -97,6 +103,8 @@ macro_rules! warn {
         );
     }};
     ($fmt:tt, $($arg:expr),*) => {{
+        use $crate::unshell_obfuscate;
+
         let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
 
         $crate::logger::add_record(
@@ -131,6 +139,7 @@ macro_rules! error {
         );
     }};
     ($fmt:tt, $($arg:expr),*) => {{
+        use $crate::unshell_obfuscate;
         let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
 
         $crate::logger::add_record(

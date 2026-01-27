@@ -3,9 +3,9 @@ name = "unshell-server"
 edition = "2024"
 
 [features]
-default = []
+default = ["log_debug"]
 log = ["unshell/log", "unshell-manager/log"]
-log_debug = ["log", "unshell/log_debug", "unshell-manager/log_debug"]
+log_debug = ["unshell/log_debug", "unshell-manager/log_debug"]
 
 [dependencies]
 unshell = { path = "../" }

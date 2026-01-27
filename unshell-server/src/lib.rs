@@ -31,7 +31,25 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 static EXPIRE_DURATION: Duration = Duration::hours(12);
 
 #[dynamic]
-static JWT_SECRET: String = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+static JWT_SECRET: String = {
+    if let Ok(env_secret) = std::env::var("JWT_SECRET") {
+        env_secret
+    } else {
+        println!(
+            r#"
+##############
+# WARNING: You are using the default JWT secret, used for creating user sessions
+# With this default key, anyone can login as any user.
+##############"#
+        );
+        "DEFAULT_SECRET".to_string()
+    }
+};
+
+// std::env::var("JWT_SECRET").unwrap_or(|| -> String {
+//     return "TEST".to_string();
+// }());
 
 #[dynamic]
 static JWT_ENCODING_KEY: EncodingKey = EncodingKey::from_secret(JWT_SECRET.as_bytes());

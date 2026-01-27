@@ -3,16 +3,19 @@ use quote::quote;
 use syn::{ItemFn, LitStr, parse_macro_input};
 use unshell_crypt::{BACKUP_ENV_KEY, ENV_KEY_NAME, STATIC_IV, aes::encrypt_aes_lines, fill};
 
+#[cfg(feature = "obfuscate")]
 #[static_init::dynamic]
 static KEY: String = {
     std::env::var(ENV_KEY_NAME).unwrap_or({
-        // Diagnostic::new(proc_macro::Level::Warning, "Using default encryption key!").emit();
-
         println!("Using default encryption key!");
-
         BACKUP_ENV_KEY.to_owned()
     })
 };
+
+// If there isn't any encryption
+#[cfg(not(feature = "obfuscate"))]
+#[static_init::dynamic]
+static KEY: String = "".to_string();
 
 pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input function

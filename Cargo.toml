@@ -33,7 +33,7 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-unshell-obfuscate = {path = "./unshell-obfuscate"}
+unshell-obfuscate = { path = "./unshell-obfuscate" }
 # unshell-crypt = {path = "./unshell-crypt"}
 
 [workspace.dependencies]
