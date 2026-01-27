@@ -1,11 +1,6 @@
 [package]
 name = "unshell-gui"
-version = "0.1.0"
 edition = "2024"
-
-authors = ["ASTATIN3"]
-include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.88"
 
 [lib]
 crate-type = ["cdylib"]
@@ -18,7 +13,7 @@ targets = [
 ]
 
 [dependencies]
-unshell = {path="../"}
+unshell = { path="../" }
 
 # log = "0.4.27"
 chrono = { workspace = true }
@@ -26,6 +21,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 reqwest = {version = "0.12.26", features=["json"]}
+log = "0.4.29"
 
 # Stuff for app functionality
 egui = "0.33.0"
@@ -44,5 +40,6 @@ egui-async = "0.2.6"
 
 # Web Stuff
 wasm-bindgen-futures = "0.4.50"
-wasm-bindgen = "0.2.106"
-web-sys = {version = "0.3.70", features = ['Headers', 'Request', 'RequestInit', 'RequestMode', 'Response', 'Window']}
+wasm-bindgen = "0.2.108"
+# web-sys = "0.3.85"
+web-sys = { version = "0.3.85", features = ["Headers", "Request", "RequestInit", "RequestMode", "Response", "Window"] }

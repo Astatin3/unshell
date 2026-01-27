@@ -2,8 +2,14 @@ cargo-features = ["trim-paths"]
 
 [package]
 name = "unshell"
+edition = "2024"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+
+authors = ["ASTATIN3"]
+include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 
 [workspace]
 members = [
@@ -28,7 +34,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 unshell-obfuscate = {path = "./unshell-obfuscate"}
-unshell-crypt = {path = "./unshell-crypt"}
+# unshell-crypt = {path = "./unshell-crypt"}
 
 [workspace.dependencies]
 ####

@@ -3923,18 +3923,17 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unshell"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "chrono",
  "serde",
  "serde_json",
- "unshell-crypt",
  "unshell-obfuscate",
 ]
 
 [[package]]
 name = "unshell-crypt"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "aes",
  "block-padding 0.4.2",
@@ -3948,7 +3947,7 @@ dependencies = [
 
 [[package]]
 name = "unshell-gui"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "chrono",
  "eframe",
@@ -3956,6 +3955,7 @@ dependencies = [
  "egui-async",
  "egui_extras",
  "egui_tiles",
+ "log",
  "reqwest",
  "serde",
  "serde_json",
