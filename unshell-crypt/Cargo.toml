@@ -1,6 +1,9 @@
 [package]
 name = "unshell-crypt"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+include.workspace = true
 
 [dependencies]
 aes = "0.8.4"

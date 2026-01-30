@@ -1,76 +1,86 @@
-use std::{any::Any, collections::HashMap, fs::File, io::Read};
+use unshell::info;
 
-use static_init::dynamic;
-use unshell_lib::{
-    ModuleError,
-    config::{PayloadConfig, RuntimeConfig},
-    module::{Manager, Module},
-};
-use unshell_obfuscate::{obs, symbol};
-
-#[macro_use]
-extern crate unshell_lib;
-
-// The main and initial 'configuration' for a payload
-
-#[dynamic]
-static PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
-    id: symbol!("Test ID"),
-    components: Vec::new(),
-    runtime_config: vec![RuntimeConfig {
-        parent_component: symbol!("client").to_string(),
-        name: symbol!("client runtime").to_string(),
-        config: HashMap::from([
-            (symbol!("host").to_string(), obs!("localhost:1234")),
-            (symbol!("retry").to_string(), obs!("1000")),
-        ]),
-    }],
-};
+// use std::dyn
 
 fn main() {
     // Init the logger
-    #[cfg(not(feature = "obfuscate"))]
-    unshell_lib::logger::PrettyLogger::init();
+    // #[cfg(not(feature = "obfuscate"))]
+    unshell::logger::PrettyLogger::init();
 
-    debug!("Initialized");
-
-    match run() {
-        Ok(_) => {}
-        Err(e) => {
-            error!("ERROR! '{:?}'", e);
-        }
-    }
+    server2::log_test_fn();
+    // info!("This is a string!");
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let args = std::env::args();
+// use std::{any::Any, collections::HashMap, fs::File, io::Read};
 
-    // TEMPORARY, load the module paths from command line args.
-    let mut modules = Vec::new();
-    for arg in args.skip(1) {
-        // debug!("Loading module: {}", arg);
+// use static_init::dynamic;
+// use unshell_lib::{
+//     ModuleError,
+//     config::{PayloadConfig, RuntimeConfig},
+//     module::{Manager, Module},
+// };
+// use unshell_obfuscate::{obs, symbol};
 
-        // let mut file = File::open(arg).map_err(|e| ModuleError::Error(e.to_string().into()))?;
-        // let mut buffer = Vec::new();
-        // file.read_to_end(&mut buffer)
-        //     .map_err(|e| ModuleError::Error(e.to_string().into()))?;
+// #[macro_use]
+// extern crate unshell_lib;
 
-        debug!("Initializing module: {}", arg);
-        let module = Module::new(&arg)?;
+// // The main and initial 'configuration' for a payload
 
-        modules.push(module);
+// #[dynamic]
+// static PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
+//     id: symbol!("Test ID"),
+//     components: Vec::new(),
+//     runtime_config: vec![RuntimeConfig {
+//         parent_component: symbol!("client").to_string(),
+//         name: symbol!("client runtime").to_string(),
+//         config: HashMap::from([
+//             (symbol!("host").to_string(), obs!("localhost:1234")),
+//             (symbol!("retry").to_string(), obs!("1000")),
+//         ]),
+//     }],
+// };
 
-        // modules.push(Module::new(&arg)?)
-    }
+// fn main() {
 
-    // let modules = vec
+//     debug!("Initialized");
 
-    debug!("Starting manager...");
+//     match run() {
+//         Ok(_) => {}
+//         Err(e) => {
+//             error!("ERROR! '{:?}'", e);
+//         }
+//     }
+// }
 
-    // Run the manager, this is blocking.
-    let manager = Manager::start(&PAYLOAD_CONFIG, modules);
+// fn run() -> Result<(), Box<dyn std::error::Error>> {
+//     let args = std::env::args();
 
-    Manager::join(manager);
+//     // TEMPORARY, load the module paths from command line args.
+//     let mut modules = Vec::new();
+//     for arg in args.skip(1) {
+//         // debug!("Loading module: {}", arg);
 
-    Ok(())
-}
+//         // let mut file = File::open(arg).map_err(|e| ModuleError::Error(e.to_string().into()))?;
+//         // let mut buffer = Vec::new();
+//         // file.read_to_end(&mut buffer)
+//         //     .map_err(|e| ModuleError::Error(e.to_string().into()))?;
+
+//         debug!("Initializing module: {}", arg);
+//         let module = Module::new(&arg)?;
+
+//         modules.push(module);
+
+//         // modules.push(Module::new(&arg)?)
+//     }
+
+//     // let modules = vec
+
+//     debug!("Starting manager...");
+
+//     // Run the manager, this is blocking.
+//     let manager = Manager::start(&PAYLOAD_CONFIG, modules);
+
+//     Manager::join(manager);
+
+//     Ok(())
+// }

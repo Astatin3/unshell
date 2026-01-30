@@ -1,0 +1,16 @@
+[package]
+name = "server2"
+edition = "2024"
+
+[features]
+log = ["unshell/log"]
+log_debug = ["unshell/log_debug"]
+
+# [lib]
+# crate-type = ["cdylib"]
+
+[dependencies]
+unshell.path = "../../"
+
+[lints]
+workspace = true

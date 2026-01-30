@@ -1,8 +1,18 @@
+cargo-features = ["trim-paths"]
+
 [package]
 name = "unshell-payload"
 edition = "2024"
 
-# [features]
+# [lib]
+# crate-type = ["cdylib"]
+
+[features]
+default = ["log"]
+log = ["unshell/log", "server2/log"]
+log_debug = ["unshell/log_debug", "server2/log_debug"]
+
+
 # obfuscate = ["unshell-obfuscate/obfuscate"]
 # log = ["unshell-lib/log"]
 # log_debug = ["unshell-lib/log_debug"]
@@ -13,17 +23,6 @@ edition = "2024"
 
 
 [dependencies]
-# lazy_static = "1.5.0"
-static_init = "1.0.4"
 
-# unshell-lib = {path = "../unshell-lib", default-features = false}
-unshell-obfuscate = {path = "../unshell-obfuscate"}
-
-[profile.release]
-# strip = true # Strip symbols from the binary
-# opt-level = "z"  # Optimize for size
-# lto = true # Link tree optimization
-# codegen-units = 1
-# panic = "abort"
-# debug = false # Remove debug
-# trim-paths="all"
+unshell.path = "../"
+server2.path = "../core-modules/server2"

@@ -1,5 +1,5 @@
 pub mod config_struct;
-pub mod config_struct_list;
+// pub mod config_struct_list;
 mod tree;
 
 pub use tree::{InterfaceData, InterfaceStruct, Tree, TreeMessage};

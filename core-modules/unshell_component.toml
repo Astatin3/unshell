@@ -1,9 +1,0 @@
-name="UnShell Core"
-version="0.1"
-description="Core components for UnShell"
-authors=["astatin3"]
-
-child_components = [
-    "client/unshell_component.toml",
-    "server/unshell_component.toml"
-]

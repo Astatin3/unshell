@@ -1,6 +1,9 @@
 [package]
 name = "unshell-gui"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+include.workspace = true
 
 [lib]
 crate-type = ["cdylib"]

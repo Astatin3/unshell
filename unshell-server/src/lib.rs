@@ -1,6 +1,6 @@
 mod api;
 mod auth;
-mod config;
+// mod config;
 pub mod logger;
 mod server;
 

@@ -3268,6 +3268,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "server2"
+version = "0.0.0"
+dependencies = [
+ "unshell",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3933,7 +3940,7 @@ dependencies = [
 
 [[package]]
 name = "unshell-crypt"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "aes",
  "block-padding 0.4.2",
@@ -3947,7 +3954,7 @@ dependencies = [
 
 [[package]]
 name = "unshell-gui"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "eframe",
@@ -3967,7 +3974,7 @@ dependencies = [
 
 [[package]]
 name = "unshell-manager"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bincode",
  "libc",
@@ -3978,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "unshell-obfuscate"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3989,8 +3996,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "unshell-server"
+name = "unshell-payload"
 version = "0.0.0"
+dependencies = [
+ "server2",
+ "unshell",
+]
+
+[[package]]
+name = "unshell-server"
+version = "0.1.0"
 dependencies = [
  "axum",
  "axum-extra",

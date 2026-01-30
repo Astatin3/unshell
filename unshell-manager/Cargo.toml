@@ -1,6 +1,9 @@
 [package]
 name = "unshell-manager"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+include.workspace = true
 
 [features]
 log = ["unshell/log"]
