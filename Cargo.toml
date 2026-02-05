@@ -36,6 +36,8 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+crossbeam-channel = "0.5.15"
+
 unshell-obfuscate = { path = "./unshell-obfuscate" }
 # unshell-crypt = {path = "./unshell-crypt"}
 

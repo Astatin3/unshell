@@ -3,6 +3,7 @@
 pub mod config;
 mod error;
 pub mod logger;
+pub mod manager;
 
 mod announcement;
 

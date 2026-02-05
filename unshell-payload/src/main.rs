@@ -1,13 +1,18 @@
-use unshell::info;
+use unshell::{info, manager::Manager};
 
 // use std::dyn
 
 fn main() {
-    // Init the logger
-    // #[cfg(not(feature = "obfuscate"))]
-    unshell::logger::PrettyLogger::init();
+    let manager = Manager::new();
+    manager.init_logger();
 
-    server2::log_test_fn();
+    info!("Test thing!");
+
+    println!("Recieved logs: {}", manager.log_count());
+
+    // unshell::logger::
+
+    // server2::log_test_fn();
     // info!("This is a string!");
 }
 
