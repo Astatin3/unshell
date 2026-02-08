@@ -1,4 +1,4 @@
-pub mod aes;
+pub mod aes_encrypt;
 pub mod base62;
 
 pub const ENV_KEY_NAME: &str = "OBFUSCATION_KEY";
@@ -31,5 +31,3 @@ pub fn hash(input: &[u8]) -> [u8; 32] {
     hasher.update(input);
     hasher.finalize().into()
 }
-
-pub use getrandom::fill;

@@ -20,7 +20,7 @@ members = [
     "unshell-server", "unshell-payload",
 
     # Libraries
-    "unshell-manager", "unshell-obfuscate", "unshell-crypt"
+    "unshell-manager", "unshell-obfuscate"
 , "core-modules/server2"]
 
 [features]

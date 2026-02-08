@@ -8,6 +8,8 @@ use syn::parse_macro_input;
 mod format_helper;
 use format_helper::*;
 
+mod crypt;
+
 #[allow(dead_code, unused_imports)]
 mod no_obfuscate;
 
