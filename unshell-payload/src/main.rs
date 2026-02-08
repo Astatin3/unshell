@@ -1,9 +1,9 @@
-use unshell::{info, manager::Manager};
+use unshell::{info, manager::Tree};
 
 // use std::dyn
 
 fn main() {
-    let manager = Manager::new();
+    let manager = Tree::new();
     manager.init_logger();
 
     info!("Test thing!");
@@ -14,6 +14,10 @@ fn main() {
 
     // server2::log_test_fn();
     // info!("This is a string!");
+}
+
+pub fn test23() -> (i32, i32) {
+    (6, 3)
 }
 
 // use std::{any::Any, collections::HashMap, fs::File, io::Read};

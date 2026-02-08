@@ -5,14 +5,17 @@ pub type Result<T> = std::result::Result<T, ModuleError>;
 ///Generic error type for module-related operations.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ModuleError {
+    NoError,
+
+    TreeNotExist,
+    TreeMessageError(String),
+
     LibLoadingError(String),
     // LogError(log::SetLoggerError),
     LinkError(String),
     CryptError(String),
     DatabaseError(String),
     SerdeJsonError(String),
-
-    TreeMessageError(String),
 
     Error(String),
 }

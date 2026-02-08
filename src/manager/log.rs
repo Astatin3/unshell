@@ -3,7 +3,7 @@ use crossbeam_channel::Sender;
 
 use crate::{
     logger::{Logger, Record},
-    manager::Manager,
+    manager::Tree,
 };
 
 pub struct ManagerLogger {
