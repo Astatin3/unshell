@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use unshell::unshell_obfuscate::symbol;
+use unshell::obfuscate::symbol;
 use unshell::{Result, config::RuntimeConfig, debug, warn};
 
 use crate::{

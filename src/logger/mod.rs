@@ -10,6 +10,7 @@ mod pretty_logger;
 use std::time::SystemTime;
 
 pub use pretty_logger::PrettyLogger;
+pub use pretty_logger::log;
 
 static mut LOGGER: &dyn Logger = &DefaultLogger;
 

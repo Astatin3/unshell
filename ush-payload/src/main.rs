@@ -1,23 +1,43 @@
-use unshell::{info, manager::Tree};
-
-// use std::dyn
+use unshell::{
+    Value, info,
+    logger::{Record, log},
+    obfuscate::{junk_asm, symbol},
+    tree::{Tree, TreeElement, symbols},
+};
 
 fn main() {
-    let manager = Tree::new();
+    let mut manager = Tree::new();
     manager.init_logger();
 
     info!("Test thing!");
+    info!("Test thing!");
 
-    println!("Recieved logs: {}", manager.log_count());
+    loop {
+        if test123(&mut manager) {
+            break;
+        }
+    }
 
-    // unshell::logger::
-
-    // server2::log_test_fn();
-    // info!("This is a string!");
+    // println!("Test");
 }
 
-pub fn test23() -> (i32, i32) {
-    (6, 3)
+fn test123(manager: &mut Tree) -> bool {
+    let result = manager.send_message(
+        Value::String(symbol!("Logger").to_string()),
+        Value::String(symbols::CMD_GET.to_string()),
+    );
+
+    junk_asm!(20.);
+
+    let is_null = result.is_null();
+
+    if let Ok(result) = serde_json::from_value::<Record>(result) {
+        log(&result);
+    }
+
+    is_null
+
+    // println!("Logger: {}", result);
 }
 
 // use std::{any::Any, collections::HashMap, fs::File, io::Read};

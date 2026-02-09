@@ -1,5 +1,5 @@
 [package]
-name = "unshell-gui"
+name = "ush-gui"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

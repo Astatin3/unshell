@@ -7,8 +7,13 @@ pub type Result<T> = std::result::Result<T, ModuleError>;
 pub enum ModuleError {
     NoError,
 
+    // Tree errors
     TreeNotExist,
     TreeMessageError(String),
+
+    // Object errors
+    UnsupportedMethod,
+    InvalidType,
 
     LibLoadingError(String),
     // LogError(log::SetLoggerError),

@@ -1,5 +1,5 @@
 [package]
-name = "unshell-obfuscate"
+name = "ush-obfuscate"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

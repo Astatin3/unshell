@@ -3945,85 +3945,8 @@ dependencies = [
  "crossbeam-channel",
  "serde",
  "serde_json",
- "unshell-obfuscate",
-]
-
-[[package]]
-name = "unshell-gui"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "eframe",
- "egui",
- "egui-async",
- "egui_extras",
- "egui_tiles",
- "log",
- "reqwest",
- "serde",
- "serde_json",
- "unshell",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "unshell-manager"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "libc",
- "libloading",
- "rand 0.9.2",
- "unshell",
-]
-
-[[package]]
-name = "unshell-obfuscate"
-version = "0.1.0"
-dependencies = [
- "aes",
- "block-padding 0.4.2",
- "cbc",
- "getrandom 0.3.4",
- "hex",
- "hex-literal",
- "proc-macro2",
- "quote",
- "rand 0.9.2",
- "regex",
- "sha2",
  "static_init",
- "syn 2.0.114",
-]
-
-[[package]]
-name = "unshell-payload"
-version = "0.0.0"
-dependencies = [
- "server2",
- "unshell",
-]
-
-[[package]]
-name = "unshell-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-extra",
- "bcrypt",
- "chrono",
- "clap",
- "jsonwebtoken",
- "serde",
- "serde_json",
- "sled",
- "static_init",
- "tokio",
- "toml",
- "unshell",
- "unshell-manager",
+ "ush-obfuscate",
 ]
 
 [[package]]
@@ -4054,6 +3977,83 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+]
+
+[[package]]
+name = "ush-gui"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "eframe",
+ "egui",
+ "egui-async",
+ "egui_extras",
+ "egui_tiles",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "unshell",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "ush-manager"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "libc",
+ "libloading",
+ "rand 0.9.2",
+ "unshell",
+]
+
+[[package]]
+name = "ush-obfuscate"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "block-padding 0.4.2",
+ "cbc",
+ "getrandom 0.3.4",
+ "hex",
+ "hex-literal",
+ "proc-macro2",
+ "quote",
+ "rand 0.9.2",
+ "regex",
+ "sha2",
+ "static_init",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "ush-payload"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "unshell",
+]
+
+[[package]]
+name = "ush-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "bcrypt",
+ "chrono",
+ "clap",
+ "jsonwebtoken",
+ "serde",
+ "serde_json",
+ "sled",
+ "static_init",
+ "tokio",
+ "toml",
+ "unshell",
 ]
 
 [[package]]

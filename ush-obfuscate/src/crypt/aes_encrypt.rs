@@ -1,7 +1,6 @@
 use crate::crypt::{base62::Base62, hash};
-use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{BlockEncryptMut, KeyIvInit};
 use cbc::cipher::block_padding::Pkcs7;
-use regex::Regex;
 
 fn pkcs7_padded_length(input_len: usize) -> usize {
     let block_size = 16;

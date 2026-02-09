@@ -5,9 +5,9 @@
 # -Z build-std-features= \
 # --profile minimize -p unshell-payload -- $@
 
-cargo build --profile minimize -p unshell-payload
+cargo build --profile minimize -p ush-payload $@
 
-export BINARY=./target/minimize/unshell-payload
+export BINARY=./target/minimize/ush-payload
 
 declare -a headers=(
     ".gnu_debuglink" # - Debug information link
@@ -54,3 +54,7 @@ do
     strip --remove-section="$section" $BINARY
     echo "Removed section header $section"
 done
+
+echo "## STARTING "
+
+$BINARY

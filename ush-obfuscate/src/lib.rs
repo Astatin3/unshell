@@ -25,17 +25,17 @@ use obfuscate as obs;
 
 #[proc_macro]
 pub fn obs(input: TokenStream) -> TokenStream {
-    obs::obs(input)
+    obs::xor(input)
 }
 
 #[proc_macro_attribute]
 pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    obs::obfuscated_symbol(_attr, item)
+    obs::aes_fn_name(_attr, item)
 }
 
 #[proc_macro]
 pub fn symbol(input: TokenStream) -> TokenStream {
-    obs::symbol(input)
+    obs::aes_str(input)
 }
 
 #[proc_macro]
@@ -56,7 +56,7 @@ pub fn file_symbol(_input: TokenStream) -> TokenStream {
 
     // Return as a string literal
     let output = quote! {
-        unshell_obfuscate::symbol!(#concatted)
+        obfuscate::symbol!(#concatted)
     };
     // let output = quote! {
     //     #concatted
@@ -83,7 +83,7 @@ pub fn format_obs(input: TokenStream) -> TokenStream {
         match segment {
             FormatSegment::Static(text) => {
                 parts.push(quote! {
-                    unshell_obfuscate::symbol!(#text).to_string()
+                    obfuscate::symbol!(#text).to_string()
                 });
             }
             FormatSegment::Dynamic(spec, idx) => {

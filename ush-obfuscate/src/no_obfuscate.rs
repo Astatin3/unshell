@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{ItemFn, LitStr, parse_macro_input};
 
-pub fn obs(input: TokenStream) -> TokenStream {
+pub fn xor(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as LitStr);
 
     (quote::quote! {
@@ -10,7 +10,7 @@ pub fn obs(input: TokenStream) -> TokenStream {
     })
     .into()
 }
-pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn aes_fn_name(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = parse_macro_input!(item as ItemFn);
     TokenStream::from(quote! {
         #[unsafe(no_mangle)]
@@ -18,7 +18,7 @@ pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
     })
 }
 
-pub fn symbol(input: TokenStream) -> TokenStream {
+pub fn aes_str(input: TokenStream) -> TokenStream {
     input
 }
 

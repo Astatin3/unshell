@@ -1,15 +1,14 @@
-#[cfg(feature = "log_debug")]
 #[macro_export]
-macro_rules! debug {
-    ($fmt:tt) => {{
-        use $crate::unshell_obfuscate;
-        let log_result = unshell_obfuscate::format_obs!($fmt);
+macro_rules! log {
+    ($level:expr, $fmt:tt) => {{
+        use $crate::obfuscate;
+        let log_result = obfuscate::format_obs!($fmt);
 
         $crate::logger::add_record(
-            $crate::logger::LogLevel::Debug,
+            $level,
 
             #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
+            Some(String::from(obfuscate::file_symbol!())),
             #[cfg(not(feature = "log_debug"))]
             None,
 
@@ -17,15 +16,15 @@ macro_rules! debug {
             log_result
         );
     }};
-    ($fmt:tt, $($arg:expr),*) => {{
-        use $crate::unshell_obfuscate;
-        let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
+    ($level:expr, $fmt:tt, $($arg:expr),*) => {{
+        use $crate::obfuscate;
+        let log_result = obfuscate::format_obs!($fmt, $($arg),*);
 
         $crate::logger::add_record(
-            $crate::logger::LogLevel::Debug,
+            $level,
 
             #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
+            Some(String::from(obfuscate::file_symbol!())),
             #[cfg(not(feature = "log_debug"))]
             None,
 
@@ -35,123 +34,30 @@ macro_rules! debug {
     }};
 }
 
-#[cfg(not(feature = "log_debug"))]
 #[macro_export]
 macro_rules! debug {
-    ($fmt:tt) => {{
-        let _ = $fmt;
-    }};
-    ($fmt:tt, $($arg:expr),*) => {{
-        let _ = $fmt;
-        $(let _ = $arg;)*
-    }};
+    ($($arg:tt)*) => {
+        $crate::log!($crate::logger::LogLevel::Debug, $($arg)*)
+    };
 }
 
 #[macro_export]
 macro_rules! info {
-    ($fmt:tt) => {{
-        use $crate::unshell_obfuscate;
-        let log_result = unshell_obfuscate::format_obs!($fmt);
-
-        $crate::logger::add_record(
-            $crate::logger::LogLevel::Info,
-
-            #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
-            #[cfg(not(feature = "log_debug"))]
-            None,
-
-            std::time::SystemTime::now(),
-            log_result
-        );
-    }};
-    ($fmt:tt, $($arg:expr),*) => {{
-        use $crate::unshell_obfuscate;
-        let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
-
-        $crate::logger::add_record(
-            $crate::logger::LogLevel::Info,
-
-            #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
-            #[cfg(not(feature = "log_debug"))]
-            None,
-
-            std::time::SystemTime::now(),
-            log_result
-        );
-    }};
+    ($($arg:tt)*) => {
+        $crate::log!($crate::logger::LogLevel::Info, $($arg)*)
+    };
 }
 
 #[macro_export]
 macro_rules! warn {
-    ($fmt:tt) => {{
-        use $crate::unshell_obfuscate;
-
-        let log_result = unshell_obfuscate::format_obs!($fmt);
-
-        $crate::logger::add_record(
-            $crate::logger::LogLevel::Warn,
-
-            #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
-            #[cfg(not(feature = "log_debug"))]
-            None,
-
-            std::time::SystemTime::now(),
-            log_result
-        );
-    }};
-    ($fmt:tt, $($arg:expr),*) => {{
-        use $crate::unshell_obfuscate;
-
-        let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
-
-        $crate::logger::add_record(
-            $crate::logger::LogLevel::Warn,
-
-            #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
-            #[cfg(not(feature = "log_debug"))]
-            None,
-
-            std::time::SystemTime::now(),
-            log_result
-        );
-    }};
+    ($($arg:tt)*) => {
+        $crate::log!($crate::logger::LogLevel::Warn, $($arg)*)
+    };
 }
 
 #[macro_export]
 macro_rules! error {
-    ($fmt:tt) => {{
-        let log_result = unshell_obfuscate::format_obs!($fmt);
-
-        $crate::logger::add_record(
-            $crate::logger::LogLevel::Error,
-
-            #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
-            #[cfg(not(feature = "log_debug"))]
-            None,
-
-            std::time::SystemTime::now(),
-            log_result
-        );
-    }};
-    ($fmt:tt, $($arg:expr),*) => {{
-        use $crate::unshell_obfuscate;
-        let log_result = unshell_obfuscate::format_obs!($fmt, $($arg),*);
-
-        $crate::logger::add_record(
-            $crate::logger::LogLevel::Error,
-
-            #[cfg(feature = "log_debug")]
-            Some(String::from(unshell_obfuscate::file_symbol!())),
-            #[cfg(not(feature = "log_debug"))]
-            None,
-
-            std::time::SystemTime::now(),
-            log_result
-        );
-    }};
+    ($($arg:tt)*) => {
+        $crate::log!($crate::logger::LogLevel::Error, $($arg)*)
+    };
 }

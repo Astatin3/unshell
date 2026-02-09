@@ -23,23 +23,31 @@ impl Logger for PrettyLogger {
             (*func)(&message)
         }
 
-        let log_level = match message.log_level {
-            LogLevel::Debug => format!("{DEBUG_COLOR}DBUG"),
-            LogLevel::Info => format!("{INFO_COLOR}INFO"),
-            LogLevel::Warn => format!("{WARN_COLOR}WARN"),
-            LogLevel::Error => format!("{ERROR_COLOR}ERR!"),
-        };
-
-        let date: DateTime<Utc> = message.time.into();
-        let date = date.to_rfc2822().to_string();
-
-        let location = message.location.unwrap_or("".to_string());
-
-        println!(
-            "{OFF_WHITE}[{TIME_COLOR}{}{OFF_WHITE}] {} {WHITE}{} {GREY}{}{WHITE}",
-            date, log_level, message.message, location
-        );
+        log(&message);
     }
+}
+
+pub fn log(message: &Record) {
+    let log_level = match message.log_level {
+        LogLevel::Debug => format!("{DEBUG_COLOR}DBUG"),
+        LogLevel::Info => format!("{INFO_COLOR}INFO"),
+        LogLevel::Warn => format!("{WARN_COLOR}WARN"),
+        LogLevel::Error => format!("{ERROR_COLOR}ERR!"),
+    };
+
+    let date: DateTime<Utc> = message.time.into();
+    let date = date.to_rfc2822().to_string();
+
+    let location = if let Some(ref location) = message.location {
+        location
+    } else {
+        &String::new()
+    };
+
+    println!(
+        "{OFF_WHITE}[{TIME_COLOR}{}{OFF_WHITE}] {} {WHITE}{} {GREY}{}{WHITE}",
+        date, log_level, message.message, location
+    );
 }
 
 impl PrettyLogger {

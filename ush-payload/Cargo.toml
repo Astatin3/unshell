@@ -1,0 +1,15 @@
+cargo-features = ["trim-paths"]
+
+[package]
+name = "ush-payload"
+edition = "2024"
+
+[features]
+default = ["log"]
+log = ["unshell/log"]
+log_debug = ["unshell/log_debug"]
+obfuscate = ["unshell/obfuscate"]
+
+[dependencies]
+unshell.path = "../"
+serde_json.workspace = true

@@ -1,4 +1,5 @@
 pub mod aes_encrypt;
+#[allow(dead_code)]
 pub mod base62;
 
 pub const ENV_KEY_NAME: &str = "OBFUSCATION_KEY";

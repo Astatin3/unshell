@@ -14,13 +14,15 @@ include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 [workspace]
 members = [
     # Binaries
-    "unshell-gui",
+    "ush-gui",
 
     # UnShell Binaries
-    "unshell-server", "unshell-payload",
+    "ush-server",
+    "ush-payload",
 
     # Libraries
-    "unshell-manager", "unshell-obfuscate"
+    "ush-manager",
+    "ush-obfuscate"
 , "core-modules/server2"]
 
 [features]
@@ -29,7 +31,7 @@ default = []
 log = []
 log_debug = ["log"]
 
-obfuscate = ["unshell-obfuscate/obfuscate"]
+obfuscate = ["ush-obfuscate/obfuscate"]
 
 [dependencies]
 chrono = { workspace = true }
@@ -38,7 +40,8 @@ serde_json = { workspace = true }
 
 crossbeam-channel = "0.5.15"
 
-unshell-obfuscate = { path = "./unshell-obfuscate" }
+ush-obfuscate = { path = "./ush-obfuscate" }
+static_init.workspace = true
 # unshell-crypt = {path = "./unshell-crypt"}
 
 [workspace.dependencies]
@@ -51,7 +54,6 @@ serde_json = "1.0.145"
 
 static_init = "1.0.4"
 toml = "0.9.9"
-
 
 
 [profile.release]
