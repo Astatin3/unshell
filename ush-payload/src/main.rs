@@ -1,7 +1,7 @@
-use unshell::{info, tree::Tree};
+use unshell::{info, tree::Branch};
 
 fn main() {
-    let mut manager = Tree::new();
+    let mut manager = Branch::new();
     manager.init_logger();
 
     info!("Test thing!");

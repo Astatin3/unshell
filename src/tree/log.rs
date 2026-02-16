@@ -1,28 +1,24 @@
 /// Implement logging for the manager
 use crossbeam_channel::{Receiver, Sender};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     logger::{Logger, Record},
-    tree::{symbols, Tree, TreeElement},
+    tree::{Branch, TreeElement, symbols},
 };
 
 struct LoggerTX(Sender<Record>);
 struct LoggerRX(Receiver<Record>);
 
-impl Tree {
+impl Branch {
     /// Initiate the unshell logger for the local binary, piped through the manager
     /// This will allow access to the logs through the tree
     pub fn init_logger(&mut self) {
-        // Create the logger through the TX element of the manager
-
         let (tx, rx) = crossbeam_channel::unbounded();
         let (tx, rx) = (LoggerTX(tx), LoggerRX(rx));
 
-        // Set the logger through unshell
         crate::logger::set_logger_box(Box::new(tx));
-        // Add the logger to the tree
-        self.add_element(symbols::LOGGER.to_string(), Box::new(rx));
+        self.add_child(symbols::LOGGER.to_string(), Box::new(rx));
     }
 }
 

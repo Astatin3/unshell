@@ -4,6 +4,9 @@ pub const LOGGER: &'static str = symbol!("Logger");
 
 pub const TYPE_TREE: &'static str = symbol!("Tree");
 pub const TYPE_QUEUE: &'static str = symbol!("Queue");
+pub const TYPE_ENDPOINT: &'static str = symbol!("Endpoint");
+pub const TYPE_CONNECTIONS: &'static str = symbol!("Connections");
+pub const TYPE_CONNECTION: &'static str = symbol!("Connection");
 
 pub const CMD_GET: &'static str = symbol!("Get");
 pub const CMD_POLL: &'static str = symbol!("Poll");
@@ -16,3 +19,6 @@ pub const ERR_INVALID_CHILD: &'static str = symbol!("InvalidChild");
 pub const ERR_INVALID_TARGET: &'static str = symbol!("InvalidTarget");
 pub const ERR_CHILD_NOT_FOUND: &'static str = symbol!("ChildNotFound");
 pub const ERR_INVALID_PATH: &'static str = symbol!("InvalidPath");
+pub const ERR_MISSING_ARGS: &'static str = symbol!("MissingArgs");
+pub const ERR_INVALID_STATE: &'static str = symbol!("InvalidState");
+pub const ERR_READONLY: &'static str = symbol!("ReadOnly");

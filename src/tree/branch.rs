@@ -1,9 +1,14 @@
+//! Branch - A TreeElement with child elements for hierarchical routing.
+
 use std::collections::HashMap;
 
 use serde_json::{json, Value};
 
 use crate::tree::symbols;
+use crate::tree::TreeElement;
 
+/// A branch node in the tree that can contain child elements.
+/// Supports path-based routing for multi-hop communication (pivoting).
 pub struct Branch {
     children: HashMap<String, Box<dyn TreeElement>>,
     branch_type: &'static str,
@@ -101,5 +106,3 @@ impl TreeElement for Branch {
         self.handle_local_message(target, message)
     }
 }
-
-use crate::tree::TreeElement;
