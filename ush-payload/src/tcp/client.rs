@@ -17,6 +17,7 @@ use unshell::tree::component::Component;
 use unshell::tree::message::TreeMessage;
 use unshell::tree::symbols::*;
 use unshell::tree::{Branch, TreeElement};
+use unshell::{error, info};
 
 /// TCP Client component with protocol stacking support.
 ///
@@ -83,6 +84,7 @@ impl TcpClient {
     /// Connect to the configured address
     pub fn connect(&mut self) -> Result<(), String> {
         let addr = format!("{}:{}", self.config.address, self.config.port);
+        info!("[{}] Connecting to {}", self.name, addr);
 
         let stream = TcpStream::connect_timeout(
             &addr
@@ -90,7 +92,10 @@ impl TcpClient {
                 .map_err(|e| format!("Invalid address: {}", e))?,
             Duration::from_millis(self.config.timeout_ms),
         )
-        .map_err(|e| format!("Connection failed: {}", e))?;
+        .map_err(|e| {
+            error!("[{}] Connection failed: {}", self.name, e);
+            format!("Connection failed: {}", e)
+        })?;
 
         stream
             .set_nonblocking(false)
@@ -105,16 +110,19 @@ impl TcpClient {
             .map(|a| a.to_string())
             .unwrap_or_default();
 
-        self.status = ConnectionStatus::connected(remote, local);
+        self.status = ConnectionStatus::connected(remote.clone(), local);
         self.stream = Some(Arc::new(Mutex::new(stream)));
 
+        info!("[{}] Connected to {}", self.name, remote);
         Ok(())
     }
 
     /// Disconnect from server
     pub fn disconnect(&mut self) -> Result<(), String> {
+        info!("[{}] Disconnecting", self.name);
         self.stream = None;
         self.status = ConnectionStatus::disconnected();
+        info!("[{}] Disconnected", self.name);
         Ok(())
     }
 
@@ -305,7 +313,17 @@ impl Component for TcpClient {
             self.set_protocols(p)?;
         }
 
-        self.connect()?;
+        // Only auto-connect if explicitly requested in config
+        // This follows the philosophy that init() should configure, not connect
+        let auto_connect = config
+            .get("auto_connect")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        if auto_connect {
+            self.connect()?;
+        }
+
         Ok(())
     }
 

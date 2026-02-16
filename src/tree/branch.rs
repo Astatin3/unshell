@@ -103,6 +103,16 @@ impl Branch {
         json!(self.branch_type)
     }
 
+    /// Remove a child by name, returning the removed element
+    pub fn remove_child(&mut self, name: &str) -> Option<Box<dyn TreeElement>> {
+        self.children.remove(name)
+    }
+
+    /// Get a reference to the children map (for iteration)
+    pub fn children_mut(&mut self) -> &mut HashMap<String, Box<dyn TreeElement>> {
+        &mut self.children
+    }
+
     pub fn send_message(&mut self, target: Value, message: Value) -> Value {
         self.handle_local_message(target, message)
     }

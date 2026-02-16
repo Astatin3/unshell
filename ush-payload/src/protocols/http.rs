@@ -212,10 +212,10 @@ mod tests {
 
     #[test]
     fn test_request_building() {
-        let server = HttpServer::new(Default::default());
+        let proto = HttpProtocol::new(Default::default());
 
         let body = r#"{"test": "data"}"#.as_bytes();
-        let request = server.build_request(body);
+        let request = proto.encode(body).unwrap();
 
         let request_str = String::from_utf8(request).unwrap();
         assert!(request_str.contains("POST / HTTP/1.1"));

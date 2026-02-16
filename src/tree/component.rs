@@ -6,6 +6,7 @@
 use serde_json::{json, Value};
 
 use crate::tree::{Branch, TreeElement};
+use crate::{error, info, warn};
 
 /// Trait for component lifecycle management
 pub trait Component: Send + Sync {
@@ -96,11 +97,13 @@ impl ComponentRegistry {
         let name = component.name().to_string();
 
         if self.branch.get_child(&name).is_some() {
+            warn!("Component '{}' already registered", name);
             return Err(format!("Component '{}' already registered", name));
         }
 
         let wrapper = ComponentWrapper::new(component);
-        self.branch.add_child(name, Box::new(wrapper));
+        self.branch.add_child(name.clone(), Box::new(wrapper));
+        info!("Component '{}' registered successfully", name);
         Ok(())
     }
 
@@ -116,8 +119,16 @@ impl ComponentRegistry {
         self.branch.children().contains_key(name)
     }
 
-    pub fn remove(&mut self, _name: &str) -> bool {
-        false
+    /// Remove a component from the registry by name.
+    /// Returns true if the component was found and removed.
+    pub fn remove(&mut self, name: &str) -> bool {
+        let removed = self.branch.remove_child(name).is_some();
+        if removed {
+            info!("Component '{}' removed successfully", name);
+        } else {
+            warn!("Component '{}' not found for removal", name);
+        }
+        removed
     }
 
     pub fn list(&self) -> Vec<String> {
@@ -136,6 +147,7 @@ impl ComponentRegistry {
         if let Some(component) = self.branch.get_child(component_name) {
             component.send_message(json!(null), message)
         } else {
+            warn!("Component '{}' not found", component_name);
             let err_msg = format!("Component '{}' not found", component_name);
             json!({"error": err_msg})
         }
@@ -159,8 +171,47 @@ impl ComponentRegistry {
             .collect()
     }
 
+    /// Shutdown all registered components gracefully.
+    /// Returns a list of component names and their shutdown results.
     pub fn shutdown_all(&mut self) -> Vec<(String, Result<(), String>)> {
-        Vec::new()
+        info!("Shutting down all components");
+        let names: Vec<String> = self.branch.children().keys().cloned().collect();
+
+        let results: Vec<(String, Result<(), String>)> = names
+            .into_iter()
+            .filter_map(|name| {
+                // Try to send shutdown message to each component
+                if let Some(component) = self.branch.get_child(&name) {
+                    let result = component.send_message(json!(null), json!({"method": "shutdown"}));
+
+                    // Check if shutdown was successful
+                    let success = result
+                        .get("success")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+
+                    let err = if success {
+                        info!("Component '{}' shutdown successfully", name);
+                        Ok(())
+                    } else {
+                        let error_msg = result
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown error")
+                            .to_string();
+                        error!("Component '{}' shutdown failed: {}", name, error_msg);
+                        Err(error_msg)
+                    };
+
+                    Some((name, err))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        info!("All components shutdown complete");
+        results
     }
 }
 

@@ -88,19 +88,23 @@ impl std::error::Error for ModuleError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        Some(self)
-    }
 }
 
 impl fmt::Display for ModuleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(format!("{:?}", self).as_str())
+        match self {
+            ModuleError::NoError => write!(f, "NoError"),
+            ModuleError::TreeNotExist => write!(f, "Tree does not exist"),
+            ModuleError::TreeMessageError(msg) => write!(f, "Tree message error: {}", msg),
+            ModuleError::UnsupportedMethod => write!(f, "Unsupported method"),
+            ModuleError::InvalidType => write!(f, "Invalid type"),
+            ModuleError::LibLoadingError(msg) => write!(f, "Library loading error: {}", msg),
+            ModuleError::LinkError(msg) => write!(f, "Link error: {}", msg),
+            ModuleError::CryptError(msg) => write!(f, "Cryptography error: {}", msg),
+            ModuleError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
+            ModuleError::SerdeJsonError(msg) => write!(f, "JSON error: {}", msg),
+            ModuleError::Error(msg) => write!(f, "{}", msg),
+        }
     }
 }
 
