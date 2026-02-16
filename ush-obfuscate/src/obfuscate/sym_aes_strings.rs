@@ -1,7 +1,7 @@
-use crate::crypt::{BACKUP_ENV_KEY, ENV_KEY_NAME, STATIC_IV, aes_encrypt::encrypt_aes_lines};
+use crate::crypt::{aes_encrypt::encrypt_aes_lines, BACKUP_ENV_KEY, ENV_KEY_NAME, STATIC_IV};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn, LitStr, parse_macro_input};
+use syn::{parse_macro_input, ItemFn, LitStr};
 
 use crate::obfuscate::get_encryption_key;
 

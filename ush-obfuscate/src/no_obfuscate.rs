@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn, LitStr, parse_macro_input};
+use syn::{parse_macro_input, ItemFn, LitStr};
 
 pub fn xor(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as LitStr);

@@ -1,7 +1,7 @@
 use getrandom::fill;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{LitStr, parse_macro_input};
+use syn::{parse_macro_input, LitStr};
 
 /// XOR encrypt strings
 pub fn xor(input: TokenStream) -> TokenStream {

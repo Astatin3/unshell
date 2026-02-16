@@ -14,9 +14,10 @@ use serde_json::{json, Value};
 use crate::tree::component::ComponentRegistry;
 use crate::tree::queue::Queue;
 use crate::tree::readonly::ReadOnly;
-use crate::tree::symbols::{self, TYPE_CONNECTION, TYPE_ENDPOINT};
+use crate::tree::symbols::{self, TYPE_ENDPOINT};
 use crate::tree::{Branch, TreeElement};
 
+#[allow(dead_code)]
 pub(crate) struct Connection {
     id: String,
     peer_id: String,
@@ -24,6 +25,7 @@ pub(crate) struct Connection {
     receiver: Receiver<Value>,
 }
 
+#[allow(dead_code)]
 impl Connection {
     pub(crate) fn new(
         id: String,
@@ -62,11 +64,13 @@ impl TreeElement for Connections {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct Connections {
     connections: HashMap<String, Connection>,
     branch: Branch,
 }
 
+#[allow(dead_code)]
 impl Connections {
     pub(crate) fn new() -> Self {
         Self {
@@ -80,6 +84,7 @@ impl Connections {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn create_channel_pair() -> (
     (Sender<Value>, Receiver<Value>),
     (Sender<Value>, Receiver<Value>),
@@ -128,7 +133,8 @@ impl EndpointManager {
         &mut self.branch
     }
 
-    pub fn add_connection(&mut self, id: String, peer_id: String) -> Connection {
+    #[allow(dead_code)]
+    pub(crate) fn add_connection(&mut self, id: String, peer_id: String) -> Connection {
         let ((tx_local, rx_remote), (tx_remote, rx_local)) = create_channel_pair();
 
         let conn_a = Connection::new(id.clone(), peer_id.clone(), tx_remote, rx_local);

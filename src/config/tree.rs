@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ModuleError, Result, config::config_struct};
+use crate::{config::config_struct, ModuleError, Result};
 
 pub trait Tree {
     fn is_folder() -> bool {

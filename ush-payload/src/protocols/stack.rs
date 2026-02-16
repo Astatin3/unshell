@@ -228,7 +228,7 @@ impl ProtocolStack {
                 let p = WebSocketProtocol::new(cfg.clone());
                 (Box::new(p) as Box<dyn Protocol>, "websocket".to_string())
             }
-            ProtocolConfig::Custom { name, config } => {
+            ProtocolConfig::Custom { name, config: _ } => {
                 return Err(ProtocolError::NotFound(format!(
                     "Custom protocol '{}' not implemented",
                     name

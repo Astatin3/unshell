@@ -114,6 +114,7 @@ impl Protocol for HttpProtocol {
 ///
 /// This is a simple implementation for testing - in production you'd
 /// use a proper HTTP server.
+#[allow(dead_code)]
 pub struct HttpServer {
     config: HttpConfig,
 }

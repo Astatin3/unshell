@@ -24,18 +24,20 @@ use obfuscate as obs;
 // String obfuscation
 
 #[proc_macro]
-pub fn obs(input: TokenStream) -> TokenStream {
+pub fn xor(input: TokenStream) -> TokenStream {
     obs::xor(input)
 }
 
-#[proc_macro_attribute]
-pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    obs::aes_fn_name(_attr, item)
+/// Represents strings as a symbol.
+#[proc_macro]
+pub fn sym(input: TokenStream) -> TokenStream {
+    obs::aes_str(input)
 }
 
-#[proc_macro]
-pub fn symbol(input: TokenStream) -> TokenStream {
-    obs::aes_str(input)
+/// Represents function names as a symbol.
+#[proc_macro_attribute]
+pub fn sym_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    obs::aes_fn_name(_attr, item)
 }
 
 #[proc_macro]
@@ -56,7 +58,7 @@ pub fn file_symbol(_input: TokenStream) -> TokenStream {
 
     // Return as a string literal
     let output = quote! {
-        obfuscate::symbol!(#concatted)
+        sym!(#concatted)
     };
     // let output = quote! {
     //     #concatted
@@ -65,7 +67,7 @@ pub fn file_symbol(_input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn format_obs(input: TokenStream) -> TokenStream {
+pub fn format_sym(input: TokenStream) -> TokenStream {
     let PrintlnArgs { format_str, args } = parse_macro_input!(input as PrintlnArgs);
 
     let segments = parse_format_string(&format_str);
@@ -83,7 +85,7 @@ pub fn format_obs(input: TokenStream) -> TokenStream {
         match segment {
             FormatSegment::Static(text) => {
                 parts.push(quote! {
-                    obfuscate::symbol!(#text).to_string()
+                    #text.to_string()
                 });
             }
             FormatSegment::Dynamic(spec, idx) => {

@@ -1,3 +1,52 @@
+//! Logging infrastructure for unshell.
+//!
+//! This module provides a pluggable logging system with support for
+//! compile-time feature flags to enable or disable logging.
+//!
+//! # Features
+//!
+//! - **Feature-gated**: Logging can be disabled at compile time for smaller binaries
+//! - **Custom loggers**: Implement the `Logger` trait for custom output
+//! - **Structured records**: Log records include level, location, time, and message
+//! - **FFI support**: C-compatible setup function for external initialization
+//!
+//! # Usage
+//!
+//! ```rust
+//! use unshell::logger::{LogLevel, Record, Logger};
+//!
+//! // Implement custom logger
+//! struct MyLogger;
+//!
+//! impl Logger for MyLogger {
+//!     fn log(&self, record: Record) {
+//!         println!("[{:?}] {}", record.log_level, record.message);
+//!     }
+//! }
+//!
+//! // Set as global logger
+//! unshell::logger::set_logger(&MyLogger);
+//! ```
+//!
+//! # Log Levels
+//!
+//! ```rust
+//! use unshell::logger::LogLevel;
+//!
+//! let level = LogLevel::Debug;
+//! let level = LogLevel::Info;
+//! let level = LogLevel::Warn;
+//! let level = LogLevel::Error;
+//! ```
+//!
+//! # Feature Flags
+//!
+//! - `log`: Enable logging functionality
+//! - `log_debug`: Enable debug-level logging
+//!
+//! When the `log` feature is disabled, the macros module is replaced with
+//! no-op implementations to reduce binary size.
+
 // Choose if the macros are enabled based on the feature setting
 #[cfg(feature = "log")]
 pub mod macros;
@@ -9,8 +58,8 @@ mod pretty_logger;
 
 use std::time::SystemTime;
 
-pub use pretty_logger::PrettyLogger;
 pub use pretty_logger::log;
+pub use pretty_logger::PrettyLogger;
 
 static mut LOGGER: &dyn Logger = &DefaultLogger;
 

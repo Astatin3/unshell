@@ -16,7 +16,7 @@ use crate::protocols::{ProtocolConfig, ProtocolStack};
 use crate::tcp::config::{ListenerStatus, TcpServerConfig};
 use unshell::tree::component::Component;
 use unshell::tree::message::TreeMessage;
-use unshell::tree::symbols;
+use unshell::tree::symbols::*;
 use unshell::tree::{Branch, TreeElement};
 
 /// A connected client managed by the server
@@ -133,12 +133,12 @@ impl TcpServer {
             name: name.clone(),
             config,
             protocols: Vec::new(),
-            status: ListenerStatus::stopped("0.0.0.0", 0),
+            status: ListenerStatus::stopped(STR_0_0_0_0, 0),
             listener: None,
             clients: HashMap::new(),
             client_protocols: HashMap::new(),
             total_connections: 0,
-            branch: Branch::new("TCPServer"),
+            branch: Branch::new(TYPE_TCP_SERVER),
         }
     }
 
@@ -299,128 +299,127 @@ impl TcpServer {
                 let addr = client
                     .lock()
                     .map(|c| c.peer_address().to_string())
-                    .unwrap_or_else(|_| "unknown".to_string());
-                json!({"id": id, "peer": addr})
+                    .unwrap_or_else(|_| STR_UNKNOWN.to_string());
+                json!({KEY_ID: id, KEY_PEER: addr})
             })
             .collect();
 
         json!({
-            "listening": self.status.listening,
-            "bind_address": self.config.bind_address,
-            "port": self.config.port,
-            "active_connections": self.clients.len(),
-            "total_connections": self.total_connections,
-            "config": self.config,
-            "protocols": self.protocols,
-            "clients": client_list,
+            KEY_LISTENING: self.status.listening,
+            KEY_BIND_ADDRESS: self.config.bind_address,
+            KEY_PORT: self.config.port,
+            KEY_ACTIVE_CONNECTIONS: self.clients.len(),
+            KEY_TOTAL_CONNECTIONS: self.total_connections,
+            KEY_CONFIG: self.config,
+            KEY_PROTOCOLS: self.protocols,
+            KEY_CLIENTS: client_list,
         })
     }
 
     /// Handle RPC call from message
     fn handle_rpc(&mut self, payload: &Value) -> Value {
-        let method = match payload.get("method").and_then(|m| m.as_str()) {
+        let method = match payload.get(KEY_METHOD).and_then(|m| m.as_str()) {
             Some(m) => m,
-            None => return json!({"success": false, "error": "missing method"}),
+            None => return json!({KEY_SUCCESS: false, KEY_ERROR: ERR_MISSING_METHOD}),
         };
 
-        let params = payload.get("params").cloned().unwrap_or(Value::Null);
+        let params = payload.get(KEY_PARAMS).cloned().unwrap_or(Value::Null);
 
         match method {
-            "listen" | "start" => {
-                if let Some(addr) = params.get("bind_address").and_then(|a| a.as_str()) {
+            METHOD_LISTEN | METHOD_START => {
+                if let Some(addr) = params.get(KEY_BIND_ADDRESS).and_then(|a| a.as_str()) {
                     self.config.bind_address = addr.to_string();
                 }
-                if let Some(port) = params.get("port").and_then(|p| p.as_u64()) {
+                if let Some(port) = params.get(KEY_PORT).and_then(|p| p.as_u64()) {
                     self.config.port = port as u16;
                 }
 
                 match self.listen() {
-                    Ok(_) => json!({"success": true, "status": self.status}),
-                    Err(e) => json!({"success": false, "error": e}),
+                    Ok(_) => json!({KEY_SUCCESS: true, KEY_STATUS: self.status}),
+                    Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
                 }
             }
-            "stop" => match self.stop() {
-                Ok(_) => json!({"success": true}),
-                Err(e) => json!({"success": false, "error": e}),
+            METHOD_STOP => match self.stop() {
+                Ok(_) => json!({KEY_SUCCESS: true}),
+                Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
             },
-            "accept" => {
-                // Try to accept a pending connection
+            METHOD_ACCEPT => {
                 if let Some((id, stream)) = self.accept() {
                     self.register_client(id.clone(), stream);
-                    json!({"success": true, "client_id": id})
+                    json!({KEY_SUCCESS: true, KEY_CLIENT_ID: id})
                 } else {
-                    json!({"success": true, "client_id": null})
+                    json!({KEY_SUCCESS: true, KEY_CLIENT_ID: serde_json::Value::Null})
                 }
             }
-            "send" => {
+            METHOD_SEND => {
                 let client_id = params
-                    .get("client_id")
+                    .get(KEY_CLIENT_ID)
                     .and_then(|c| c.as_str())
-                    .ok_or_else(|| json!({"error": "missing client_id"}));
+                    .ok_or_else(|| json!({KEY_ERROR: ERR_MISSING_CLIENT_ID}));
 
                 match client_id {
                     Ok(id) => {
                         let data = params
-                            .get("data")
+                            .get(KEY_DATA)
                             .and_then(|d| d.as_str())
                             .map(|s| s.as_bytes().to_vec());
 
                         match data {
                             Some(data) => match self.send_to(id, &data) {
-                                Ok(n) => json!({"success": true, "bytes_sent": n}),
-                                Err(e) => json!({"success": false, "error": e}),
+                                Ok(n) => json!({KEY_SUCCESS: true, KEY_BYTES_SENT: n}),
+                                Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
                             },
-                            None => json!({"success": false, "error": "missing data"}),
+                            None => json!({KEY_SUCCESS: false, KEY_ERROR: ERR_MISSING_DATA}),
                         }
                     }
                     Err(e) => e,
                 }
             }
-            "recv" => {
+            METHOD_RECV => {
                 let client_id = params
-                    .get("client_id")
+                    .get(KEY_CLIENT_ID)
                     .and_then(|c| c.as_str())
-                    .ok_or_else(|| json!({"error": "missing client_id"}));
+                    .ok_or_else(|| json!({KEY_ERROR: ERR_MISSING_CLIENT_ID}));
 
                 match client_id {
                     Ok(id) => {
                         let size = params
-                            .get("size")
+                            .get(KEY_SIZE)
                             .and_then(|s| s.as_u64())
                             .map(|s| s as usize)
                             .unwrap_or(4096);
                         match self.recv_from(id, size) {
                             Ok(data) => json!({
-                                "success": true,
-                                "data": String::from_utf8_lossy(&data),
+                                KEY_SUCCESS: true,
+                                KEY_DATA: String::from_utf8_lossy(&data),
                                 "bytes": data.len()
                             }),
-                            Err(e) => json!({"success": false, "error": e}),
+                            Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
                         }
                     }
                     Err(e) => e,
                 }
             }
-            "disconnect" => {
+            METHOD_DISCONNECT => {
                 let client_id = params
-                    .get("client_id")
+                    .get(KEY_CLIENT_ID)
                     .and_then(|c| c.as_str())
-                    .ok_or_else(|| json!({"error": "missing client_id"}));
+                    .ok_or_else(|| json!({KEY_ERROR: ERR_MISSING_CLIENT_ID}));
 
                 match client_id {
                     Ok(id) => match self.disconnect_client(id) {
-                        Ok(_) => json!({"success": true}),
-                        Err(e) => json!({"success": false, "error": e}),
+                        Ok(_) => json!({KEY_SUCCESS: true}),
+                        Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
                     },
                     Err(e) => e,
                 }
             }
-            "status" => self.get_status(),
-            "list_clients" => {
+            METHOD_STATUS => self.get_status(),
+            METHOD_LIST_CLIENTS => {
                 let clients: Vec<Value> = self.clients.keys().map(|k| json!(k)).collect();
-                json!({"success": true, "clients": clients})
+                json!({KEY_SUCCESS: true, KEY_CLIENTS: clients})
             }
-            _ => json!({"success": false, "error": format!("unknown method: {}", method)}),
+            _ => json!({KEY_SUCCESS: false, KEY_ERROR: format!("unknown method: {}", method)}),
         }
     }
 }
@@ -435,7 +434,7 @@ impl Component for TcpServer {
     }
 
     fn init(&mut self, config: Value) -> Result<(), String> {
-        if let Some(server_config) = config.get("config") {
+        if let Some(server_config) = config.get(KEY_CONFIG) {
             self.config = serde_json::from_value(server_config.clone())
                 .map_err(|e| format!("Invalid config: {}", e))?;
         } else {
@@ -443,7 +442,7 @@ impl Component for TcpServer {
                 .map_err(|e| format!("Invalid config: {}", e))?;
         }
 
-        if let Some(protocols) = config.get("protocols") {
+        if let Some(protocols) = config.get(KEY_PROTOCOLS) {
             let p: Vec<ProtocolConfig> = serde_json::from_value(protocols.clone())
                 .map_err(|e| format!("Invalid protocols: {}", e))?;
             self.set_protocols(p)?;
@@ -461,32 +460,30 @@ impl Component for TcpServer {
 impl TreeElement for TcpServer {
     fn get_type(&self) -> Value {
         json!({
-            "type": "TCPServer",
-            "name": self.name,
+            KEY_TYPE: TYPE_TCP_SERVER,
+            KEY_NAME: self.name,
         })
     }
 
     fn send_message(&mut self, target: Value, message: Value) -> Value {
         match target {
             Value::Null => {
-                // Check for RPC call format
-                if message.get("method").is_some() {
+                if message.get(KEY_METHOD).is_some() {
                     return self.handle_rpc(&message);
                 }
 
-                // Legacy string commands
                 if let Some(cmd) = message.as_str() {
                     match cmd {
-                        "Listen" | "Start" => match self.listen() {
-                            Ok(_) => json!({"success": true}),
-                            Err(e) => json!({"success": false, "error": e}),
+                        CMD_LISTEN | CMD_START => match self.listen() {
+                            Ok(_) => json!({KEY_SUCCESS: true}),
+                            Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
                         },
-                        "Stop" => match self.stop() {
-                            Ok(_) => json!({"success": true}),
-                            Err(e) => json!({"success": false, "error": e}),
+                        CMD_STOP => match self.stop() {
+                            Ok(_) => json!({KEY_SUCCESS: true}),
+                            Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e}),
                         },
-                        "Status" => self.get_status(),
-                        symbols::CMD_GET_CHILDREN => {
+                        CMD_STATUS => self.get_status(),
+                        CMD_GET_CHILDREN => {
                             let children = self
                                 .branch
                                 .children()
@@ -495,37 +492,37 @@ impl TreeElement for TcpServer {
                                 .collect::<Vec<_>>();
                             json!(children)
                         }
-                        _ => json!(symbols::ERR_UNSUPPORTED_METHOD),
+                        _ => json!(ERR_UNSUPPORTED_METHOD),
                     }
                 } else if let Value::Object(obj) = message {
-                    if let Some(config) = obj.get("config") {
+                    if let Some(config) = obj.get(KEY_CONFIG) {
                         match serde_json::from_value(config.clone()) {
                             Ok(cfg) => {
                                 self.config = cfg;
-                                json!({"success": true})
+                                json!({KEY_SUCCESS: true})
                             }
-                            Err(e) => json!({"success": false, "error": e.to_string()}),
+                            Err(e) => json!({KEY_SUCCESS: false, KEY_ERROR: e.to_string()}),
                         }
-                    } else if obj.get("method").is_some() {
+                    } else if obj.get(KEY_METHOD).is_some() {
                         let payload = Value::Object(obj.clone());
                         self.handle_rpc(&payload)
                     } else {
-                        json!(symbols::ERR_INVALID_COMMAND)
+                        json!(ERR_INVALID_COMMAND)
                     }
                 } else {
-                    json!(symbols::ERR_INVALID_COMMAND)
+                    json!(ERR_INVALID_COMMAND)
                 }
             }
             Value::String(subtarget) => match subtarget.as_str() {
-                "config" => json!(self.config),
-                "status" => self.get_status(),
-                "clients" => {
+                STR_CONFIG => json!(self.config),
+                KEY_STATUS => self.get_status(),
+                KEY_CLIENTS => {
                     let clients: Vec<Value> = self.clients.keys().map(|k| json!(k)).collect();
                     json!(clients)
                 }
-                _ => json!(symbols::ERR_CHILD_NOT_FOUND),
+                _ => json!(ERR_CHILD_NOT_FOUND),
             },
-            _ => json!(symbols::ERR_INVALID_TARGET),
+            _ => json!(ERR_INVALID_TARGET),
         }
     }
 }

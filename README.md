@@ -216,3 +216,47 @@ const C2_URL: &str = symbol!("https://C2Server/endpoint");
 ## License
 
 MIT / Apache-2.0
+
+## Implementation Notes
+
+### Obfuscation Macros
+
+The `ush-obfuscate` crate provides two macros for string obfuscation:
+
+- **`sym!()`** - For static strings that are used at runtime. Uses AES encryption.
+- **`xor!()`** - For simple XOR obfuscation.
+
+When the `obfuscate` feature is enabled, strings are encrypted at compile time. When disabled, they remain as plain strings.
+
+### Using Sym Constants
+
+To avoid redundant `sym!()` calls, define constants in `src/tree/symbols.rs`:
+
+```rust
+use crate::obfuscate::sym;
+
+pub const MY_CONSTANT: &'static str = sym!("MyString");
+```
+
+Then use the constant in your code:
+
+```rust
+use unshell::tree::symbols::*;
+
+json!({ KEY_NAME: "value" })
+```
+
+### Module Organization
+
+- **`src/tree/`** - Core tree system (routing, components, messages)
+- **`ush-payload/src/`** - Protocol implementations, TCP client/server, connection management
+
+Protocol-specific and transport-specific code belongs in `ush-payload`, while the tree system handles hierarchical message routing only.
+
+### Building for Size
+
+```bash
+./build.sh  # Builds with minimize profile and strips debug sections
+```
+
+This produces a ~200KB binary (may vary with content).

@@ -1,4 +1,46 @@
 //! Base64 encoding/decoding protocol.
+//!
+//! This module provides two protocol implementations:
+//! - `Base64Protocol`: Standard base64 encoding with URL-safe variant support
+//! - `IdentityProtocol`: No-op pass-through protocol
+//!
+//! # Base64 Protocol
+//!
+//! The Base64 protocol wraps data in base64 encoding, useful for:
+//! - Evading basic pattern detection
+//! - Text-based transport encoding
+//! - Legacy system compatibility
+//!
+//! ```rust
+//! use ush_payload::protocols::{Base64Config, ProtocolConfig, ProtocolStack};
+//!
+//! let mut stack = ProtocolStack::new();
+//! stack.push(&ProtocolConfig::Base64(Base64Config {
+//!     url_safe: false,
+//!     padding: true,
+//! })).unwrap();
+//!
+//! let data = b"Hello";
+//! let encoded = stack.encode(data).unwrap();
+//! let decoded = stack.decode(&encoded).unwrap();
+//! assert_eq!(decoded, data);
+//! ```
+//!
+//! # Identity Protocol
+//!
+//! The identity protocol is a no-op pass-through. Useful as a placeholder
+//! or when no encoding is needed.
+//!
+//! ```rust
+//! use ush_payload::protocols::{ProtocolConfig, ProtocolStack};
+//!
+//! let mut stack = ProtocolStack::new();
+//! stack.push(&ProtocolConfig::Identity).unwrap();
+//!
+//! let data = b"test";
+//! let result = stack.encode(data).unwrap();
+//! assert_eq!(result, data);
+//! ```
 
 use super::stack::{Base64Config, Protocol, ProtocolError};
 use serde_json::Value;

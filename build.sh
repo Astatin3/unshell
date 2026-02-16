@@ -58,3 +58,4 @@ done
 echo "## STARTING "
 
 $BINARY
+wc -c $BINARY

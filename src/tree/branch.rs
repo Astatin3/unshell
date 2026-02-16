@@ -1,4 +1,49 @@
 //! Branch - A TreeElement with child elements for hierarchical routing.
+//!
+//! A Branch is a container node in the tree hierarchy that can hold multiple
+//! child elements. It provides path-based message routing to traverse the
+//! tree structure.
+//!
+//! # Path-Based Routing
+//!
+//! Messages can target elements using path notation:
+//!
+//! ```rust
+//! use serde_json::json;
+//! use unshell::tree::{Branch, TreeElement};
+//!
+//! let mut branch = Branch::new("parent");
+//! // ... add children ...
+//!
+//! // Target a direct child
+//! branch.send_message(json!("child-name"), json!("Command"));
+//!
+//! // Target a nested child using array path
+//! branch.send_message(json!(["parent", "child", "grandchild"]), json!("Command"));
+//! ```
+//!
+//! # Child Management
+//!
+//! ```rust
+//! use unshell::tree::{Branch, TreeElement};
+//! use serde_json::json;
+//!
+//! let mut branch = Branch::new("my-branch");
+//!
+//! // Add children
+//! branch.add_child("child1", Box::new(ChildElement));
+//! branch.add_child("child2", Box::new(AnotherElement));
+//!
+//! // Query children
+//! let children = branch.send_message(json!(null), json!("GetChildren"));
+//! // Returns: {"child1": "ChildElement", "child2": "AnotherElement"}
+//! ```
+//!
+//! # Pivot Routing
+//!
+//! Branches support multi-hop communication for pivoting through networks.
+//! A path like `["endpoint1", "connections", "peer1", "endpoint2"]` would
+//! route a message through multiple endpoints to reach a final destination.
 
 use std::collections::HashMap;
 

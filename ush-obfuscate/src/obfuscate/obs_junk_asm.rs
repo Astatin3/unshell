@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
-use syn::{LitFloat, parse_macro_input};
+use syn::{parse_macro_input, LitFloat};
 
 // const MIN_TAGS: u32 = 1; // Maximum instructions per recursive block
 // const MAX_TAGS: u32 = 22; // Maximum instructions per recursive block

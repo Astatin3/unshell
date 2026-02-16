@@ -1,9 +1,8 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
-    ModuleError, Result,
     config::{ConfigStructField, InterfaceData, InterfaceStruct, TreeMessage},
-    warn,
+    warn, ModuleError, Result,
 };
 
 pub type ConfigStructKeys = Vec<ConfigStructField>;

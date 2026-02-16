@@ -1,14 +1,14 @@
 #[macro_export]
 macro_rules! log {
     ($level:expr, $fmt:tt) => {{
-        use $crate::obfuscate;
-        let log_result = obfuscate::format_obs!($fmt);
+        use $crate::obfuscate::format_sym;
+        let log_result = format_sym!($fmt);
 
         $crate::logger::add_record(
             $level,
 
             #[cfg(feature = "log_debug")]
-            Some(String::from(obfuscate::file_symbol!())),
+            Some(String::from($crate::obfuscate::file_symbol!())),
             #[cfg(not(feature = "log_debug"))]
             None,
 
@@ -17,14 +17,14 @@ macro_rules! log {
         );
     }};
     ($level:expr, $fmt:tt, $($arg:expr),*) => {{
-        use $crate::obfuscate;
-        let log_result = obfuscate::format_obs!($fmt, $($arg),*);
+        use $crate::obfuscate::format_sym;
+        let log_result = format_sym!($fmt, $($arg),*);
 
         $crate::logger::add_record(
             $level,
 
             #[cfg(feature = "log_debug")]
-            Some(String::from(obfuscate::file_symbol!())),
+            Some(String::from($crate::obfuscate::file_symbol!())),
             #[cfg(not(feature = "log_debug"))]
             None,
 
