@@ -6,15 +6,88 @@
 //! - connections: Container for peer connections
 //! - components: Extensible component system (accessed via tree messages)
 
-use crossbeam_channel::Sender;
+use std::collections::HashMap;
+
+use crossbeam_channel::{Receiver, Sender};
 use serde_json::{json, Value};
 
 use crate::tree::component::ComponentRegistry;
-use crate::tree::connection::{create_channel_pair, Connection, Connections};
 use crate::tree::queue::Queue;
 use crate::tree::readonly::ReadOnly;
-use crate::tree::symbols::TYPE_ENDPOINT;
+use crate::tree::symbols::{self, TYPE_CONNECTION, TYPE_ENDPOINT};
 use crate::tree::{Branch, TreeElement};
+
+pub(crate) struct Connection {
+    id: String,
+    peer_id: String,
+    sender: Sender<Value>,
+    receiver: Receiver<Value>,
+}
+
+impl Connection {
+    pub(crate) fn new(
+        id: String,
+        peer_id: String,
+        sender: Sender<Value>,
+        receiver: Receiver<Value>,
+    ) -> Self {
+        Self {
+            id,
+            peer_id,
+            sender,
+            receiver,
+        }
+    }
+
+    pub(crate) fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub(crate) fn send(&self, message: Value) {
+        let _ = self.sender.send(message);
+    }
+
+    pub(crate) fn recv(&self) -> Option<Value> {
+        self.receiver.recv().ok()
+    }
+}
+
+impl TreeElement for Connections {
+    fn get_type(&self) -> Value {
+        json!(symbols::TYPE_CONNECTIONS)
+    }
+
+    fn send_message(&mut self, _target: Value, _message: Value) -> Value {
+        json!(symbols::ERR_UNSUPPORTED_METHOD)
+    }
+}
+
+pub(crate) struct Connections {
+    connections: HashMap<String, Connection>,
+    branch: Branch,
+}
+
+impl Connections {
+    pub(crate) fn new() -> Self {
+        Self {
+            connections: HashMap::new(),
+            branch: Branch::new(symbols::TYPE_CONNECTIONS),
+        }
+    }
+
+    pub(crate) fn add(&mut self, id: String, connection: Connection) {
+        self.connections.insert(id.clone(), connection);
+    }
+}
+
+pub(crate) fn create_channel_pair() -> (
+    (Sender<Value>, Receiver<Value>),
+    (Sender<Value>, Receiver<Value>),
+) {
+    let (tx1, rx1) = crossbeam_channel::unbounded::<Value>();
+    let (tx2, rx2) = crossbeam_channel::unbounded::<Value>();
+    ((tx1, rx2), (tx2, rx1))
+}
 
 pub struct EndpointManager {
     branch: Branch,

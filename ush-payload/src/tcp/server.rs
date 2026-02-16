@@ -12,12 +12,12 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::tree::component::Component;
-use crate::tree::message::TreeMessage;
-use crate::tree::protocols::{ProtocolConfig, ProtocolStack};
-use crate::tree::symbols;
-use crate::tree::tcp::config::{ListenerStatus, TcpServerConfig};
-use crate::tree::{Branch, TreeElement};
+use crate::protocols::{ProtocolConfig, ProtocolStack};
+use crate::tcp::config::{ListenerStatus, TcpServerConfig};
+use unshell::tree::component::Component;
+use unshell::tree::message::TreeMessage;
+use unshell::tree::symbols;
+use unshell::tree::{Branch, TreeElement};
 
 /// A connected client managed by the server
 #[derive(Debug)]

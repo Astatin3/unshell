@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::tree::message::TreeMessage;
+use super::base64::{Base64Protocol, IdentityProtocol};
+use super::http::HttpProtocol;
+use unshell::tree::message::TreeMessage;
 
 #[derive(Error, Debug)]
 pub enum ProtocolError {
@@ -207,15 +209,15 @@ impl ProtocolStack {
     pub fn push(&mut self, config: &ProtocolConfig) -> Result<(), ProtocolError> {
         let (protocol, name) = match config {
             ProtocolConfig::Identity => {
-                let p = crate::tree::protocols::base64::IdentityProtocol::new();
+                let p = IdentityProtocol::new();
                 (Box::new(p) as Box<dyn Protocol>, "identity".to_string())
             }
             ProtocolConfig::Base64(cfg) => {
-                let p = crate::tree::protocols::base64::Base64Protocol::new(cfg.clone());
+                let p = Base64Protocol::new(cfg.clone());
                 (Box::new(p) as Box<dyn Protocol>, "base64".to_string())
             }
             ProtocolConfig::Http(cfg) => {
-                let p = crate::tree::protocols::http::HttpProtocol::new(cfg.clone());
+                let p = HttpProtocol::new(cfg.clone());
                 (Box::new(p) as Box<dyn Protocol>, "http".to_string())
             }
             ProtocolConfig::Tcp(cfg) => {

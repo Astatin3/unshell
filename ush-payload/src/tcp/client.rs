@@ -11,12 +11,12 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::tree::component::Component;
-use crate::tree::message::TreeMessage;
-use crate::tree::protocols::{ProtocolConfig, ProtocolStack};
-use crate::tree::symbols;
-use crate::tree::tcp::config::{ConnectionStatus, TcpClientConfig};
-use crate::tree::{Branch, TreeElement};
+use crate::protocols::{ProtocolConfig, ProtocolStack};
+use crate::tcp::config::{ConnectionStatus, TcpClientConfig};
+use unshell::tree::component::Component;
+use unshell::tree::message::TreeMessage;
+use unshell::tree::symbols;
+use unshell::tree::{Branch, TreeElement};
 
 /// TCP Client component with protocol stacking support.
 ///

@@ -12,4 +12,8 @@ obfuscate = ["unshell/obfuscate"]
 
 [dependencies]
 unshell.path = "../"
+serde.workspace = true
 serde_json.workspace = true
+crossbeam-channel = "0.5.15"
+thiserror = "2.0"
+base64 = "0.22"

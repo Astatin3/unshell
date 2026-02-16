@@ -2,7 +2,7 @@
 //!
 //! This protocol wraps data in HTTP requests/responses for traffic blending.
 
-use crate::tree::protocols::stack::{HttpConfig, Protocol, ProtocolError};
+use super::stack::{HttpConfig, Protocol, ProtocolError};
 use serde_json::Value;
 
 /// HTTP protocol for tree communication.

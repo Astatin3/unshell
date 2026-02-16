@@ -14,14 +14,14 @@ include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 [workspace]
 members = [
     # Binaries
-    "ush-gui",
+    # "ush-gui",
 
     # UnShell Binaries
-    "ush-server",
+    # "ush-server",
     "ush-payload",
 
     # Libraries
-    "ush-manager",
+    # "ush-manager",
     "ush-obfuscate"
 , "core-modules/server2"]
 

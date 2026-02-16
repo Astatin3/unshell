@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use crossbeam_channel::{Receiver, Sender};
 use serde_json::{json, Value};
 
-use crate::tree::symbols::{self, TYPE_CONNECTION, TYPE_CONNECTIONS};
-use crate::tree::{Branch, TreeElement};
+use unshell::tree::symbols::{self, TYPE_CONNECTION, TYPE_CONNECTIONS};
+use unshell::tree::{Branch, TreeElement};
 
 /// A bidirectional connection to another endpoint.
 /// Wraps sender/receiver channels for message passing.

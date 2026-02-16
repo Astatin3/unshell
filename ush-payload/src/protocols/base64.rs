@@ -1,6 +1,6 @@
 //! Base64 encoding/decoding protocol.
 
-use crate::tree::protocols::stack::{Base64Config, Protocol, ProtocolError};
+use super::stack::{Base64Config, Protocol, ProtocolError};
 use serde_json::Value;
 
 /// Base64 encoding protocol

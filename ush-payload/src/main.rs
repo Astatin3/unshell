@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use serde_json::json;
 use unshell::tree::message::TreeMessage;
-use unshell::tree::protocols::{ProtocolConfig, ProtocolStack};
-use unshell::tree::tcp::{TcpClient, TcpServer};
 use unshell::tree::{ComponentRegistry, EndpointManager, TreeElement};
+use ush_payload::protocols::{ProtocolConfig, ProtocolStack};
+use ush_payload::tcp::{TcpClient, TcpServer};
 
 fn main() {
     println!("=== Tree Protocol Test Harness ===\n");
