@@ -4,10 +4,12 @@
 //! - id: Read-only endpoint identifier
 //! - logs: Queue for log messages
 //! - connections: Container for peer connections
+//! - components: Extensible component system (accessed via tree messages)
 
 use crossbeam_channel::Sender;
 use serde_json::{json, Value};
 
+use crate::tree::component::ComponentRegistry;
 use crate::tree::connection::{create_channel_pair, Connection, Connections};
 use crate::tree::queue::Queue;
 use crate::tree::readonly::ReadOnly;
@@ -27,11 +29,13 @@ impl EndpointManager {
         let logs = Queue::new(logs_sender.clone(), logs_receiver);
 
         let connections = Connections::new();
+        let components = ComponentRegistry::new();
 
         let mut branch = Branch::new(TYPE_ENDPOINT);
         branch.add_child("id", Box::new(ReadOnly::new(&endpoint_id, TYPE_ENDPOINT)));
         branch.add_child("logs", Box::new(logs));
         branch.add_child("connections", Box::new(connections));
+        branch.add_child("components", Box::new(components));
 
         Self {
             branch,
@@ -58,7 +62,7 @@ impl EndpointManager {
         let conn_b = Connection::new(id.clone(), peer_id, tx_local, rx_remote);
 
         if let Some(connections) = self.branch.get_child("connections") {
-            connections.send_message(Value::String(id), json!({ "Add": conn_a.id() }));
+            let _ = connections.send_message(Value::String(id), json!({ "Add": conn_a.id() }));
         }
 
         conn_b

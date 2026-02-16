@@ -1,91 +1,125 @@
-use unshell::{info, tree::Branch};
+//! TCP Chain CLI Test Harness
+//!
+//! Demonstrates multi-layer TCP connections for testing pivoting.
+//! Creates a chain of endpoints connected via TCP.
+
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::sync::mpsc;
+use std::thread;
+
+use unshell::tree::{EndpointManager, TreeMessage};
 
 fn main() {
-    let mut manager = Branch::new();
-    manager.init_logger();
+    println!("=== TCP Chain Test Harness ===\n");
 
-    info!("Test thing!");
-    info!("Test thing!");
+    // Test 1: Local TCP Server-Client loopback
+    test_tcp_loopback();
 
-    // loop {
-    //     if test123(&mut manager) {
-    //         break;
-    //     }
-    // }
+    // Test 2: Tree message routing
+    test_tree_message();
 
-    // println!("Test");
+    // Test 3: TreeMessage serialization
+    test_message_serialization();
+
+    println!("\n=== All tests complete ===");
 }
 
-// use std::{any::Any, collections::HashMap, fs::File, io::Read};
+/// Test basic TCP server/client communication
+fn test_tcp_loopback() {
+    println!("[Test 1] TCP Loopback Test");
 
-// use static_init::dynamic;
-// use unshell_lib::{
-//     ModuleError,
-//     config::{PayloadConfig, RuntimeConfig},
-//     module::{Manager, Module},
-// };
-// use unshell_obfuscate::{obs, symbol};
+    // Start a TCP server in a thread
+    let (tx, rx) = mpsc::channel();
 
-// #[macro_use]
-// extern crate unshell_lib;
+    let server_thread = thread::spawn(move || {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind");
+        let addr = listener.local_addr().unwrap();
+        tx.send(addr.port()).unwrap();
 
-// // The main and initial 'configuration' for a payload
+        for stream in listener.incoming() {
+            if let Ok(mut stream) = stream {
+                let mut buf = [0u8; 1024];
+                if let Ok(n) = stream.read(&mut buf) {
+                    let response = b"Echo: ";
+                    let _ = stream.write(response);
+                    let _ = stream.write(&buf[..n]);
+                    let _ = stream.flush();
+                }
+            }
+        }
+    });
 
-// #[dynamic]
-// static PAYLOAD_CONFIG: PayloadConfig = PayloadConfig {
-//     id: symbol!("Test ID"),
-//     components: Vec::new(),
-//     runtime_config: vec![RuntimeConfig {
-//         parent_component: symbol!("client").to_string(),
-//         name: symbol!("client runtime").to_string(),
-//         config: HashMap::from([
-//             (symbol!("host").to_string(), obs!("localhost:1234")),
-//             (symbol!("retry").to_string(), obs!("1000")),
-//         ]),
-//     }],
-// };
+    let port = rx.recv().unwrap();
 
-// fn main() {
+    // Connect client
+    let mut stream =
+        std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).expect("Failed to connect");
 
-//     debug!("Initialized");
+    let msg = b"Hello from client!";
+    stream.write(msg).expect("Failed to write");
 
-//     match run() {
-//         Ok(_) => {}
-//         Err(e) => {
-//             error!("ERROR! '{:?}'", e);
-//         }
-//     }
-// }
+    let mut buf = [0u8; 1024];
+    let n = stream.read(&mut buf).expect("Failed to read");
+    let response = String::from_utf8_lossy(&buf[..n]);
 
-// fn run() -> Result<(), Box<dyn std::error::Error>> {
-//     let args = std::env::args();
+    println!("  Client sent: {:?}", msg);
+    println!("  Server responded: {:?}", response);
 
-//     // TEMPORARY, load the module paths from command line args.
-//     let mut modules = Vec::new();
-//     for arg in args.skip(1) {
-//         // debug!("Loading module: {}", arg);
+    server_thread.join().unwrap();
+    println!("  ✓ Loopback test passed\n");
+}
 
-//         // let mut file = File::open(arg).map_err(|e| ModuleError::Error(e.to_string().into()))?;
-//         // let mut buffer = Vec::new();
-//         // file.read_to_end(&mut buffer)
-//         //     .map_err(|e| ModuleError::Error(e.to_string().into()))?;
+/// Test the tree message routing
+fn test_tree_message() {
+    println!("[Test 2] Tree Message Routing");
 
-//         debug!("Initializing module: {}", arg);
-//         let module = Module::new(&arg)?;
+    let mut endpoint = EndpointManager::new("endpoint-1");
 
-//         modules.push(module);
+    // Test GetChildren
+    let response = endpoint
+        .branch_mut()
+        .send_message(serde_json::Value::Null, serde_json::json!("GetChildren"));
 
-//         // modules.push(Module::new(&arg)?)
-//     }
+    let children = response.as_object().unwrap();
+    println!("  Children: {:?}", children.keys().collect::<Vec<_>>());
 
-//     // let modules = vec
+    // Test ID access
+    let response = endpoint
+        .branch_mut()
+        .send_message(serde_json::json!("id"), serde_json::Value::Null);
+    println!("  Endpoint ID: {:?}", response);
 
-//     debug!("Starting manager...");
+    // Test logs queue
+    let sender = endpoint.logs_sender().clone();
+    sender.send(serde_json::json!("Test log entry")).unwrap();
 
-//     // Run the manager, this is blocking.
-//     let manager = Manager::start(&PAYLOAD_CONFIG, modules);
+    let response = endpoint
+        .branch_mut()
+        .send_message(serde_json::json!("logs"), serde_json::json!("GetLength"));
+    println!("  Log queue length: {:?}", response);
 
-//     Manager::join(manager);
+    println!("  ✓ Tree message test passed\n");
+}
 
-//     Ok(())
-// }
+/// Test TreeMessage serialization
+fn test_message_serialization() {
+    println!("[Test 3] TreeMessage Serialization");
+
+    let msg = TreeMessage::new_req(
+        "msg-1",
+        vec!["endpoint1".to_string(), "shell".to_string()],
+        "Get",
+    );
+
+    let json = serde_json::to_string_pretty(&msg).unwrap();
+    println!("  Message: {}", json);
+
+    // Test response message
+    let resp = TreeMessage::new_resp("resp-1", "msg-1", serde_json::json!("result data"));
+
+    let json = serde_json::to_string_pretty(&resp).unwrap();
+    println!("  Response: {}", json);
+
+    println!("  ✓ Message serialization test passed\n");
+}
