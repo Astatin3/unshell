@@ -40,6 +40,8 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 
 crossbeam-channel = "0.5.15"
+thiserror = "2.0"
+base64 = "0.22"
 
 ush-obfuscate = { path = "./ush-obfuscate" }
 static_init.workspace = true

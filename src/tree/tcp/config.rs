@@ -98,7 +98,7 @@ impl TcpServerConfig {
 }
 
 /// Connection status information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConnectionStatus {
     pub connected: bool,
     pub remote_address: Option<String>,
@@ -138,7 +138,7 @@ impl ConnectionStatus {
 }
 
 /// Server listener status
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListenerStatus {
     pub listening: bool,
     pub bind_address: String,

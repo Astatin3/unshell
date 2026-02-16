@@ -9,6 +9,7 @@ pub mod connection;
 pub mod endpoint;
 pub mod log;
 pub mod message;
+pub mod protocols;
 pub mod queue;
 pub mod readonly;
 pub mod symbols;

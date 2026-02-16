@@ -14,6 +14,21 @@ pub struct Branch {
     branch_type: &'static str,
 }
 
+impl Default for Branch {
+    fn default() -> Self {
+        Self::new("default")
+    }
+}
+
+impl std::fmt::Debug for Branch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Branch")
+            .field("branch_type", &self.branch_type)
+            .field("children", &self.children.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
 impl Branch {
     pub fn new(branch_type: &'static str) -> Self {
         Self {
