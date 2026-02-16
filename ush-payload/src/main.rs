@@ -1,9 +1,4 @@
-use unshell::{
-    Value, info,
-    logger::{Record, log},
-    obfuscate::{junk_asm, symbol},
-    tree::{Tree, TreeElement, symbols},
-};
+use unshell::{info, tree::Tree};
 
 fn main() {
     let mut manager = Tree::new();
@@ -12,32 +7,13 @@ fn main() {
     info!("Test thing!");
     info!("Test thing!");
 
-    loop {
-        if test123(&mut manager) {
-            break;
-        }
-    }
+    // loop {
+    //     if test123(&mut manager) {
+    //         break;
+    //     }
+    // }
 
     // println!("Test");
-}
-
-fn test123(manager: &mut Tree) -> bool {
-    let result = manager.send_message(
-        Value::String(symbol!("Logger").to_string()),
-        Value::String(symbols::CMD_GET.to_string()),
-    );
-
-    junk_asm!(20.);
-
-    let is_null = result.is_null();
-
-    if let Ok(result) = serde_json::from_value::<Record>(result) {
-        log(&result);
-    }
-
-    is_null
-
-    // println!("Logger: {}", result);
 }
 
 // use std::{any::Any, collections::HashMap, fs::File, io::Read};

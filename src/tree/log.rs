@@ -1,10 +1,10 @@
 /// Implement logging for the manager
 use crossbeam_channel::{Receiver, Sender};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{
     logger::{Logger, Record},
-    tree::{Tree, TreeElement, symbols},
+    tree::{symbols, Tree, TreeElement},
 };
 
 struct LoggerTX(Sender<Record>);

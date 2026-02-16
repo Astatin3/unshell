@@ -13,3 +13,6 @@ pub const CMD_GET_CHILDREN: &'static str = symbol!("GetChildren");
 pub const ERR_UNSUPPORTED_METHOD: &'static str = symbol!("UnsupportedMethod");
 pub const ERR_INVALID_COMMAND: &'static str = symbol!("InvalidCommand");
 pub const ERR_INVALID_CHILD: &'static str = symbol!("InvalidChild");
+pub const ERR_INVALID_TARGET: &'static str = symbol!("InvalidTarget");
+pub const ERR_CHILD_NOT_FOUND: &'static str = symbol!("ChildNotFound");
+pub const ERR_INVALID_PATH: &'static str = symbol!("InvalidPath");
