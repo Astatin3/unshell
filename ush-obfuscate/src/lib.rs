@@ -1,3 +1,33 @@
+//! Compile-time string obfuscation for stealthy payloads.
+//!
+//! This crate provides procedural macros for encrypting strings at compile time,
+//! making them harder to detect via static analysis.
+//!
+//! # Features
+//!
+//! - `obfuscate`: Enable AES encryption (enabled via cargo feature)
+//! - When disabled, strings pass through as plain text (for debugging)
+//!
+//! # Macros
+//!
+//! - `sym!("string")` - Encrypt a string literal
+//! - `xor!("string")` - XOR obfuscate a string
+//! - `sym_fn` - Obfuscate function names
+//! - `junk_asm` - Insert junk assembly instructions
+//! - `file_symbol` - Get obfuscated file location for logging
+//! - `format_sym` - Format strings with obfuscation
+//!
+//! # Usage
+//!
+//! ```rust
+//! use ush_obfuscate::sym;
+//!
+//! const API_KEY: &str = sym!("SuperSecretKey123");
+//! const C2_URL: &str = sym!("https://C2Server/endpoint");
+//! ```
+//!
+//! When `obfuscate` feature is enabled, strings are encrypted at compile time.
+
 #![feature(proc_macro_quote)]
 #![feature(proc_macro_span)]
 
@@ -23,30 +53,43 @@ use obfuscate as obs;
 
 // String obfuscation
 
+/// XOR obfuscate a string at compile time.
+///
+/// Simple XOR-based encoding for basic obfuscation.
 #[proc_macro]
 pub fn xor(input: TokenStream) -> TokenStream {
     obs::xor(input)
 }
 
-/// Represents strings as a symbol.
+/// Encrypt a string using AES at compile time.
+///
+/// This is the primary macro for string obfuscation.
+/// The string is encrypted with a hardcoded key and decrypted at runtime.
 #[proc_macro]
 pub fn sym(input: TokenStream) -> TokenStream {
     obs::aes_str(input)
 }
 
-/// Represents function names as a symbol.
+/// Obfuscate a function name.
+///
+/// Can be used to hide function names from static analysis.
 #[proc_macro_attribute]
 pub fn sym_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
     obs::aes_fn_name(_attr, item)
 }
 
+/// Insert junk assembly instructions.
+///
+/// Adds random assembly instructions to confuse disassembly.
 #[proc_macro]
 pub fn junk_asm(input: TokenStream) -> TokenStream {
     obs::junk_asm(input)
 }
 
-//
-
+/// Get obfuscated file location for logging.
+///
+/// Encodes the file path and line number for debug logging
+/// without exposing readable strings in the binary.
 #[proc_macro]
 pub fn file_symbol(_input: TokenStream) -> TokenStream {
     // Get the call site span to extract file information
@@ -66,6 +109,9 @@ pub fn file_symbol(_input: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Format a string with obfuscated parts.
+///
+/// Combines format string parsing with string obfuscation.
 #[proc_macro]
 pub fn format_sym(input: TokenStream) -> TokenStream {
     let PrintlnArgs { format_str, args } = parse_macro_input!(input as PrintlnArgs);

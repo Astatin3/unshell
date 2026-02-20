@@ -1,3 +1,24 @@
+//! Logging macros for unshell.
+//!
+//! Provides convenient logging macros that integrate with the
+//! feature-gated logging system.
+//!
+//! # Usage
+//!
+//! ```rust
+//! use unshell::{info, warn, error, debug};
+//!
+//! info!("Application started");
+//! warn!("Configuration file not found, using defaults");
+//! error!("Failed to connect: {}", err);
+//! debug!("Processing item {}", idx);
+//! ```
+//!
+//! # Feature Flags
+//!
+//! - `log`: Enable logging (required for any output)
+//! - `log_debug`: Include file location in log records
+
 #[macro_export]
 macro_rules! log {
     ($level:expr, $fmt:tt) => {{
@@ -34,6 +55,9 @@ macro_rules! log {
     }};
 }
 
+/// Log a debug-level message.
+///
+/// Only produces output when the `log` feature is enabled.
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {
@@ -41,6 +65,9 @@ macro_rules! debug {
     };
 }
 
+/// Log an info-level message.
+///
+/// Only produces output when the `log` feature is enabled.
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
@@ -48,6 +75,9 @@ macro_rules! info {
     };
 }
 
+/// Log a warning-level message.
+///
+/// Only produces output when the `log` feature is enabled.
 #[macro_export]
 macro_rules! warn {
     ($($arg:tt)*) => {
@@ -55,6 +85,9 @@ macro_rules! warn {
     };
 }
 
+/// Log an error-level message.
+///
+/// Only produces output when the `log` feature is enabled.
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {

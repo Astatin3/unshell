@@ -1,7 +1,30 @@
+//! Pretty console logger implementation.
+//!
+//! Provides a colored, formatted logger for console output.
+//! Supports custom output handlers and ANSI color codes.
+//!
+//! # Usage
+//!
+//! ```rust
+//! use unshell::logger::PrettyLogger;
+//!
+//! // Initialize with console output
+//! PrettyLogger::init();
+//!
+//! // Or with custom output handler
+//! PrettyLogger::init_output(|record| {
+//!     // Custom handling
+//! });
+//! ```
+
 use chrono::{DateTime, Utc};
 
 use crate::logger::{LogLevel, Logger, Record};
 
+/// A logger that outputs formatted, colored messages to console.
+///
+/// Supports ANSI color codes and optional custom output handlers.
+/// Output format: `[timestamp] LEVEL message [location]`
 pub struct PrettyLogger {
     output: Option<Box<dyn Fn(&Record)>>,
 }
@@ -27,6 +50,13 @@ impl Logger for PrettyLogger {
     }
 }
 
+/// Format and print a log record to console.
+///
+/// Uses ANSI color codes for level differentiation:
+/// - Debug: Cyan
+/// - Info: Green  
+/// - Warn: Yellow
+/// - Error: Red
 pub fn log(message: &Record) {
     let log_level = match message.log_level {
         LogLevel::Debug => format!("{DEBUG_COLOR}DBUG"),
@@ -51,10 +81,14 @@ pub fn log(message: &Record) {
 }
 
 impl PrettyLogger {
+    /// Initialize with default console output.
     pub fn init() {
         crate::logger::set_logger_box(Box::new(PrettyLogger { output: None }));
     }
 
+    /// Initialize with custom output handler.
+    ///
+    /// The handler receives each `Record` for custom processing.
     pub fn init_output<T>(output: T)
     where
         T: Fn(&Record) + 'static,

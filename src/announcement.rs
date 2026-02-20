@@ -1,12 +1,26 @@
-// use bincode::{Decode, Encode};
+//! Announcement message types for server communication.
+//!
+//! This module defines message types for inter-component communication.
+//! Currently minimal - most functionality is handled by the tree system.
+//!
+//! # Usage
+//!
+//! ```rust
+//! use unshell::Announcement;
+//!
+//! let msg = Announcement::TestAnnouncement("Hello".to_string());
+//! ```
 
-/// Mostly temporary server message type
+/// Server message types for runtime communication.
+///
+/// These were previously used for binary encoding with bincode.
+/// Currently unused - tree-based messaging handles all communication.
 // #[derive(Clone, Debug, Encode, Decode)]
 pub enum Announcement {
+    /// Test announcement with string payload
     TestAnnouncement(String),
     // GetRuntimes,
     // GetRuntimesAck(usize),
-
     // StartRuntime(RuntimeConfig),
     // StartRuntimeAck(bool),
 }
