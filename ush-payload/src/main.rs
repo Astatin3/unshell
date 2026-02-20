@@ -1,6 +1,8 @@
+#![macro_use]
+extern crate unshell;
+
 use unshell::{
     Value, info,
-    logger::{Record, log},
     obfuscate::{junk_asm, symbol},
     tree::{Tree, TreeElement, symbols},
 };
@@ -31,9 +33,9 @@ fn test123(manager: &mut Tree) -> bool {
 
     let is_null = result.is_null();
 
-    if let Ok(result) = serde_json::from_value::<Record>(result) {
-        log(&result);
-    }
+    // if let Ok(result) = serde_json::from_value::<Record>(result) {
+    //     log(&result);
+    // }
 
     is_null
 
