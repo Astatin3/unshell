@@ -3,7 +3,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Expr, Lit, Token, parse_macro_input};
 
-pub fn format_obs(input: TokenStream) -> TokenStream {
+pub fn sym_format(input: TokenStream) -> TokenStream {
     let PrintlnArgs { format_str, args } = parse_macro_input!(input as PrintlnArgs);
 
     let segments = parse_format_string(&format_str);
@@ -21,7 +21,7 @@ pub fn format_obs(input: TokenStream) -> TokenStream {
         match segment {
             FormatSegment::Static(text) => {
                 parts.push(quote! {
-                    obfuscate::symbol!(#text).to_string()
+                    obfuscate::sym!(#text).to_string()
                 });
             }
             FormatSegment::Dynamic(spec, idx) => {

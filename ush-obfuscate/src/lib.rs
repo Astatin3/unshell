@@ -1,43 +1,40 @@
 #![feature(proc_macro_quote)]
 #![feature(proc_macro_span)]
+#![allow(dead_code, unused_macros, unused_imports)]
+
+mod env;
+mod format_helper;
+mod proc_impl_switcher;
+
+mod obfuscate;
+
+// Types of symbolic reference
+mod symbolic_aes;
+mod symbolic_ref;
 
 use proc_macro::TokenStream;
 use quote::quote;
 
-mod env;
-mod format_helper;
-
-#[allow(dead_code, unused_imports)]
-mod no_obfuscate;
-
-#[allow(dead_code, unused_imports)]
-mod obfuscate;
-
-#[cfg(not(feature = "obfuscate"))]
-use no_obfuscate as obs;
-#[cfg(feature = "obfuscate")]
-use obfuscate as obs;
-
-// String obfuscation
+use proc_impl_switcher::proc_impl;
 
 #[proc_macro]
 pub fn obs(input: TokenStream) -> TokenStream {
-    obs::xor(input)
+    proc_impl::xor(input)
 }
 
 #[proc_macro_attribute]
-pub fn obfuscated_symbol(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    obs::aes_fn_name(_attr, item)
+pub fn sym_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    proc_impl::sym_fn(item)
 }
 
 #[proc_macro]
-pub fn symbol(input: TokenStream) -> TokenStream {
-    obs::aes_str(input)
+pub fn sym(input: TokenStream) -> TokenStream {
+    proc_impl::sym(input)
 }
 
 #[proc_macro]
 pub fn junk_asm(input: TokenStream) -> TokenStream {
-    obs::junk_asm(input)
+    proc_impl::junk_asm(input)
 }
 
 #[proc_macro]
@@ -57,6 +54,6 @@ pub fn file_symbol(_input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn format_obs(input: TokenStream) -> TokenStream {
-    format_helper::format_obs(input)
+pub fn sym_format(input: TokenStream) -> TokenStream {
+    format_helper::sym_format(input)
 }

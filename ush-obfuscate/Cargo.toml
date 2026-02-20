@@ -6,22 +6,25 @@ authors.workspace = true
 include.workspace = true
 
 [features]
-obfuscate = []
+default = ["obfuscate_none"]
+obfuscate_none = []
+obfuscate_aes = []
+obfuscate_ref = []
 
 [lib]
 proc-macro = true
 
 [dependencies]
-aes = "0.8.4"
+base62 = {path = "../base62"}
+
+# aes = "0.8.4"
 block-padding = "0.4.1"
-cbc = "0.1.2"
+# cbc = "0.1.2"
 getrandom = "0.3.4"
 hex = "0.4.3"
 hex-literal = "1.1.0"
-regex = "1.12.2"
-sha2 = "0.10.9"
-
-base62 = {path = "../base62"}
+# regex = "1.12.2"
+# sha2 = "0.10.9"
 
 # Common
 static_init = { workspace = true }

@@ -6,9 +6,8 @@ use syn::{ItemFn, LitStr, parse_macro_input};
 use crate::env::get_encryption_key;
 
 /// Obfuscate function names by encrypting in AES
-pub fn aes_fn_name(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn aes_fn_name(item: TokenStream) -> TokenStream {
     // Parse the input function
-
     let func = parse_macro_input!(item as ItemFn);
 
     // Get the original function name

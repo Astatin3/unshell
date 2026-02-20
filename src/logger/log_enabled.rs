@@ -2,7 +2,7 @@
 macro_rules! log {
     ($level:expr, $fmt:tt) => {{
         use $crate::obfuscate;
-        let log_result = obfuscate::format_obs!($fmt);
+        let log_result = obfuscate::sym_format!($fmt);
 
         $crate::logger::add_record(
             $level,
@@ -18,7 +18,7 @@ macro_rules! log {
     }};
     ($level:expr, $fmt:tt, $($arg:expr),*) => {{
         use $crate::obfuscate;
-        let log_result = obfuscate::format_obs!($fmt, $($arg),*);
+        let log_result = obfuscate::sym_format!($fmt, $($arg),*);
 
         $crate::logger::add_record(
             $level,

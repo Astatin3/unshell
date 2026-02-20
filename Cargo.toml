@@ -31,7 +31,8 @@ default = []
 log = []
 log_debug = ["log"]
 
-obfuscate = ["ush-obfuscate/obfuscate"]
+obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
+obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
 
 [dependencies]
 chrono = { workspace = true }

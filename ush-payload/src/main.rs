@@ -3,7 +3,7 @@ extern crate unshell;
 
 use unshell::{
     Value, info,
-    obfuscate::{junk_asm, symbol},
+    obfuscate::{junk_asm, sym},
     tree::{Tree, TreeElement, symbols},
 };
 
@@ -25,7 +25,7 @@ fn main() {
 
 fn test123(manager: &mut Tree) -> bool {
     let result = manager.send_message(
-        Value::String(symbol!("Logger").to_string()),
+        Value::String(sym!("Logger").to_string()),
         Value::String(symbols::CMD_GET.to_string()),
     );
 

@@ -622,18 +622,14 @@ dependencies = [
 name = "ush-obfuscate"
 version = "0.1.0"
 dependencies = [
- "aes",
  "base62",
  "block-padding 0.4.2",
- "cbc",
  "getrandom",
  "hex",
  "hex-literal",
  "proc-macro2",
  "quote",
  "rand",
- "regex",
- "sha2",
  "static_init",
  "syn 2.0.114",
 ]
