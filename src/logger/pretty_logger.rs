@@ -52,15 +52,19 @@ pub fn log(message: &Record) {
 
 impl PrettyLogger {
     pub fn init() {
-        crate::logger::set_logger_box(Box::new(PrettyLogger { output: None }));
+        if !unsafe { crate::logger::IS_DEFAULT_LOGGER } {
+            crate::logger::set_logger_box(Box::new(PrettyLogger { output: None }));
+        }
     }
 
     pub fn init_output<T>(output: T)
     where
         T: Fn(&Record) + 'static,
     {
-        crate::logger::set_logger_box(Box::new(PrettyLogger {
-            output: Some(Box::new(output)),
-        }));
+        if !unsafe { crate::logger::IS_DEFAULT_LOGGER } {
+            crate::logger::set_logger_box(Box::new(PrettyLogger {
+                output: Some(Box::new(output)),
+            }));
+        }
     }
 }

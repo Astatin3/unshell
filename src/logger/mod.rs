@@ -12,6 +12,7 @@ use std::time::SystemTime;
 pub use pretty_logger::PrettyLogger;
 pub use pretty_logger::log;
 
+pub static mut IS_DEFAULT_LOGGER: bool = true;
 static mut LOGGER: &dyn Logger = &DefaultLogger;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -46,12 +47,14 @@ pub fn set_logger_box(logger: Box<dyn Logger>) {
     #[cfg(feature = "log")]
     unsafe {
         LOGGER = Box::leak(logger);
+        IS_DEFAULT_LOGGER = false;
     }
 }
 
 pub fn set_logger(logger: &'static dyn Logger) {
     unsafe {
         LOGGER = logger;
+        IS_DEFAULT_LOGGER = false;
     }
 }
 
