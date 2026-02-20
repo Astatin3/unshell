@@ -1,4 +1,4 @@
-use crate::crypt::{STATIC_BYTE_MAP, hash};
+use crate::{STATIC_BYTE_MAP, hash};
 
 // Randomly mapped Base62 characters
 pub struct Base62 {

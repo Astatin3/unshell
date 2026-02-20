@@ -1,3 +1,8 @@
+use aes::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+use regex::Regex;
+
+use crate::{Base62, hash};
+
 pub fn decrypt_aes(input: &str, key_str: &str, iv: [u8; 16]) -> Result<String, String> {
     // Hash the env key to get a 32-byte (256-bit) AES key
     let mut key = hash(key_str.as_bytes());

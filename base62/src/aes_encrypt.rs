@@ -1,4 +1,4 @@
-use crate::crypt::{base62::Base62, hash};
+use crate::{base62::Base62, hash};
 use aes::cipher::{BlockEncryptMut, KeyIvInit};
 use cbc::cipher::block_padding::Pkcs7;
 

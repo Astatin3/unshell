@@ -21,7 +21,7 @@ hex-literal = "1.1.0"
 regex = "1.12.2"
 sha2 = "0.10.9"
 
-# unshell-crypt = {path = "../unshell-crypt"}
+base62 = {path = "../base62"}
 
 # Common
 static_init = { workspace = true }

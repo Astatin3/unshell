@@ -1,9 +1,9 @@
-use crate::crypt::{BACKUP_ENV_KEY, ENV_KEY_NAME, STATIC_IV, aes_encrypt::encrypt_aes_lines};
+use base62::{STATIC_IV, encrypt_aes_lines};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{ItemFn, LitStr, parse_macro_input};
 
-use crate::obfuscate::get_encryption_key;
+use crate::env::get_encryption_key;
 
 /// Obfuscate function names by encrypting in AES
 pub fn aes_fn_name(_attr: TokenStream, item: TokenStream) -> TokenStream {

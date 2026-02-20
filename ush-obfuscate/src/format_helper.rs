@@ -1,9 +1,72 @@
+use proc_macro::TokenStream;
+use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{Expr, Lit, Token};
+use syn::{Expr, Lit, Token, parse_macro_input};
 
-pub struct PrintlnArgs {
-    pub format_str: String,
-    pub args: Vec<Expr>,
+pub fn format_obs(input: TokenStream) -> TokenStream {
+    let PrintlnArgs { format_str, args } = parse_macro_input!(input as PrintlnArgs);
+
+    let segments = parse_format_string(&format_str);
+
+    if segments.is_empty() {
+        return quote! {
+            print!("\n")
+        }
+        .into();
+    }
+
+    let mut parts = Vec::new();
+
+    for segment in segments {
+        match segment {
+            FormatSegment::Static(text) => {
+                parts.push(quote! {
+                    obfuscate::symbol!(#text).to_string()
+                });
+            }
+            FormatSegment::Dynamic(spec, idx) => {
+                if idx >= args.len() {
+                    return syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("argument {} is missing", idx),
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+
+                let arg = &args[idx];
+                let fmt_spec = if spec.is_empty() {
+                    quote! { "{}" }
+                } else {
+                    let full_spec = format!("{{{}}}", spec);
+                    quote! { #full_spec }
+                };
+
+                // quote! {
+                //     println!(#fmt_spec, #arg);
+                // }
+                parts.push(quote! {
+                    format!(#fmt_spec, #arg)
+                });
+            }
+        }
+    }
+
+    (quote! {
+        {
+            let mut string = String::new();
+            #(
+                string.push_str(&#parts);
+            )*
+            string
+        }
+    })
+    .into()
+}
+
+struct PrintlnArgs {
+    format_str: String,
+    args: Vec<Expr>,
 }
 
 impl Parse for PrintlnArgs {
@@ -40,12 +103,12 @@ impl Parse for PrintlnArgs {
 }
 
 #[derive(Debug)]
-pub enum FormatSegment {
+enum FormatSegment {
     Static(String),
     Dynamic(String, usize), // format spec, arg index
 }
 
-pub fn parse_format_string(fmt: &str) -> Vec<FormatSegment> {
+fn parse_format_string(fmt: &str) -> Vec<FormatSegment> {
     let mut segments = Vec::new();
     let mut current_static = String::new();
     let mut chars = fmt.chars().peekable();

@@ -38,6 +38,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "base62"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "cbc",
+ "regex",
+ "sha2",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -613,6 +623,7 @@ name = "ush-obfuscate"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "base62",
  "block-padding 0.4.2",
  "cbc",
  "getrandom",

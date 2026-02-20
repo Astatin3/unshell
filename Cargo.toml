@@ -21,7 +21,8 @@ members = [
     "ush-payload",
 
     # Libraries
-    "ush-obfuscate"
+    "ush-obfuscate",
+    "base62"
 ]
 
 [features]

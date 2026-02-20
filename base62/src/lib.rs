@@ -1,9 +1,12 @@
-pub mod aes_encrypt;
+mod aes_decrypt;
+mod aes_encrypt;
 #[allow(dead_code)]
-pub mod base62;
+mod base62;
 
-pub const ENV_KEY_NAME: &str = "OBFUSCATION_KEY";
-pub const BACKUP_ENV_KEY: &str = "OBFUSCATION_KEY_DO_NOT_USE";
+// Exports
+pub use aes_decrypt::{decrypt_aes, decrypt_aes_lines};
+pub use aes_encrypt::{encrypt_aes, encrypt_aes_lines};
+pub use base62::Base62;
 
 pub const STATIC_IV: [u8; 16] = [
     0x6d, 0x79, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x5f, 0x69, 0x76, 0x5f, 0x30, 0x31, 0x32,
