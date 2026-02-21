@@ -58,9 +58,9 @@ pub mod proc_impl {
     use proc_macro::TokenStream;
     use syn::{LitStr, parse_macro_input};
 
-    unwrap_string!(xor);
+    passtrough!(xor, crate::obfuscate::xor);
     delete!(junk_asm);
 
     passtrough!(sym, crate::symbolic_ref::sym_ref);
-    unwrap_string!(sym_fn);
+    passtrough!(sym_fn, crate::symbolic_ref::sym_ref_fn);
 }
