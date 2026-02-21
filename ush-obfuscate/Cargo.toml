@@ -6,8 +6,7 @@ authors.workspace = true
 include.workspace = true
 
 [features]
-default = ["obfuscate_none"]
-obfuscate_none = []
+default = []
 obfuscate_aes = []
 obfuscate_ref = []
 

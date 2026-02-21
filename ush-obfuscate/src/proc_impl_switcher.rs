@@ -30,7 +30,7 @@ macro_rules! delete {
     };
 }
 
-#[cfg(feature = "obfuscate_none")]
+#[cfg(all(not(feature = "obfuscate_aes"), not(feature = "obfuscate_ref")))]
 pub mod proc_impl {
     use proc_macro::TokenStream;
     use syn::{LitStr, parse_macro_input};
@@ -61,6 +61,6 @@ pub mod proc_impl {
     unwrap_string!(xor);
     delete!(junk_asm);
 
-    unwrap_string!(sym);
+    passtrough!(sym, crate::symbolic_ref::sym_ref);
     unwrap_string!(sym_fn);
 }

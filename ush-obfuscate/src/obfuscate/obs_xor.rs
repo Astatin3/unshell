@@ -14,9 +14,6 @@ pub fn xor(input: TokenStream) -> TokenStream {
         return TokenStream::from(quote! { String::new() });
     }
 
-    // --- Obfuscated Branch Logic ---
-    // This code runs at compile-time
-
     let str_bytes = original_str.as_bytes();
     let len = str_bytes.len();
 

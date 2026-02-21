@@ -1,11 +1,8 @@
-mod aes_decrypt;
-mod aes_encrypt;
-#[allow(dead_code)]
+mod aes;
 mod base62;
 
 // Exports
-pub use aes_decrypt::{decrypt_aes, decrypt_aes_lines};
-pub use aes_encrypt::{encrypt_aes, encrypt_aes_lines};
+pub use aes::{decrypt_aes, decrypt_aes_lines, encrypt_aes, encrypt_aes_lines};
 pub use base62::Base62;
 
 pub const STATIC_IV: [u8; 16] = [
@@ -34,4 +31,20 @@ pub fn hash(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(input);
     hasher.finalize().into()
+}
+
+pub fn encode_usize(value: usize) -> Vec<u8> {
+    if value == 0 {
+        return vec![0];
+    }
+    let bytes = value.to_be_bytes();
+    let leading_zeros = bytes.iter().take_while(|&&b| b == 0).count();
+    bytes[leading_zeros..].to_vec()
+}
+
+pub fn decode_usize(bytes: &[u8]) -> usize {
+    let mut buf = [0u8; size_of::<usize>()];
+    let offset = buf.len() - bytes.len();
+    buf[offset..].copy_from_slice(bytes);
+    usize::from_be_bytes(buf)
 }

@@ -18,19 +18,20 @@ const ENCODING_RATIO: f64 = 8.0 / 5.954196310386875; // 8.0 / log2(62.0)
 impl Base62 {
     pub fn new(key: &[u8], nonce: usize) -> Self {
         // Hash key again, for the chance that this random function can be used to derive the key
+        // My solution to not being good at cryptography lol
         let key = hash(key);
 
         let mut charset: [char; 62] = [0 as char; 62];
 
         // Create a vector of indices from 0 to 61
-        let mut current_indicies = (0..62).map(|i| i as usize).collect::<Vec<usize>>();
+        let mut current_indices = (0..62).map(|i| i as usize).collect::<Vec<usize>>();
 
         // Loop through each byte in the key until all chars are filled
         for i in 0..62 as usize {
             let rand = STATIC_BYTE_MAP[(key[i as usize % key.len()] as usize + nonce) % 255];
 
-            let index_index = rand as usize % current_indicies.len();
-            let put_index = current_indicies.remove(index_index);
+            let index_index = rand as usize % current_indices.len();
+            let put_index = current_indices.remove(index_index);
 
             charset[put_index] = BASE62_CHARS[i];
         }
