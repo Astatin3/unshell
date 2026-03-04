@@ -52,7 +52,7 @@ pub fn log(message: &Record) {
 
 impl PrettyLogger {
     pub fn init() {
-        if !unsafe { crate::logger::IS_DEFAULT_LOGGER } {
+        if unsafe { crate::logger::IS_DEFAULT_LOGGER } {
             crate::logger::set_logger_box(Box::new(PrettyLogger { output: None }));
         }
     }

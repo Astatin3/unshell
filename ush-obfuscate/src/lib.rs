@@ -48,7 +48,7 @@ pub fn file_symbol(_input: TokenStream) -> TokenStream {
 
     // Return as a string literal
     let output = quote! {
-        obfuscate::symbol!(#concatted)
+        obfuscate::sym!(#concatted)
     };
     output.into()
 }
