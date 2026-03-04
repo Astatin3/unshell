@@ -1,13 +1,13 @@
 #![macro_use]
 extern crate unshell;
 
-use unshell::{info, logger::PrettyLogger, obfuscate::sym};
+use unshell::{info, obfuscate::sym, tree::Tree};
 
 fn main() {
-    PrettyLogger::init();
+    // PrettyLogger::init();
 
-    // let mut manager = Tree::new();
-    // manager.init_logger();
+    let mut manager = Tree::new();
+    manager.init_logger();
 
     println!("{}", sym!("TEST"));
 
