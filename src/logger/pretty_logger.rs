@@ -1,5 +1,3 @@
-use chrono::{DateTime, Utc};
-
 use crate::logger::{LogLevel, Logger, Record};
 
 pub struct PrettyLogger {
@@ -35,19 +33,25 @@ pub fn log(message: &Record) {
         LogLevel::Error => format!("{ERROR_COLOR}ERR!"),
     };
 
-    let date: DateTime<Utc> = message.time.into();
-    let date = date.to_rfc2822().to_string();
+    match (message.time, &message.location) {
+        (None, None) => {
+            println!("{} {WHITE}{}", log_level, message.message,);
+        }
 
-    let location = if let Some(ref location) = message.location {
-        location
-    } else {
-        &String::new()
-    };
+        #[cfg(feature = "log_debug")]
+        (Some(time), Some(location)) => {
+            use chrono::{DateTime, Utc};
 
-    println!(
-        "{OFF_WHITE}[{TIME_COLOR}{}{OFF_WHITE}] {} {WHITE}{} {GREY}{}{WHITE}",
-        date, log_level, message.message, location
-    );
+            let date: DateTime<Utc> = time.into();
+
+            println!(
+                "{OFF_WHITE}[{TIME_COLOR}{}{OFF_WHITE}] {} {WHITE}{} {GREY}{}{WHITE}",
+                date, log_level, message.message, location
+            );
+        }
+
+        _ => unreachable!("All debug fields must be present or removed."),
+    }
 }
 
 impl PrettyLogger {

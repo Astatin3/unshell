@@ -28,7 +28,7 @@ pub struct Record {
     log_level: LogLevel,
     location: Option<String>,
     // line: u32,
-    time: SystemTime,
+    time: Option<SystemTime>,
     message: String,
 }
 
@@ -61,7 +61,7 @@ pub fn set_logger(logger: &'static dyn Logger) {
 pub fn add_record(
     log_level: LogLevel,
     location: Option<String>,
-    time: SystemTime,
+    time: Option<SystemTime>,
     message: String,
 ) {
     logger().log(Record {

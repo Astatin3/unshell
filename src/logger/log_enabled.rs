@@ -12,7 +12,12 @@ macro_rules! log {
             #[cfg(not(feature = "log_debug"))]
             None,
 
-            std::time::SystemTime::now(),
+            #[cfg(feature = "log_debug")]
+            Some(std::time::SystemTime::now()),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
+
             log_result
         );
     }};
@@ -28,7 +33,11 @@ macro_rules! log {
             #[cfg(not(feature = "log_debug"))]
             None,
 
-            std::time::SystemTime::now(),
+            #[cfg(feature = "log_debug")]
+            Some(std::time::SystemTime::now()),
+            #[cfg(not(feature = "log_debug"))]
+            None,
+
             log_result
         );
     }};

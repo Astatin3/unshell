@@ -29,13 +29,13 @@ members = [
 default = []
 
 log = []
-log_debug = ["log"]
+log_debug = ["log", "chrono"]
 
 obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
 obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
 
 [dependencies]
-chrono = { workspace = true }
+chrono = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
