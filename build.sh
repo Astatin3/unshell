@@ -5,6 +5,9 @@
 # -Z build-std-features= \
 # --profile minimize -p unshell-payload -- $@
 
+set -e
+
+OBFUSCATION_KEY=kjwerkwerkjbwejehrwhje \
 cargo build --profile minimize -p ush-payload $@
 
 export BINARY=./target/minimize/ush-payload

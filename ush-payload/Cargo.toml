@@ -8,7 +8,7 @@ edition = "2024"
 default = ["log"]
 log = ["unshell/log"]
 log_debug = ["unshell/log_debug"]
-obfuscate = ["unshell/obfuscate"]
+obfuscate = ["unshell/obfuscate_ref"]
 
 [dependencies]
 unshell.path = "../"

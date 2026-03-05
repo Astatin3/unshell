@@ -1,44 +1,46 @@
-use unshell::{
-    Value, info,
-    logger::{Record, log},
-    obfuscate::{junk_asm, symbol},
-    tree::{Tree, TreeElement, symbols},
-};
+#![macro_use]
+extern crate unshell;
+
+use unshell::{info, obfuscate::sym, tree::Tree};
 
 fn main() {
+    // PrettyLogger::init();
+
     let mut manager = Tree::new();
     manager.init_logger();
 
+    println!("{}", sym!("TEST"));
+
     info!("Test thing!");
     info!("Test thing!");
 
-    loop {
-        if test123(&mut manager) {
-            break;
-        }
-    }
+    // loop {
+    //     if test123(&mut manager) {
+    //         break;
+    //     }
+    // }
 
     // println!("Test");
 }
 
-fn test123(manager: &mut Tree) -> bool {
-    let result = manager.send_message(
-        Value::String(symbol!("Logger").to_string()),
-        Value::String(symbols::CMD_GET.to_string()),
-    );
+// fn test123(manager: &mut Tree) -> bool {
+//     let result = manager.send_message(
+//         Value::String(sym!("Logger").to_string()),
+//         Value::String(symbols::CMD_GET.to_string()),
+//     );
 
-    junk_asm!(20.);
+//     junk_asm!(20.);
 
-    let is_null = result.is_null();
+//     let is_null = result.is_null();
 
-    if let Ok(result) = serde_json::from_value::<Record>(result) {
-        log(&result);
-    }
+//     // if let Ok(result) = serde_json::from_value::<Record>(result) {
+//     //     log(&result);
+//     // }
 
-    is_null
+//     is_null
 
-    // println!("Logger: {}", result);
-}
+//     // println!("Logger: {}", result);
+// }
 
 // use std::{any::Any, collections::HashMap, fs::File, io::Read};
 

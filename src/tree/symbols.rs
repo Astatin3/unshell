@@ -1,15 +1,15 @@
-use crate::obfuscate::symbol;
+use crate::obfuscate::sym;
 
-pub const LOGGER: &'static str = symbol!("Logger");
+pub const LOGGER: &'static str = sym!("Logger");
 
-pub const TYPE_TREE: &'static str = symbol!("Tree");
-pub const TYPE_QUEUE: &'static str = symbol!("Queue");
+pub const TYPE_TREE: &'static str = sym!("Tree");
+pub const TYPE_QUEUE: &'static str = sym!("Queue");
 
-pub const CMD_GET: &'static str = symbol!("Get");
-pub const CMD_POLL: &'static str = symbol!("Poll");
-pub const CMD_GET_LENGTH: &'static str = symbol!("GetLength");
-pub const CMD_GET_CHILDREN: &'static str = symbol!("GetChildren");
+pub const CMD_GET: &'static str = sym!("Get");
+pub const CMD_POLL: &'static str = sym!("Poll");
+pub const CMD_GET_LENGTH: &'static str = sym!("GetLength");
+pub const CMD_GET_CHILDREN: &'static str = sym!("GetChildren");
 
-pub const ERR_UNSUPPORTED_METHOD: &'static str = symbol!("UnsupportedMethod");
-pub const ERR_INVALID_COMMAND: &'static str = symbol!("InvalidCommand");
-pub const ERR_INVALID_CHILD: &'static str = symbol!("InvalidChild");
+pub const ERR_UNSUPPORTED_METHOD: &'static str = sym!("UnsupportedMethod");
+pub const ERR_INVALID_COMMAND: &'static str = sym!("InvalidCommand");
+pub const ERR_INVALID_CHILD: &'static str = sym!("InvalidChild");
