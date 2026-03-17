@@ -7,15 +7,15 @@ mod log_disabled;
 
 mod pretty_logger;
 
-use std::time::SystemTime;
-
+use alloc::boxed::Box;
+use alloc::string::String;
 pub use pretty_logger::PrettyLogger;
 pub use pretty_logger::log;
 
 pub static mut IS_DEFAULT_LOGGER: bool = true;
 static mut LOGGER: &dyn Logger = &DefaultLogger;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug)]
 pub enum LogLevel {
     Debug,
     Info,
@@ -23,12 +23,12 @@ pub enum LogLevel {
     Error,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug)]
 pub struct Record {
     log_level: LogLevel,
     location: Option<String>,
     // line: u32,
-    time: Option<SystemTime>,
+    time: Option<u64>,
     message: String,
 }
 
@@ -61,7 +61,7 @@ pub fn set_logger(logger: &'static dyn Logger) {
 pub fn add_record(
     log_level: LogLevel,
     location: Option<String>,
-    time: Option<SystemTime>,
+    time: Option<u64>,
     message: String,
 ) {
     logger().log(Record {

@@ -1,3 +1,5 @@
+use alloc::{boxed::Box, format};
+
 use crate::logger::{LogLevel, Logger, Record};
 
 pub struct PrettyLogger {
@@ -31,7 +33,7 @@ pub fn log(message: &Record) {
         (None, None) => {
             static WHITE: &str = "\x1b[97m";
 
-            println!("{} {WHITE}{}", log_level, message.message,);
+            unix_print::unix_println!("{} {WHITE}{}", log_level, message.message);
         }
 
         #[cfg(feature = "log_debug")]
@@ -45,9 +47,12 @@ pub fn log(message: &Record) {
             static TIME_COLOR: &str = "\x1b[36m";
             static GREY: &str = "\x1b[90m";
 
-            println!(
+            unix_print::unix_println!(
                 "{OFF_WHITE}[{TIME_COLOR}{}{OFF_WHITE}] {} {WHITE}{} {GREY}{}{WHITE}",
-                date, log_level, message.message, location
+                date,
+                log_level,
+                message.message,
+                location
             );
         }
 
