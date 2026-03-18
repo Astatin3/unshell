@@ -1,11 +1,12 @@
 use alloc::{boxed::Box, string::String, vec::Vec};
 
-use crate::tree::request::{TreeRequest, TreeRequestType};
-
 mod request;
+
+pub use request::{TreeRequest, TreeRequestType};
 
 pub mod types;
 
+#[derive(Default)]
 pub struct Tree {
     endpoints: Vec<(Box<dyn Endpoint>, Vec<String>)>,
 }
@@ -24,7 +25,7 @@ impl Tree {
                 return None;
             }
 
-            for i in 0..search_path.len() {
+            for i in 0..endpoint_path.len() {
                 if search_path[i] != endpoint_path[i] {
                     return None;
                 }

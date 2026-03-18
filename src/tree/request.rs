@@ -25,14 +25,13 @@ pub struct TreeRequest {
 #[rkyv(compare(PartialEq), derive(Debug))]
 pub enum TreeRequestType {
     Return = 0,
+
     Read = 1,
-    Write = 2,
-    Submit = 3,
+    GetProcedures = 2,
 
-    ListBranches = 10,
+    Write = 11,
+    CallProcedure = 12,
 
-    // CreateField = 3,
-    // DeleteField = 4,
     UnnamedError = 100,
     NoBranchError = 101,
     ProtocolError = 102,
