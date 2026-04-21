@@ -59,7 +59,7 @@ pub mod proc_impl {
     use syn::{LitStr, parse_macro_input};
 
     passtrough!(xor, crate::obfuscate::xor);
-    delete!(junk_asm);
+    passtrough!(junk_asm, crate::obfuscate::junk_asm);
 
     passtrough!(sym, crate::symbolic_ref::sym_ref);
     passtrough!(sym_fn, crate::symbolic_ref::sym_ref_fn);
