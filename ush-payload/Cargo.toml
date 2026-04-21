@@ -1,15 +1,35 @@
 cargo-features = ["trim-paths"]
 
+# =============================================================================
+# ush-payload — The UnShell Implant Binary
+# =============================================================================
+#
+# This binary runs on the target machine. It:
+#   1. Connects to the router over TCP (reverse connection).
+#   2. Completes the handshake, registering its modules.
+#   3. Runs a recv loop, routing incoming TreeRequests to local Endpoints.
+#
+# Build with:
+#   cargo build --profile minimize -p ush-payload
+#
+# The minimize profile strips symbols and optimises for binary size.
+
 [package]
-name = "ush-payload"
-edition = "2024"
+name        = "ush-payload"
+version.workspace = true
+edition.workspace = true
+description = "UnShell implant binary"
 
 [features]
-default = ["log"]
-log = ["unshell/log"]
-log_debug = ["unshell/log_debug"]
-obfuscate = ["unshell/obfuscate_ref"]
+default    = ["log", "tcp"]
+log        = ["unshell/log"]
+log_debug  = ["unshell/log_debug"]
+tcp        = ["unshell/tcp"]
+obfuscate  = ["unshell/obfuscate_ref"]
 
 [dependencies]
-unshell.path = "../"
-serde_json.workspace = true
+unshell = { workspace = true }
+rkyv    = { workspace = true }
+
+[lints]
+workspace = true

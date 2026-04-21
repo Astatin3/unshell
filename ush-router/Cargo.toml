@@ -1,0 +1,29 @@
+# =============================================================================
+# ush-router — The UnShell Router Binary
+# =============================================================================
+#
+# The router is a dumb packet relay. It:
+#   1. Accepts TCP connections from payload nodes and operator nodes.
+#   2. Reads the PacketHeader to determine the destination path.
+#   3. Forwards the packet to whichever node registered that path prefix.
+#   4. Has a small set of built-in endpoints at /router/... for node discovery.
+#
+# Run with:
+#   cargo run -p ush-router -- --bind 0.0.0.0:9000
+#
+# The router binary is NOT no_std — it uses the full standard library.
+
+[package]
+name        = "ush-router"
+version.workspace = true
+edition.workspace = true
+description = "UnShell router/relay binary"
+
+[dependencies]
+unshell           = { workspace = true, features = ["tcp", "log"] }
+crossbeam-channel = { workspace = true }
+thiserror         = { workspace = true }
+rkyv              = { workspace = true }
+
+[lints]
+workspace = true

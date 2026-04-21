@@ -1,288 +1,182 @@
 cargo-features = ["trim-paths", "panic-immediate-abort"]
 
-[package]
-name = "unshell"
-edition = "2024"
-
-[workspace.package]
-version = "0.1.0"
-edition = "2024"
-
-authors = ["ASTATIN3"]
-include = ["LICENSE", "**/*.rs", "Cargo.toml"]
+# =============================================================================
+# UnShell Workspace
+# =============================================================================
+#
+# Crate layout:
+#
+#   unshell         — core library: protocol types, transport trait, tree routing
+#   ush-router      — the router/relay binary (runs on operator's VPS)
+#   ush-payload     — the implant binary (runs on the target)
+#   ush-cli         — the operator REPL binary (runs on the operator's machine)
+#   ush-obfuscate   — proc-macro crate: compile-time string/code obfuscation
+#   base62          — base62 encoding (used for node IDs)
+#
+# Build profiles:
+#   dev             — fast compile, debug info
+#   release         — optimized
+#   minimize        — size-optimized, for the payload binary
 
 [workspace]
 members = [
-    # Binaries
-    # "ush-gui",
-
-    # UnShell Binaries
-    # "ush-server",
+    # Core binaries
+    "ush-router",
     "ush-payload",
+    "ush-cli",
 
     # Libraries
     "ush-obfuscate",
-    "base62"
+    "base62",
 ]
+resolver = "2"
+
+# ---------------------------------------------------------------------------
+# Shared package metadata
+# ---------------------------------------------------------------------------
+[workspace.package]
+version     = "0.1.0"
+edition     = "2024"
+authors     = ["ASTATIN3"]
+license     = "MIT"
+repository  = "https://github.com/Astatin3/unshell"
+include     = ["LICENSE", "**/*.rs", "Cargo.toml"]
+
+# ---------------------------------------------------------------------------
+# Shared dependencies — all crates in the workspace can reference these
+# with `dep.workspace = true` to get consistent versions.
+# ---------------------------------------------------------------------------
+[workspace.dependencies]
+# Serialisation
+rkyv             = "0.8.15"    # zero-copy deserialisation framework
+serde            = { version = "1.0.228", features = ["derive"] }
+serde_json       = "1.0.149"
+
+# Concurrency
+crossbeam-channel = "0.5.15"   # multi-producer multi-consumer channels
+
+# Error handling
+thiserror = "2.0.18"           # derive(Error) macro
+
+# Logging / time
+chrono           = "0.4.42"
+
+# Utilities
+static_init = "1.0.4"          # safe static initialisation
+
+# Internal workspace crates (other crates depend on these)
+unshell      = { path = "."           }
+ush-obfuscate = { path = "./ush-obfuscate" }
+base62       = { path = "./base62"    }
+
+# ---------------------------------------------------------------------------
+# The unshell core library
+# ---------------------------------------------------------------------------
+[package]
+name    = "unshell"
+version.workspace = true
+edition.workspace = true
+description = "UnShell core library: protocol types, transport, and tree routing"
+
+# The library must be no_std compatible so the payload can use it without
+# a full standard library. It does, however, link `alloc` (heap allocation).
+#
+# Binaries (ush-router, ush-cli) link std and use the library's full API.
+# The payload binary also links std for now but the library itself is no_std.
 
 [features]
 default = []
 
-log = []
-log_debug = ["log", "chrono"]
+# Enable the structured logger (uses chrono for timestamps)
+log       = []
+log_debug = ["log", "dep:chrono"]
 
+# Enable TCP transport (requires std). All std binaries enable this.
+# The payload binary can also enable it; only omit it for bare-metal embedded targets.
+tcp = []
+
+# Obfuscation support (compile-time string obfuscation via proc-macro)
 obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
 obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
 
 [dependencies]
-chrono = { workspace = true, optional = true }
-# serde = { workspace = true }
-# serde_json = { workspace = true }
+rkyv              = { workspace = true }
+crossbeam-channel = { workspace = true }
+thiserror         = { workspace = true }
+chrono            = { workspace = true, optional = true }
+ush-obfuscate     = { workspace = true }
+static_init       = { workspace = true }
 
-crossbeam-channel = "0.5.15"
-
-ush-obfuscate = { path = "./ush-obfuscate" }
-static_init.workspace = true
-
-rkyv = "0.8.15"
-
-unix-print = {version = "0.1.0" }
-
-# unshell-crypt = {path = "./unshell-crypt"}
-
-[workspace.dependencies]
-####
-# Standard libraries
-chrono = "0.4.42"
-
-serde = {version = "1.0.228", features = ["derive"]}
-serde_json = "1.0.145"
-
-static_init = "1.0.4"
-toml = "0.9.9"
-
+# ---------------------------------------------------------------------------
+# Build profiles
+# ---------------------------------------------------------------------------
 
 [profile.release]
 opt-level = 2
 
-# Optimize all dependencies even in debug builds:
+# Even in debug builds, optimise all dependencies so test runs aren't sluggish.
 [profile.dev.package."*"]
 opt-level = 2
 
+# Payload profile: strip everything possible, optimise for size.
+# Use with: cargo build --profile minimize -p ush-payload
 [profile.minimize]
-inherits = "release"
-strip = true             # Strip symbols from the binary
-opt-level = "z"          # Optimize for size
-lto = true               # Link tree optimization
-codegen-units = 1
-panic = "immediate-abort"
-debug = false            # Remove debug
-trim-paths="all"
+inherits      = "release"
+strip         = true        # strip debug symbols and non-essential sections
+opt-level     = "z"         # optimise for binary size
+lto           = true        # link-time optimisation (cross-crate dead code elim)
+codegen-units = 1           # single codegen unit for maximum LTO
+panic         = "immediate-abort"
+debug         = false
+trim-paths    = "all"       # strip file paths from panic messages
 
-# ----------------------------------------------------------------------------------------
-# Lints:
-
+# ---------------------------------------------------------------------------
+# Lints — applied to the entire workspace
+# ---------------------------------------------------------------------------
 [lints]
 workspace = true
 
 [workspace.lints.rust]
-# unsafe_code = "deny"
-
-elided_lifetimes_in_paths = "warn"
-future_incompatible = { level = "warn", priority = -1 }
-nonstandard_style = { level = "warn", priority = -1 }
-rust_2018_idioms = { level = "warn", priority = -1 }
-rust_2021_prelude_collisions = "warn"
+elided_lifetimes_in_paths          = "warn"
+future_incompatible                = { level = "warn", priority = -1 }
+nonstandard_style                  = { level = "warn", priority = -1 }
+rust_2018_idioms                   = { level = "warn", priority = -1 }
+rust_2021_prelude_collisions       = "warn"
 semicolon_in_expressions_from_macros = "warn"
-trivial_numeric_casts = "warn"
-unsafe_op_in_unsafe_fn = "warn"                         # `unsafe_op_in_unsafe_fn` may become the default in future Rust versions: https://github.com/rust-lang/rust/issues/71668
-unused_extern_crates = "warn"
-unused_import_braces = "warn"
-unused_lifetimes = "warn"
-
-trivial_casts = "allow"
-unused_qualifications = "allow"
-
+trivial_numeric_casts              = "warn"
+unsafe_op_in_unsafe_fn             = "warn"
+unused_extern_crates               = "warn"
+unused_import_braces               = "warn"
+unused_lifetimes                   = "warn"
+trivial_casts                      = "allow"
+unused_qualifications              = "allow"
 
 [workspace.lints.rustdoc]
-all = "warn"
-missing_crate_level_docs = "warn"
-
+all                          = "warn"
+missing_crate_level_docs     = "warn"
 
 [workspace.lints.clippy]
-allow_attributes = "warn"
-as_ptr_cast_mut = "warn"
-await_holding_lock = "warn"
-bool_to_int_with_if = "warn"
-branches_sharing_code = "warn"
-char_lit_as_u8 = "warn"
-checked_conversions = "warn"
-clear_with_drain = "warn"
-cloned_instead_of_copied = "warn"
-dbg_macro = "warn"
-debug_assert_with_mut_call = "warn"
-default_union_representation = "warn"
-derive_partial_eq_without_eq = "warn"
-disallowed_macros = "warn"                   # See clippy.toml
-disallowed_methods = "warn"                  # See clippy.toml
-disallowed_names = "warn"                    # See clippy.toml
-disallowed_script_idents = "warn"            # See clippy.toml
-disallowed_types = "warn"                    # See clippy.toml
-doc_comment_double_space_linebreaks = "warn"
-doc_link_with_quotes = "warn"
-doc_markdown = "warn"
-elidable_lifetime_names = "warn"
-empty_enum = "warn"
-empty_enum_variants_with_brackets = "warn"
-empty_line_after_outer_attr = "warn"
-enum_glob_use = "warn"
-equatable_if_let = "warn"
-exit = "warn"
-expl_impl_clone_on_copy = "warn"
-explicit_deref_methods = "warn"
-explicit_into_iter_loop = "warn"
-explicit_iter_loop = "warn"
-fallible_impl_from = "warn"
-filter_map_next = "warn"
-flat_map_option = "warn"
-float_cmp_const = "warn"
-fn_params_excessive_bools = "warn"
-fn_to_numeric_cast_any = "warn"
-from_iter_instead_of_collect = "warn"
-get_unwrap = "warn"
-if_let_mutex = "warn"
-ignore_without_reason = "warn"
-implicit_clone = "warn"
-implied_bounds_in_impls = "warn"
-imprecise_flops = "warn"
-inconsistent_struct_constructor = "warn"
-index_refutable_slice = "warn"
-indexing_slicing = "warn"
-inefficient_to_string = "warn"
-infinite_loop = "warn"
-into_iter_without_iter = "warn"
-invalid_upcast_comparisons = "warn"
-iter_filter_is_ok = "warn"
-iter_filter_is_some = "warn"
-iter_not_returning_iterator = "warn"
-iter_on_empty_collections = "warn"
-iter_on_single_items = "warn"
-iter_over_hash_type = "warn"
-iter_without_into_iter = "warn"
-large_digit_groups = "warn"
-large_include_file = "warn"
-large_stack_arrays = "warn"
-large_stack_frames = "warn"
-large_types_passed_by_value = "warn"
-let_underscore_must_use = "warn"
-let_underscore_untyped = "warn"
-let_unit_value = "warn"
-linkedlist = "warn"
-literal_string_with_formatting_args = "warn"
-lossy_float_literal = "warn"
-macro_use_imports = "warn"
-manual_assert = "warn"
-manual_clamp = "warn"
-manual_instant_elapsed = "warn"
-manual_is_power_of_two = "warn"
-manual_is_variant_and = "warn"
-manual_let_else = "warn"
-manual_midpoint = "warn"
-manual_ok_or = "warn"
-manual_string_new = "warn"
-map_err_ignore = "warn"
-map_flatten = "warn"
-match_bool = "warn"
-match_same_arms = "warn"
-match_wild_err_arm = "warn"
-match_wildcard_for_single_variants = "warn"
-mem_forget = "warn"
-mismatching_type_param_order = "warn"
-missing_assert_message = "warn"
-missing_enforced_import_renames = "warn"
-missing_errors_doc = "warn"
-missing_safety_doc = "warn"
-mixed_attributes_style = "warn"
-mut_mut = "warn"
-mutex_integer = "warn"
-needless_borrow = "warn"
-needless_continue = "warn"
-needless_for_each = "warn"
-needless_pass_by_ref_mut = "warn"
-needless_pass_by_value = "warn"
-negative_feature_names = "warn"
-non_std_lazy_statics = "warn"
-non_zero_suggestions = "warn"
-nonstandard_macro_braces = "warn"
-option_as_ref_cloned = "warn"
-option_option = "warn"
-path_buf_push_overwrite = "warn"
-pathbuf_init_then_push = "warn"
-precedence_bits = "warn"
-print_stderr = "warn"
-print_stdout = "warn"
-ptr_as_ptr = "warn"
-ptr_cast_constness = "warn"
-pub_underscore_fields = "warn"
-pub_without_shorthand = "warn"
-rc_mutex = "warn"
-readonly_write_lock = "warn"
-redundant_type_annotations = "warn"
-ref_as_ptr = "warn"
-ref_option_ref = "warn"
-ref_patterns = "warn"
-rest_pat_in_fully_bound_structs = "warn"
-return_and_then = "warn"
-same_functions_in_if_condition = "warn"
-semicolon_if_nothing_returned = "warn"
-set_contains_or_insert = "warn"
-should_panic_without_expect = "warn"
-single_char_pattern = "warn"
-single_match_else = "warn"
-single_option_map = "warn"
-str_split_at_newline = "warn"
-str_to_string = "warn"
-string_add = "warn"
-string_add_assign = "warn"
-string_lit_as_bytes = "warn"
-string_lit_chars_any = "warn"
-string_to_string = "warn"
-suspicious_command_arg_space = "warn"
-suspicious_xor_used_as_pow = "warn"
-todo = "warn"
-too_long_first_doc_paragraph = "warn"
-too_many_lines = "warn"
-trailing_empty_array = "warn"
-trait_duplication_in_bounds = "warn"
-transmute_ptr_to_ptr = "warn"
-tuple_array_conversions = "warn"
-unchecked_duration_subtraction = "warn"
-undocumented_unsafe_blocks = "warn"
-unimplemented = "warn"
-uninhabited_references = "warn"
-uninlined_format_args = "warn"
-unnecessary_box_returns = "warn"
-unnecessary_debug_formatting = "warn"
-unnecessary_literal_bound = "warn"
-unnecessary_safety_comment = "warn"
-unnecessary_safety_doc = "warn"
-unnecessary_self_imports = "warn"
-unnecessary_semicolon = "warn"
-unnecessary_struct_initialization = "warn"
-unnecessary_wraps = "warn"
-unnested_or_patterns = "warn"
-unused_peekable = "warn"
-unused_rounding = "warn"
-unused_self = "warn"
-unused_trait_names = "warn"
-unwrap_used = "warn"
-use_self = "warn"
-useless_let_if_seq = "warn"
-useless_transmute = "warn"
-verbose_file_reads = "warn"
-wildcard_dependencies = "warn"
-wildcard_imports = "warn"
-zero_sized_map_values = "warn"
-
-manual_range_contains = "allow" # this is better on 'allow'
-map_unwrap_or = "allow"         # this is better on 'allow'
+# --- Correctness ---
+get_unwrap                         = "warn"
+unwrap_used                        = "warn"
+indexing_slicing                   = "warn"
+# --- Style ---
+cloned_instead_of_copied           = "warn"
+explicit_into_iter_loop            = "warn"
+explicit_iter_loop                 = "warn"
+manual_string_new                  = "warn"
+needless_borrow                    = "warn"
+needless_pass_by_value             = "warn"
+str_to_string                      = "warn"
+string_to_string                   = "warn"
+uninlined_format_args              = "warn"
+use_self                           = "warn"
+# --- Documentation ---
+missing_errors_doc                 = "warn"
+missing_safety_doc                 = "warn"
+undocumented_unsafe_blocks         = "warn"
+# --- Complexity ---
+too_many_lines                     = "warn"
+# --- Allowed (intentional style choices) ---
+manual_range_contains              = "allow"
+map_unwrap_or                      = "allow"
