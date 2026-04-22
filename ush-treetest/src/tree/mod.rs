@@ -63,6 +63,52 @@ impl Node {
         self.children.keys().cloned().collect()
     }
     
+    /// List child nodes at a given path - traverses directly without find_handler
+    ///
+    /// Works even without endpoint at the path (like Linux directories).
+    ///
+    /// # Arguments
+    /// * `path` - The path to list children at (e.g., "/" or "/shell")
+    ///
+    /// # Returns
+    /// List of child node names, or empty list if path not found
+    pub fn list_nodes_at(&self, path: &str) -> Vec<String> {
+        let segments: Vec<String> = path
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+        let mut current = self;
+        for seg in &segments {
+            if let Some(child) = current.children.get(seg) {
+                current = child;
+            } else {
+                return vec![];
+            }
+        }
+        current.child_names()
+    }
+    
+    /// List endpoints at a given path - traverses directly without find_handler
+    ///
+    /// Works even without endpoint at the path (like Linux directories).
+    pub fn list_endpoints_at(&self, path: &str) -> Vec<EndpointInfo> {
+        let segments: Vec<String> = path
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+        let mut current = self;
+        for seg in &segments {
+            if let Some(child) = current.children.get(seg) {
+                current = child;
+            } else {
+                return vec![];
+            }
+        }
+        current.endpoint_names()
+    }
+    
     /// Get all endpoints at this node and in children
     pub fn endpoint_names(&self) -> Vec<EndpointInfo> {
         let mut endpoints = Vec::new();
@@ -91,19 +137,23 @@ impl Node {
     /// Get all leaf paths (nodes with endpoint but no children)
     pub fn leaf_paths(&self) -> Vec<String> {
         let mut paths = Vec::new();
-        
+
         if self.endpoint.is_some() && self.children.is_empty() {
             paths.push(self.path.clone());
         }
-        
+
         for (name, child) in &self.children {
             let mut child_leaves = child.leaf_paths();
             for path in &mut child_leaves {
-                *path = format!("{}/{}", self.path, name);
+                *path = if self.path == "/" {
+                    format!("/{}", name)
+                } else {
+                    format!("{}/{}", self.path, name)
+                };
                 paths.push(path.clone());
             }
         }
-        
+
         paths
     }
     
@@ -121,7 +171,7 @@ impl Node {
 /// Tree structure for routing - contains the root node.
 #[allow(dead_code)]
 pub struct Tree {
-    root: Node,
+    pub root: Node,
 }
 
 impl fmt::Debug for Tree {
@@ -186,7 +236,7 @@ impl Tree {
     /// Returns the endpoint and the matched path
     pub fn find_handler(&self, path: &str) -> Option<(Arc<Mutex<Box<dyn Endpoint>>>, &str)> {
         if path == "/" {
-            return self.root.endpoint.as_ref().map(|e| (e.clone(), ""));
+            return self.root.endpoint.as_ref().map(|e| (e.clone(), "/"));
         }
         
         let segments = path_segments(path);
@@ -207,43 +257,70 @@ impl Tree {
         current.endpoint.as_ref().map(|e| (e.clone(), handler_path))
     }
     
-    /// List child nodes at a given path
+    /// List child nodes at a given path using direct tree traversal.
+    ///
+    /// Unlike `find_handler()`, this works even without an endpoint at the path,
+    /// making "/" and other directories traversable like Linux directories.
+    ///
+    /// # Example
+    /// ```
+    /// let tree = Tree::new();
+    /// tree.add_endpoint("/shell", Box::new(RemoteShell::new("shell")));
+    /// let names = tree.list_nodes("/").unwrap();  // ["shell"]
+    /// ```
     pub fn list_nodes(&self, path: &str) -> Result<Vec<String>, String> {
-        let (_, matched_path) = self.find_handler(path)
-            .ok_or_else(|| format!("path not found: {}", path))?;
-        
-        let segments = path_segments(matched_path);
-        let mut current = &self.root;
-        
-        for segment in &segments {
-            if let Some(child) = current.children.get(segment) {
-                current = child;
-            }
-        }
-        
-        Ok(current.child_names())
+        // Use direct traversal - works without endpoint
+        let names = self.root.list_nodes_at(path);
+        Ok(names)
     }
     
-    /// List all endpoints at a given path
+    /// List all endpoints at a given path.
+    ///
+    /// Works even without endpoint at the path.
     pub fn list_endpoints(&self, path: &str) -> Result<Vec<EndpointInfo>, String> {
-        let (_, matched_path) = self.find_handler(path)
-            .ok_or_else(|| format!("path not found: {}", path))?;
-        
-        let segments = path_segments(matched_path);
-        let mut current = &self.root;
-        
-        for segment in &segments {
-            if let Some(child) = current.children.get(segment) {
-                current = child;
-            }
-        }
-        
-        Ok(current.endpoint_names())
+        let endpoints = self.root.list_endpoints_at(path);
+        Ok(endpoints)
     }
     
-    /// List all leaf paths in the tree
+    /// List all leaf paths in the tree.
     pub fn list_leaves(&self) -> Vec<String> {
         self.root.leaf_paths()
+    }
+
+    /// List child nodes at a given path - traverses directly without find_handler
+    pub fn list_nodes_at(&self, path: &str) -> Vec<String> {
+        let segments: Vec<String> = path
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+        let mut current = &self.root;
+        for seg in &segments {
+            if let Some(child) = current.children.get(seg) {
+                current = child;
+            } else {
+                return vec![];
+            }
+        }
+        current.child_names()
+    }
+
+    /// List endpoints at a given path - traverses directly without find_handler
+    pub fn list_endpoints_at(&self, path: &str) -> Vec<EndpointInfo> {
+        let segments: Vec<String> = path
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+        let mut current = &self.root;
+        for seg in &segments {
+            if let Some(child) = current.children.get(seg) {
+                current = child;
+            } else {
+                return vec![];
+            }
+        }
+        current.endpoint_names()
     }
     
     /// Get information about a node at the given path

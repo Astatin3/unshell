@@ -114,9 +114,17 @@ impl Cli {
     ///
     /// # Returns
     /// List of child node names
-    pub fn list_nodes(&self, path: Option<&str>) -> Result<Vec<String>, String> {
-        let path = path.unwrap_or(&self.current_path);
-        self.tree.list_nodes(path)
+    pub fn list_nodes(&mut self, path: Option<&str>) -> Result<Vec<String>, String> {
+        let path = path.map(|p| p.to_string()).unwrap_or_else(|| self.current_path.clone());
+        if self.is_connected() && self.is_remote_path(&path) {
+            let response = self.send_request(&path, &TreeRequest::ListNodes {})?;
+            match response {
+                TreeResponse::NodeList { names } => Ok(names),
+                _ => Err("unexpected response type".to_string()),
+            }
+        } else {
+            self.tree.list_nodes(&path)
+        }
     }
 
     /// List endpoints at a path.
@@ -124,21 +132,80 @@ impl Cli {
     /// # Arguments
     /// * `path` - Optional path (defaults to current path)
     pub fn list_endpoints(
-        &self,
+        &mut self,
         path: Option<&str>,
     ) -> Result<Vec<crate::protocol::EndpointInfo>, String> {
-        let path = path.unwrap_or(&self.current_path);
-        self.tree.list_endpoints(path)
+        let path = path.map(|p| p.to_string()).unwrap_or_else(|| self.current_path.clone());
+        if self.is_connected() && self.is_remote_path(&path) {
+            let response = self.send_request(&path, &TreeRequest::ListEndpoints {})?;
+            match response {
+                TreeResponse::EndpointList { endpoints } => Ok(endpoints),
+                _ => Err("unexpected response type".to_string()),
+            }
+        } else {
+            self.tree.list_endpoints(&path)
+        }
     }
 
     /// List all leaf paths.
-    pub fn list_leaves(&self) -> Vec<String> {
-        self.tree.list_leaves()
+    pub fn list_leaves(&mut self) -> Vec<String> {
+        if self.is_connected() {
+            let response = match self.send_request("/", &TreeRequest::ListLeaves {}) {
+                Ok(r) => r,
+                Err(_) => return self.tree.list_leaves(),
+            };
+            match response {
+                TreeResponse::LeafList { leaves } => leaves.into_iter().map(|p| self.normalize_path(&p)).collect(),
+                _ => self.tree.list_leaves(),
+            }
+        } else {
+            self.tree.list_leaves()
+        }
     }
 
     /// Get info about a node.
-    pub fn get_info(&self, path: &str) -> Result<crate::protocol::NodeInfo, String> {
-        self.tree.get_info(path)
+    pub fn get_info(&mut self, path: &str) -> Result<crate::protocol::NodeInfo, String> {
+        let path_owned = path.to_string();
+        if self.is_connected() && self.is_remote_path(&path_owned) {
+            let response = self.send_request(&path_owned, &TreeRequest::GetInfo { path: path_owned.clone() })?;
+            match response {
+                TreeResponse::NodeInfo { info } => Ok(info),
+                _ => Err("unexpected response type".to_string()),
+            }
+        } else {
+            self.tree.get_info(path)
+        }
+    }
+
+    /// Check if a path is a remote path (not local).
+    ///
+    /// A path is remote if it's not the base_path assigned to this client.
+    fn is_remote_path(&self, path: &str) -> bool {
+        path != self.base_path && !path.starts_with(&self.base_path)
+    }
+
+    /// Normalize a path by removing double slashes.
+    ///
+    /// # Example
+    /// ```
+    /// assert_eq!(normalize_path("//shell"), "/shell");
+    /// assert_eq!(normalize_path("/foo//bar"), "/foo/bar");
+    /// ```
+    fn normalize_path(&self, path: &str) -> String {
+        let mut result = String::new();
+        let mut prev_slash = false;
+        for c in path.chars() {
+            if c == '/' {
+                if !prev_slash {
+                    result.push(c);
+                }
+                prev_slash = true;
+            } else {
+                result.push(c);
+                prev_slash = false;
+            }
+        }
+        result
     }
 
     /// Execute a command locally on the tree.

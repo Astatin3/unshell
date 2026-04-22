@@ -1,0 +1,14 @@
+[package]
+name = "no-alloc-network-test"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+include.workspace = true
+
+[dependencies]
+libc = "0.2"
+
+[lints]
+workspace = true

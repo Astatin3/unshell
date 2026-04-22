@@ -27,7 +27,7 @@ members = [
 
     # Libraries
     "ush-obfuscate",
-    "base62",
+    "base62", "no-alloc-network-test",
 ]
 resolver = "2"
 

@@ -3,12 +3,16 @@
 //! This module provides the server functionality for handling incoming connections.
 
 use crate::protocol::{
-    FrameHeader, FrameType, TreeRequest, TreeResponse, TcpTransport, Transport,
+    FrameHeader, FrameType, Handshake, TreeRequest, TreeResponse, TcpTransport, Transport,
     make_response, make_handshake_ack,
 };
 use crate::tree::Tree;
-use crate::leaves::{RemoteShell, TTY};
+use crate::leaves::{ProxyEndpoint, RemoteShell, TTY};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
+
+/// Global client counter for assigning unique base paths.
+static CLIENT_COUNT: AtomicU32 = AtomicU32::new(0);
 
 /// Default listening address for the server.
 ///
@@ -38,6 +42,7 @@ pub fn run_server(addr: &str) -> ! {
     let tree = Arc::new(Mutex::new(Tree::new()));
     {
         let mut tree = tree.lock().unwrap();
+        tree.add_endpoint("/", Box::new(ProxyEndpoint::new_empty("proxy")));
         tree.add_endpoint("/shell", Box::new(RemoteShell::new("shell")));
         tree.add_endpoint("/tty", Box::new(TTY::new("tty")));
     }
@@ -70,7 +75,7 @@ pub fn run_server(addr: &str) -> ! {
 /// * `transport` - The TCP transport for the connection
 /// * `tree` - Shared access to the tree
 pub fn handle_connection(mut transport: TcpTransport, tree: Arc<Mutex<Tree>>) {
-    let (header, _payload) = match transport.recv_frame() {
+    let (header, payload) = match transport.recv_frame() {
         Ok(h) => h,
         Err(e) => {
             log::error!("recv error: {:?}", e);
@@ -85,7 +90,28 @@ pub fn handle_connection(mut transport: TcpTransport, tree: Arc<Mutex<Tree>>) {
 
     log::info!("Client connected");
 
-    let (ack_header, ack_payload) = make_handshake_ack(true, "/client");
+    let base_path = if payload.is_empty() {
+        let client_num = CLIENT_COUNT.fetch_add(1, Ordering::SeqCst);
+        format!("/client_{}", client_num)
+    } else {
+        let handshake = match Handshake::from_bytes(&payload) {
+            Ok(h) => h,
+            Err(e) => {
+                log::error!("handshake parse error: {}", e);
+                return;
+            }
+        };
+        let client_num = CLIENT_COUNT.fetch_add(1, Ordering::SeqCst);
+        if handshake.registered_paths.is_empty() {
+            format!("/client_{}", client_num)
+        } else {
+            handshake.registered_paths.first().cloned().unwrap_or_else(|| {
+                format!("/client_{}", client_num)
+            })
+        }
+    };
+
+    let (ack_header, ack_payload) = make_handshake_ack(true, &base_path);
     transport.send_frame(&ack_header, Some(&ack_payload)).expect("send failed");
 
     loop {
@@ -168,11 +194,11 @@ pub fn handle_frame(
 
             let response = match request {
                 TreeRequest::ListNodes {} => {
-                    let names = tree.list_nodes(dst_path).unwrap_or_default();
+                    let names = tree.list_nodes_at(dst_path);
                     TreeResponse::NodeList { names }
                 }
                 TreeRequest::ListEndpoints {} => {
-                    let endpoints = tree.list_endpoints(dst_path).unwrap_or_default();
+                    let endpoints = tree.list_endpoints_at(dst_path);
                     TreeResponse::EndpointList { endpoints }
                 }
                 TreeRequest::ListLeaves {} => {
