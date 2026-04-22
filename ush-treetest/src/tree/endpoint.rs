@@ -5,11 +5,12 @@
 
 use crate::protocol::{TreeRequest, TreeResponse, EndpointType};
 use std::string::String;
+use std::fmt;
 
 /// Endpoint trait - implemented by all leaf handlers in the tree
 /// 
 /// This trait is object-safe and must be Send + Sync to allow sharing across threads.
-pub trait Endpoint: Send + Sync {
+pub trait Endpoint: Send + Sync + fmt::Debug {
     /// Handle a request and return a response
     fn handle_request(&mut self, request: &TreeRequest, src_path: &str) -> Result<TreeResponse, String>;
     

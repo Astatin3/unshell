@@ -14,14 +14,24 @@ use std::vec::Vec;
 use std::boxed::Box;
 use std::result::Result;
 use std::sync::{Arc, Mutex};
+use std::fmt;
 
-/// A node in the tree - contains an optional endpoint and child nodes
+/// A node in the tree - contains an optional endpoint and child nodes.
 pub struct Node {
-    endpoint: Option<Arc<Mutex<Box<dyn Endpoint>>>>,
+    endpoint: Option<Arc<Mutex<Box<dyn Endpoint + 'static>>>>,
     children: BTreeMap<String, Node>,
     streams: BTreeMap<u16, Stream>,
     next_stream_id: u16,
     path: String,
+}
+
+impl fmt::Debug for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Node")
+            .field("path", &self.path)
+            .field("children", &self.children.keys().cloned().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 impl Node {
@@ -108,9 +118,18 @@ impl Node {
     }
 }
 
-/// Tree structure for routing - contains the root node
+/// Tree structure for routing - contains the root node.
+#[allow(dead_code)]
 pub struct Tree {
     root: Node,
+}
+
+impl fmt::Debug for Tree {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tree")
+            .field("root", &self.root.path)
+            .finish()
+    }
 }
 
 impl Tree {

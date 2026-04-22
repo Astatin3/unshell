@@ -8,19 +8,29 @@ use crate::tree::Endpoint;
 use std::boxed::Box;
 use std::result::Result;
 use std::collections::HashMap;
+use std::fmt;
 
-/// A PTY session - represents an active terminal session
+/// A PTY session - represents an active terminal session.
 #[allow(dead_code)]
-pub struct PtySession { 
+pub struct PtySession {
     /// Stream ID for this session
-    pub stream_id: u16, 
+    pub stream_id: u16,
     /// Master file descriptor for the PTY
-    pub master: std::os::unix::io::RawFd, 
+    pub master: std::os::unix::io::RawFd,
     /// Child process PID
-    pub child_pid: u32 
+    pub child_pid: u32,
 }
 
-/// TTY endpoint - provides PTY streaming functionality
+impl fmt::Debug for PtySession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PtySession")
+            .field("stream_id", &self.stream_id)
+            .field("child_pid", &self.child_pid)
+            .finish()
+    }
+}
+
+/// TTY endpoint - provides PTY streaming functionality.
 pub struct TTY {
     name: String,
     sessions: HashMap<u16, Box<PtySession>>,
@@ -28,146 +38,149 @@ pub struct TTY {
     next_id: u16,
 }
 
+impl fmt::Debug for TTY {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TTY")
+            .field("name", &self.name)
+            .field("sessions", &self.sessions.len())
+            .finish()
+    }
+}
+
 impl TTY {
-    /// Create a new TTY endpoint
+    /// Create a new TTY endpoint.
+    ///
+    /// # Arguments
+    /// * `name` - The name for this endpoint
     pub fn new(name: &str) -> Self {
-        Self { 
-            name: name.to_string(), 
-            sessions: HashMap::new(), 
-            next_id: 1 
+        Self {
+            name: name.to_string(),
+            sessions: HashMap::new(),
+            next_id: 1,
         }
     }
-    
-    /// Open a new PTY session
-    /// 
+
+    /// Open a new PTY session.
+    ///
     /// # Arguments
     /// * `stream_id` - The stream ID for this session
-    /// 
+    ///
     /// # Returns
     /// Ok(()) on success, Err(message) on failure
     fn open_pty(&mut self, stream_id: u16) -> Result<(), String> {
-        // Open PTY master - must be unsafe
         let master = unsafe { libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
-        if master < 0 { 
-            return Err("failed to open PTY".to_string()); 
+        if master < 0 {
+            return Err("failed to open PTY".to_string());
         }
-        
-        // Grant PTY access - unsafe
-        if unsafe { libc::grantpt(master) } != 0 { 
-            unsafe { libc::close(master); }
-            return Err("failed to grant PTY".to_string()); 
+
+        if unsafe { libc::grantpt(master) } != 0 {
+            unsafe { libc::close(master) };
+            return Err("failed to grant PTY".to_string());
         }
-        
-        // Unlock PTY - unsafe
-        if unsafe { libc::unlockpt(master) } != 0 { 
-            unsafe { libc::close(master); }
-            return Err("failed to unlock PTY".to_string()); 
+
+        if unsafe { libc::unlockpt(master) } != 0 {
+            unsafe { libc::close(master) };
+            return Err("failed to unlock PTY".to_string());
         }
-        
-        // Get slave name - unsafe but returns pointer we need to check
+
         let slave_name = unsafe {
             let ptr = libc::ptsname(master);
-            if ptr.is_null() { 
-                libc::close(master); 
-                return Err("failed to get PTY name".to_string()); 
+            if ptr.is_null() {
+                libc::close(master);
+                return Err("failed to get PTY name".to_string());
             }
             std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
         };
-        
-        // Fork - unsafe
+
         let pid = unsafe { libc::fork() };
-        if pid < 0 { 
-            unsafe { libc::close(master); }
-            return Err("fork failed".to_string()); 
+        if pid < 0 {
+            unsafe { libc::close(master) };
+            return Err("fork failed".to_string());
         }
-        
+
         if pid == 0 {
-            // Child process - set up slave PTY and exec shell
-            unsafe { libc::close(master); }
-            
-            let slave = unsafe { libc::open(slave_name.as_ptr() as *const libc::c_char, libc::O_RDWR) };
-            if slave < 0 { 
-                unsafe { libc::exit(1); }
+            unsafe { libc::close(master) };
+
+            let slave = unsafe {
+                libc::open(slave_name.as_ptr() as *const libc::c_char, libc::O_RDWR)
+            };
+            if slave < 0 {
+                unsafe { libc::exit(1) };
             }
-            
-            // Set controlling terminal - unsafe
-            unsafe { libc::ioctl(slave, libc::TIOCSCTTY, 0); }
-            
-            // Redirect stdio - unsafe
-            unsafe { 
-                libc::dup2(slave, libc::STDIN_FILENO); 
-                libc::dup2(slave, libc::STDOUT_FILENO); 
-                libc::dup2(slave, libc::STDERR_FILENO); 
-                libc::close(slave); 
+
+            unsafe { libc::ioctl(slave, libc::TIOCSCTTY, 0) };
+
+            unsafe {
+                libc::dup2(slave, libc::STDIN_FILENO);
+                libc::dup2(slave, libc::STDOUT_FILENO);
+                libc::dup2(slave, libc::STDERR_FILENO);
+                libc::close(slave);
             }
-            
-            // Exec shell - unsafe
-            unsafe { 
+
+            unsafe {
                 libc::execl(
-                    "/bin/sh\0".as_ptr() as *const libc::c_char, 
-                    "sh\0".as_ptr() as *const libc::c_char, 
-                    std::ptr::null::<libc::c_char>()
+                    "/bin/sh\0".as_ptr() as *const libc::c_char,
+                    "sh\0".as_ptr() as *const libc::c_char,
+                    std::ptr::null::<libc::c_char>(),
                 );
             }
-            
-            // If exec fails, exit
-            unsafe { libc::exit(1); }
+
+            unsafe { libc::exit(1) };
         }
-        
-        // Parent - store session
-        self.sessions.insert(stream_id, Box::new(PtySession { 
-            stream_id, 
-            master, 
-            child_pid: pid as u32 
+
+        self.sessions.insert(stream_id, Box::new(PtySession {
+            stream_id,
+            master,
+            child_pid: pid as u32,
         }));
         Ok(())
     }
-    
-    /// Write data to a PTY session
-    /// 
+
+    /// Write data to a PTY session.
+    ///
     /// # Arguments
     /// * `stream_id` - The stream ID
     /// * `data` - The data to write
-    /// 
+    ///
     /// # Returns
     /// Ok(()) on success, Err(message) on failure
     fn write_to_pty(&mut self, stream_id: u16, data: &[u8]) -> Result<(), String> {
         let session = self.sessions.get_mut(&stream_id).ok_or("session not found")?;
-        let written = unsafe { 
+        let written = unsafe {
             libc::write(
-                session.master, 
-                data.as_ptr() as *const libc::c_void, 
-                data.len()
-            ) 
+                session.master,
+                data.as_ptr() as *const libc::c_void,
+                data.len(),
+            )
         };
-        if written < 0 { 
-            return Err("write failed".to_string()); 
+        if written < 0 {
+            return Err("write failed".to_string());
         }
         Ok(())
     }
-    
-    /// Close a PTY session
-    /// 
+
+    /// Close a PTY session.
+    ///
     /// # Arguments
     /// * `stream_id` - The stream ID to close
     fn close_pty(&mut self, stream_id: u16) {
         if let Some(session) = self.sessions.remove(&stream_id) {
-            // Send SIGTERM to child - unsafe
-            unsafe { libc::kill(session.child_pid as i32, libc::SIGTERM); }
-            
-            // Wait for child - unsafe
+            unsafe { libc::kill(session.child_pid as i32, libc::SIGTERM) };
+
             let mut status: libc::c_int = 0;
-            unsafe { libc::waitpid(session.child_pid as i32, &mut status, 0); }
-            
-            // Close master - unsafe
-            unsafe { libc::close(session.master); }
+            unsafe { libc::waitpid(session.child_pid as i32, &mut status, 0) };
+
+            unsafe { libc::close(session.master) };
         }
     }
 }
 
 impl Endpoint for TTY {
-    /// Handle a request - TTY only supports exec for basic commands
-    fn handle_request(&mut self, request: &TreeRequest, _src_path: &str) -> Result<TreeResponse, String> {
+    fn handle_request(
+        &mut self,
+        request: &TreeRequest,
+        _src_path: &str,
+    ) -> Result<TreeResponse, String> {
         match request {
             TreeRequest::Exec { cmd } => {
                 use std::process::{Command, Stdio};
@@ -177,39 +190,42 @@ impl Endpoint for TTY {
                     .stderr(Stdio::piped())
                     .output()
                     .map_err(|e| e.to_string())?;
-                Ok(TreeResponse::ExecOutput { 
-                    exit_code: output.status.code().unwrap_or(-1), 
-                    stdout: output.stdout, 
-                    stderr: output.stderr 
+                Ok(TreeResponse::ExecOutput {
+                    exit_code: output.status.code().unwrap_or(-1),
+                    stdout: output.stdout,
+                    stderr: output.stderr,
                 })
             }
             _ => Err("use stream for TTY".to_string()),
         }
     }
-    
-    /// Handle stream open - creates a new PTY session
-    fn on_stream_open(&mut self, stream_id: u16, _src_path: &str) -> Option<u16> {
+
+    fn on_stream_open(
+        &mut self,
+        stream_id: u16,
+        _src_path: &str,
+    ) -> Option<u16> {
         self.open_pty(stream_id).ok().map(|_| stream_id)
     }
-    
-    /// Handle stream data - writes to PTY
-    fn on_stream_data(&mut self, stream_id: u16, data: &[u8]) -> bool {
+
+    fn on_stream_data(
+        &mut self,
+        stream_id: u16,
+        data: &[u8],
+    ) -> bool {
         self.write_to_pty(stream_id, data).ok();
         true
     }
-    
-    /// Handle stream close - closes PTY session
-    fn on_stream_close(&mut self, stream_id: u16) { 
-        self.close_pty(stream_id); 
+
+    fn on_stream_close(&mut self, stream_id: u16) {
+        self.close_pty(stream_id);
     }
-    
-    /// Get endpoint type
-    fn endpoint_type(&self) -> EndpointType { 
-        EndpointType::Stream 
+
+    fn endpoint_type(&self) -> EndpointType {
+        EndpointType::Stream
     }
-    
-    /// Get endpoint name
-    fn name(&self) -> &str { 
-        &self.name 
+
+    fn name(&self) -> &str {
+        &self.name
     }
 }
