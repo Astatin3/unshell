@@ -1,8 +1,8 @@
 # UnShell Network Protocol Specification
 
-**Version:** 0.1.0  
+**Version:** 0.2.0  
 **Status:** Draft — implementation in progress  
-**Last updated:** 2026-04-20
+**Last updated:** 2026-04-21
 
 ---
 
@@ -30,66 +30,78 @@ address on the envelope and delivers the contents without opening them.
 
 ## Design Goals
 
-1. **Minimal footprint on the payload.** The payload binary must stay small. The
-   protocol must work in a `no_std + alloc` environment.
+1. **Shallow protocol, deep functionality.** The base protocol is minimal. Complexity comes
+   from APIs stacked on top (RESTful paths, modules), not from the wire format.
 
-2. **Transport independence.** TCP is the first transport, but the protocol must not
+2. **Two communication patterns.** One-time events (request/response) and streams
+   (bidirectional channels) — not one-size-fits-all.
+
+3. **Transport independence.** TCP is the first transport, but the protocol must not
    assume TCP. HTTPS, ICMP, and other transports will be added later. The protocol
    layer sits above the transport layer via a `Transport` trait.
 
-3. **Router-opaque payloads.** The router only reads the packet header (destination
-   path, source path, packet type). The payload body is forwarded as opaque bytes.
-   This means the protocol can evolve without touching router code.
+4. **No explicit node types.** Nodes are identified by registered paths, not by type.
+   This allows flexible deployment (implant, operator, relay, tunnel endpoint).
 
-4. **Forward compatibility.** Adding new fields to message types must not break
+5. **Forward compatibility.** Adding new fields to message types must not break
    existing implementations. Use rkyv's archived format, which supports this.
 
-5. **Operator experience.** The operator CLI is a first-class node, not a special
-   client. It connects and registers like any payload, just with a terminal attached.
+6. **Detection-aware.** The handshake is kept simple. For stealth, swap in an
+   encrypted transport (HTTPS, custom obfs) without changing the protocol.
 
 ---
 
-## Node Types
+## Fundamental Design
+
+The UnShell protocol has **two communication patterns**:
+
+1. **One-time events** — Request → Response, reliable, stateless on router
+2. **Streams** — Open → Bidirectional data flow → Close, persistent, fastpath routing
+
+This mirrors HTTP (request/response) and WebSockets/VPNs (persistent streams).
+
+### No Explicit Node Types
+
+The protocol does not distinguish between payloads, operators, or routers.
+Nodes are identified by their **registered paths**, not their type.
+
+**Recommended path conventions** (not required):
+- `/agents/<node_id>/` — for implants
+- `/operator/<session_id>/` — for CLI sessions
+- `/router/` — for built-in router endpoints
+- `/tunnel/<name>/` — for stream endpoints
+
+The complexity comes from **APIs stacked on top**, not from the protocol itself.
+This is intentional — the protocol is shallow; the functionality is in the routes.
 
 ```
 ┌─────────────────┐    ┌─────────────────────────────────────────────┐
-│   Payload Node  │    │             Router Node                      │
-│                 │    │                                              │
-│  - Registers at │    │  - Accepts TCP from all node types           │
-│    /agents/<id> │    │  - Maintains: node_id → (paths, tx_channel) │
-│  - Hosts modules│    │  - Routes packets by longest-prefix match    │
-│    as endpoints │    │  - Has own endpoints at /router/...          │
-│  - no_std + alloc│   │  - NO application logic beyond routing      │
+│   Implant Node  │    │             Router Node                     │
+│                 │    │                                             │
+│  - Connects to  │    │  - Accepts TCP from any node                │
+│    router       │    │  - Routes by path prefix match              │
+│  - Registers    │    │  - Routes by stream_id for fastpath         │
+│    paths        │    │  - NO application logic beyond routing      │
+│  - Hosts API    │    │  - Has /router/ endpoints                   │
 └────────┬────────┘    └─────────────────────────────────────────────┘
-         │ TCP (reverse connect: payload → router)
-         │
+          │ TCP
+          │
 ┌────────▼────────┐
 │  Operator Node  │
 │  (ush-cli)      │
 │                 │
-│  - Registers at │
-│    /operator/<n>│
+│  - Connects to  │
+│    router       │
+│  - Registers    │
+│    paths        │
 │  - Interactive  │
 │    REPL shell   │
-│  - Issues Tree  │
-│    Requests to  │
-│    any path     │
 └─────────────────┘
 ```
 
-**Path conventions:**
-- Payload nodes: `/agents/<node_id>/` prefix (e.g., `/agents/abc123/shell/exec`)
-- Operator nodes: `/operator/<session_id>/` prefix
-- Router built-ins: `/router/` prefix (e.g., `/router/nodes`, `/router/ping`)
-
-**NodeType enum (v1):**
-```rust
-pub enum NodeType {
-    Payload,
-    Operator,
-    // Router variant added when multi-hop/pivoting is implemented
-}
-```
+**NodeType enum (DEPRECATED):**
+Removed in v0.2.0. Nodes are identified by paths, not types.
+Existing implementations should ignore or omit this field.
 
 ---
 
@@ -102,15 +114,34 @@ Every transmission uses a **two-part framed message**:
 │  Part 1: Header                          │  Part 2: Payload          │
 │                                          │                           │
 │  [u32 big-endian length]                 │  [u32 big-endian length]  │
-│  [rkyv-serialised PacketHeader bytes]    │  [rkyv payload bytes]     │
+│  [rkyv-serialised FrameHeader bytes]     │  [rkyv payload bytes]    │
 │                                          │                           │
 │  Router reads this to determine routing  │  Router forwards opaque   │
 └──────────────────────────────────────────┴───────────────────────────┘
 ```
 
 Both length fields are **big-endian `u32`**, so the maximum frame size is ~4GB per
-part. In practice, packets should be much smaller. A future streaming extension will
-allow chunked payloads for large data transfers.
+part. In practice, packets should be much smaller.
+
+### Two Communication Patterns
+
+The protocol supports two distinct patterns:
+
+**1. One-time Events (Request/Response):**
+- Client sends `FrameType::Request` with `dst_path` and `request_id`
+- Router routes by longest-prefix match on `dst_path`
+- Server responds with `FrameType::Response` with same `request_id`
+- Reliable, stateless, exactly-once semantics via request_id
+
+**2. Streams (Bidirectional Channels):**
+- Client sends `FrameType::StreamOpen` with `dst_path`
+- Router assigns `stream_id` (u16), registers in stream table, responds
+- Subsequent frames use `FrameType::StreamData` or `StreamClose` with `stream_id`
+- Router uses **fastpath**: looks up `stream_id` → node directly, no path matching
+- Bidirectional: both sides can send `StreamData` frames
+- Clean close: either side sends `StreamClose`, router cleans up
+
+This mirrors HTTP (request/response) and WebSockets/VPN tunnels (persistent streams).
 
 ### Why two parts?
 
@@ -120,39 +151,57 @@ separate header, the router deserialises only the small header (typically < 100 
 and forwards the payload bytes untouched. This is efficient and keeps the protocol
 transport-agnostic at the router level.
 
-### PacketHeader
+### FrameHeader
 
 ```rust
-/// The packet header that every node sends before the payload.
-/// The router reads ONLY this to determine routing.
-/// The payload body is opaque to the router.
+/// The frame header that every frame starts with.
+/// For events: router reads dst_path for routing.
+/// For streams: router reads stream_id for fastpath routing.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct PacketHeader {
-    /// Destination path in the global tree.
-    /// The router does a longest-prefix match against registered node paths.
-    /// Example: "/agents/abc123/shell/exec"
-    pub dst_path: String,
+pub struct FrameHeader {
+    /// Frame type: REQUEST, RESPONSE, STREAM_OPEN, STREAM_DATA, STREAM_CLOSE
+    pub frame_type: FrameType,
 
-    /// Source path of the sending node.
-    /// Used by the destination to know where to send the response.
-    /// Example: "/operator/sess1"
+    /// Destination path for REQUEST and STREAM_OPEN.
+    /// Ignored for RESPONSE (uses src_path from request) and STREAM_DATA/CLOSE (uses stream_id).
+    pub dst_path: Option<String>,
+
+    /// Source path of the sender.
+    /// Used by the destination to know where to send responses.
     pub src_path: String,
 
-    /// Discriminates between handshake and protocol messages.
-    pub packet_type: PacketType,
+    /// Request ID for correlation (REQUEST/RESPONSE pairs).
+    /// None for stream frames.
+    pub request_id: Option<u64>,
+
+    /// Stream ID for fastpath routing (STREAM_DATA, STREAM_CLOSE).
+    /// None for REQUEST/RESPONSE.
+    pub stream_id: Option<u16>,
 }
 
-/// Discriminates the payload type so the receiver knows how to deserialise it.
+/// Discriminates between the two communication patterns.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum PacketType {
-    /// Sent by a newly connected node to register itself.
-    Handshake,
-    /// Sent by the router in response to a handshake.
-    HandshakeAck,
-    /// An application-level request (the main protocol message).
-    Request,
-    /// An application-level response.
-    Response,
+pub enum FrameType {
+    /// One-time event: request from client.
+    Request = 0x01,
+
+    /// One-time event: response from server.
+    Response = 0x02,
+
+    /// Stream: open a persistent bidirectional channel.
+    StreamOpen = 0x03,
+
+    /// Stream: data over an established stream (fastpath).
+    StreamData = 0x04,
+
+    /// Stream: close an established stream.
+    StreamClose = 0x05,
+
+    /// Legacy: sent by a newly connected node to register itself.
+    Handshake = 0x10,
+
+    /// Legacy: router's response to handshake.
+    HandshakeAck = 0x11,
 }
 ```
 
@@ -166,33 +215,32 @@ application layer, not at the wire level.
 
 ## Handshake Protocol
 
-When any node connects to the router, it must complete a handshake before sending
-application messages. The handshake registers the node's identity and the paths it
-owns.
+A minimal registration handshake to tell the router which paths this node owns.
 
 ```
 Node                         Router
  │                              │
  │──── TCP connect ────────────>│
  │                              │
- │──── HandshakeMessage ───────>│  (PacketType::Handshake)
- │     node_id: "abc123"        │
- │     node_type: Payload       │
+ │──── Handshake ──────────────>│  (FrameType::Handshake)
  │     registered_paths: [...]  │
- │     platform: "linux-x86_64" │
  │                              │
- │<─── HandshakeAck ────────────│  (PacketType::HandshakeAck)
+ │<─── HandshakeAck ────────────│  (FrameType::HandshakeAck)
  │     accepted: true           │
- │     assigned_base_path: "..." │
+ │     assigned_base_path: "..."│
  │                              │
  │  [now registered, can send   │
- │   and receive Requests]      │
+ │   and receive frames]        │
 ```
+
+**Design note:** The handshake is kept simple to minimize detection surface.
+However, the pattern (length-prefixed frames after TCP connect) is detectable.
+For stealth, use an encrypted transport layer (see Transport section).
 
 **Handshake timeout:** If the node does not receive a `HandshakeAck` within **5
 seconds**, it closes the connection and retries.
 
-**Router timeout:** If the router does not receive a `HandshakeMessage` within **10
+**Router timeout:** If the router does not receive a `Handshake` within **10
 seconds** of a TCP connect, it closes the connection.
 
 ### HandshakeMessage
@@ -200,21 +248,10 @@ seconds** of a TCP connect, it closes the connection.
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct HandshakeMessage {
-    /// Node identifier. For payloads: baked at compile time (base62).
-    /// For operator CLI: random per session (UUID or random base62).
-    pub node_id: String,
-
-    /// Whether this node is a payload or an operator shell.
-    pub node_type: NodeType,
-
     /// The path prefixes this node owns. The router registers these.
     /// Example: ["/agents/abc123"]
     /// All sub-paths are implicitly owned by this prefix.
     pub registered_paths: Vec<String>,
-
-    /// Human-readable platform string for operator visibility.
-    /// Example: "linux-x86_64", "windows-x86_64", "operator"
-    pub platform: String,
 }
 ```
 
@@ -236,9 +273,27 @@ pub struct HandshakeAck {
 }
 ```
 
-**Rejection reasons (v1):**
-- `"duplicate_node_id"` — a node with this ID is already registered
+### HandshakeAck
+
+```rust
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct HandshakeAck {
+    /// Whether the router accepted this node's registration.
+    pub accepted: bool,
+
+    /// The canonical base path assigned by the router (usually matches
+    /// the first registered_path the node sent, but the router may adjust it).
+    /// Empty string if rejected.
+    pub assigned_base_path: String,
+
+    /// Human-readable rejection reason if accepted == false.
+    pub rejection_reason: Option<String>,
+}
+```
+
+**Rejection reasons (v0.2):**
 - `"invalid_path"` — a registered path is malformed or conflicts with a reserved prefix
+- `"duplicate_path"` — this path prefix is already registered by another node
 
 ---
 
@@ -346,7 +401,11 @@ Custom module content types should use the module name as the namespace:
 
 ## Path Routing
 
-The router uses **longest-prefix match** to route packets to nodes.
+The router uses **two routing methods**:
+
+### 1. Path-based Routing (Events)
+
+For `FrameType::Request` and `FrameType::StreamOpen`, the router does **longest-prefix match**:
 
 ```
 Registered paths:        Incoming dst_path:         Routes to:
@@ -359,7 +418,26 @@ Registered paths:        Incoming dst_path:         Routes to:
 1. Split `dst_path` by `/`, find all nodes whose `registered_paths` is a prefix of `dst_path`.
 2. Choose the node with the longest matching prefix (most specific).
 3. If no match, return a `TreeResponse { status: NoBranchError, ... }` to the sender.
-4. If multiple nodes match with equal prefix length (should not happen if registration is correct), route to the most recently registered node and log a warning.
+4. If multiple nodes match with equal prefix length, route to most recently registered.
+
+### 2. Stream ID Fastpath
+
+For `FrameType::StreamData` and `FrameType::StreamClose`, the router uses **stream ID lookup**:
+
+```
+Stream table (router):
+stream_id: u16  →  node (connection handle)
+
+Frame header:
+stream_id: 42   →  Direct lookup → node "abc123"
+```
+
+**Rules:**
+1. Router maintains a `HashMap<u16, Node>` for active streams.
+2. `StreamOpen` returns a unique `stream_id` (assigned by router).
+3. All subsequent `StreamData` frames use this `stream_id` for O(1) lookup.
+4. `StreamClose` removes the entry from the stream table.
+5. If `stream_id` not found (already closed), frame is discarded with warning.
 
 ---
 
@@ -388,19 +466,14 @@ on an engagement or in the wild.
 1. Payload's `recv()` call returns `TransportError::Disconnected` (EOF) or `TransportError::Io`.
 2. Payload closes the TcpStream, waits **5 seconds**, attempts reconnect.
 3. Router's node thread for this connection receives EOF, removes the `NodeInfo` entry from the registry, exits cleanly.
-4. Payload reconnects, sends a new `HandshakeMessage` with the **same** `node_id`.
+4. Payload reconnects, sends a new `HandshakeMessage` with the **same** `registered_paths`.
 5. Router re-registers it. The operator runs `list` and sees the payload appear again.
 
 **Operator experience:** The operator may see the payload disappear from `list` briefly
 during the reconnect window. Sessions associated with that payload become temporarily
 unresponsive. After reconnect they work again.
 
-**Failure mode:** If the payload's `node_id` was stored as persistent session state on
-the operator side, it should survive the reconnect without the operator re-typing `use`.
-
-**Protocol requirement:** The router must handle re-registration of a node ID that was
-previously registered. The old entry is already gone (thread exited), so this is a
-clean re-registration.
+**Stream impact:** Any open streams are lost on disconnect. Client must re-establish with new `StreamOpen` after reconnect.
 
 ---
 
@@ -560,22 +633,21 @@ All transports implement this interface:
 ///
 /// Implementations are responsible for framing: the two-part header+payload format
 /// described in the wire format spec. Each `send` call transmits exactly one
-/// logical packet (header + payload). Each `recv` call receives exactly one.
+/// logical frame (header + payload). Each `recv` call receives exactly one.
 ///
 /// Implementations MUST use `read_exact`-style loops (not single `read` calls)
 /// because TCP is a stream protocol and may deliver partial frames.
 ///
-/// # Example
+/// # Example (TCP)
 ///
 /// ```rust
-/// // TCP implementation skeleton
 /// impl Transport for TcpTransport {
-///     fn send(&mut self, header: &PacketHeader, payload: &[u8]) -> Result<(), TransportError> {
-///         // 1. Serialise header to bytes
+///     fn send(&mut self, header: &FrameHeader, payload: &[u8]) -> Result<(), TransportError> {
+///         // 1. Serialise header to rkyv bytes
 ///         // 2. Write [u32 header_len][header bytes][u32 payload_len][payload bytes]
 ///         // 3. Use write_all() to ensure complete write
 ///     }
-///     fn recv(&mut self) -> Result<(PacketHeader, Vec<u8>), TransportError> {
+///     fn recv(&mut self) -> Result<(FrameHeader, Vec<u8>), TransportError> {
 ///         // 1. read_exact 4 bytes → header length
 ///         // 2. read_exact N bytes → header bytes
 ///         // 3. Deserialise header
@@ -586,13 +658,13 @@ All transports implement this interface:
 /// }
 /// ```
 pub trait Transport: Send {
-    /// Send a packet (header + payload) over this transport.
+    /// Send a frame (header + payload) over this transport.
     /// Blocks until all bytes are written.
-    fn send(&mut self, header: &PacketHeader, payload: &[u8]) -> Result<(), TransportError>;
+    fn send(&mut self, header: &FrameHeader, payload: &[u8]) -> Result<(), TransportError>;
 
-    /// Receive one packet from this transport.
+    /// Receive one frame from this transport.
     /// Blocks until a complete header+payload pair is received.
-    fn recv(&mut self) -> Result<(PacketHeader, Vec<u8>), TransportError>;
+    fn recv(&mut self) -> Result<(FrameHeader, Vec<u8>), TransportError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -601,7 +673,10 @@ pub enum TransportError {
     Io(#[from] std::io::Error),
 
     #[error("frame header too large: {0} bytes (max {1})")]
-    FrameTooLarge(usize, usize),
+    HeaderTooLarge(usize, usize),
+
+    #[error("frame payload too large: {0} bytes (max {1})")]
+    PayloadTooLarge(usize, usize),
 
     #[error("connection closed cleanly")]
     Disconnected,
@@ -610,6 +685,22 @@ pub enum TransportError {
     DeserialiseError,
 }
 ```
+
+### Alternative Transports
+
+The protocol is transport-agnostic. Implementations can swap transports without
+changing protocol logic:
+
+| Transport | Use Case |
+|-----------|----------|
+| `TcpTransport` | Default, straightforward |
+| `TlsTransport` | Encrypted channel (looks like HTTPS) |
+| `HttpTransport` | Tunnel over HTTP (looks like web traffic) |
+| `DnsTransport` | Tunnel over DNS queries |
+| `IcmpTransport` | Tunnel over ICMP (looks like ping) |
+
+For stealth, use a transport that blends with legitimate traffic.
+The protocol logic remains the same — only the transport layer changes.
 
 ### Reconnect Policy
 
@@ -643,7 +734,7 @@ fields when reading older messages). This means:
 
 - New fields can be added to any message type without breaking existing implementations.
 - Removing or renaming fields IS a breaking change.
-- The `PacketType` enum should only gain variants, never lose them.
+- The `FrameType` enum should only gain variants, never lose them.
 
 When breaking changes are necessary, bump the protocol version (future: add a version
 field to the framing format).
@@ -653,13 +744,167 @@ field to the framing format).
 ## Implementation Checklist
 
 - [ ] `src/protocol/mod.rs` — re-exports all protocol types
-- [ ] `src/protocol/types.rs` — PacketHeader, PacketType, TreeRequest, TreeResponse, HandshakeMessage, HandshakeAck
+- [ ] `src/protocol/types.rs` — FrameHeader, FrameType, TreeRequest, TreeResponse, HandshakeMessage, HandshakeAck
 - [ ] `src/protocol/content_types.rs` — content type constants
-- [ ] `src/transport/mod.rs` — Transport trait, TransportError
+- [ ] `src/transport/mod.rs` — Transport trait, TransportError (add PayloadTooLarge variant)
 - [ ] `src/transport/tcp.rs` — TcpTransport implementing Transport
-- [ ] `src/tree/mod.rs` — Tree, Endpoint trait (new implementation with correct routing)
-- [ ] `ush-router/` — router binary
+- [ ] `src/tree/mod.rs` — Tree, Endpoint trait
+- [ ] `ush-router/` — router binary with stream fastpath routing
 - [ ] `ush-payload/` — payload binary with transport layer
 - [ ] `ush-cli/` — operator REPL binary
 - [ ] Unit tests for framing round-trips, tree routing correctness
 - [ ] Integration test: two nodes through a real router
+- [ ] Stream test: open stream, send data both directions, close stream
+- [ ] Alternative transport: TlsTransport (stealth mode)
+
+---
+
+## Leaf System Architecture
+
+### Terminology
+
+| Term | Definition |
+|------|------------|
+| **Tree** | The network of endpoints connected through the UnShell protocol |
+| **Endpoint** | A node connected to the tree (payload, operator, router) |
+| **Leaf** | A data object or service hosted on an endpoint |
+
+### Design Goals
+
+1. **Rich leaves, simple protocol** — The protocol stays shallow. Complexity lives in leaves.
+2. **Self-contained** — Each leaf is an object with config, state, RPC, and streams.
+3. **Composable** — Leaves can be composed; a TTY leaf might wrap a process leaf.
+
+---
+
+### Leaf Structure
+
+Every leaf has three aspects:
+
+```
+Leaf {
+  config:  Map<String, LeafValue>    // Stored configuration
+  state:   LeafState                 // Running, Stopped, Error
+  rpc:     Map<Name, Handler>        // Synchronous calls
+  streams: Map<Name, StreamHandle>   // Bidirectional data flows
+}
+```
+
+### Configuration
+
+Leaves expose configurable parameters as key-value pairs:
+
+| Type | Example | Use |
+|------|---------|-----|
+| `Int` | `rows: 24`, `cols: 80` | Dimensions, limits |
+| `Bool` | `echo: true`, `raw: false` | Mode flags |
+| `String` | `shell: "/bin/bash"`, `env: "TERM=xterm"` | Commands, env vars |
+| `Bytes` | (reserved for large config) | Certificates, keys |
+
+**RPC (Remote Procedure Call)**
+
+Synchronous request/response operations:
+
+```
+Request                              Response
+------                               --------
+start()    →                     →  { ok: true, state: Running }
+reset()    →                     →  { ok: true, state: Running }
+halt()     →                     →  { ok: true, state: Stopped }
+resize(80, 24) →                 →  { ok: true }
+config.get("rows") →              →  { value: 24 }
+config.set("cols", 120) →        →  { ok: true }
+```
+
+**Streams**
+
+Bidirectional data channels for long-lived connections:
+
+```
+Client                                                        Leaf
+  │                                                             │
+  ├───── StreamOpen(path="/tty/0/input") ────────────────────>│
+  │<──── StreamOpenAck(stream_id=42) ──────────────────────────│
+  │                                                             │
+  ├───── StreamData(stream_id=42, data="ls -la\n") ──────────>│
+  ├───── StreamData(stream_id=42, data="echo $TERM\n") ──────>│
+  │<──── StreamData(stream_id=42, data="total 12\n") ─────────│
+  │<──── StreamData(stream_id=42, data="drwxr-xr-x  2 user user 4096 Apr 21 10:30 .\n") │
+  │<──── StreamData(stream_id=42, data="xterm-256color\n") ──│
+  │                                                             │
+  ├───── StreamData(stream_id=42, data="\x03") ───────────────>│ (Ctrl+C)
+  │                                                             │
+  ├───── StreamClose(stream_id=42) ──────────────────────────>│
+```
+
+### Reference Implementation: TTY Leaf
+
+**Configuration:**
+```rust
+struct TtyConfig {
+    rows: u16,           // Terminal rows (default: 24)
+    cols: u16,           // Terminal columns (default: 80)
+    pixel_width: u16,   // Pixel width (default: 0)
+    pixel_height: u16,  // Pixel height (default: 0)
+    shell: String,      // Shell to spawn (default: "/bin/sh")
+    env: Vec<(String, String)>,  // Environment variables
+}
+```
+
+**RPC Methods:**
+| Method | Description | Returns |
+|--------|-------------|---------|
+| `start()` | Spawn PTY and begin session | `{ state: "Running", pid: u32 }` |
+| `reset()` | Kill and respawn process | `{ state: "Running", pid: u32 }` |
+| `halt()` | Kill the process | `{ state: "Stopped" }` |
+| `resize(rows, cols)` | Update PTY size | `{ ok: true }` |
+| `config.get(key)` | Get config value | `{ value: LeafValue }` |
+| `config.set(key, value)` | Set config value | `{ ok: true }` |
+| `state()` | Get current state | `{ state: LeafState, pid: Option<u32> }` |
+
+**Stream Bindings:**
+| Stream | Direction | Description |
+|--------|-----------|-------------|
+| `input` | Client → TTY | Send keystrokes to terminal |
+| `output` | TTY → Client | Receive terminal output |
+| `both` | Bidirectional | Combined input+output over single stream |
+
+---
+
+### Leaf Discovery
+
+Endpoints expose available leaves via the `GetProcedures` mechanism:
+
+```
+REQUEST dst: "/agents/abc123/"
+  request_type: GetProcedures
+  content_type: "core/Utf8String"
+  data: ""
+
+RESPONSE
+  status: Ok
+  content_type: "core/ProcedureList"
+  data: rkyv([...]) of ProcedureDescriptor:
+    - path: "/tty/0"
+      name: "tty/0"
+      description: "PTY shell session 0"
+      methods: ["start", "reset", "halt", "resize", "state", "config.get", "config.set"]
+      streams: ["input", "output", "both"]
+    - path: "/files"
+      name: "files"
+      description: "File system access"
+      methods: ["read", "write", "list"]
+      streams: []
+```
+
+---
+
+### Future Leaf Types
+
+| Leaf | Config | RPC | Streams |
+|------|--------|-----|---------|
+| **TTY** | rows, cols, shell | start, halt, resize | input, output |
+| **Process** | cmd, args, env | spawn, kill, wait | stdout, stderr |
+| **TCP Tunnel** | lport, rhost, rport | open, close, stats | tunnel |
+| **FileSystem** | root_path | read, write, list | (none) |
+| **DNS** | domain, record_type | query | (none) |

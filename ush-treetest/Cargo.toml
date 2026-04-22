@@ -1,0 +1,25 @@
+[package]
+name = "ush-treetest"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[features]
+default = ["std"]
+std = ["dep:libc"]
+alloc = []
+
+[dependencies]
+rkyv = { version = "0.7", features = ["alloc", "size_32"] }
+log = "0.4"
+env_logger = "0.11"
+libc = { version = "0.2", optional = true }
+
+[dependencies.clap]
+version = "4.5"
+features = ["derive", "env"]
+
+[profile.release]
+opt-level = 3
+lto = true
