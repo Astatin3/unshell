@@ -1,6 +1,6 @@
 # UnShell Protocol Specification
 
-**Version:** 0.6.0  
+**Version:** 0.7.0  
 **Status:** Draft  
 **Last updated:** 2026-04-23
 
@@ -8,7 +8,7 @@
 
 **Non-Normative**
 
-The UnShell protocol is a tree-addressed packet protocol for remote procedure calls, response hooks, and bidirectional streams across a hierarchy of connected endpoints.
+The UnShell protocol is a tree-addressed packet protocol for remote procedure calls and bidirectional hook-backed data exchange across a hierarchy of connected endpoints.
 
 The protocol is intended to be small, extensible, and canonical.
 
@@ -43,7 +43,7 @@ To achieve this purpose, the scope of this specification includes:
 - path-based routing behavior
 - upwards and downwards packet semantics
 - hook behavior
-- stream behavior
+- protocol fault behavior
 - the required introspection procedure
 - extension through leaves, procedures, and payload schemas
 
@@ -77,12 +77,12 @@ Leaves are hosted by endpoints.
 
 A superior endpoint issues a downwards `Call` toward a subordinate endpoint or one of its leaves.
 
-If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets upwards toward the hook host. If that hook is stream-oriented, the same `Data` packet type is also used for subsequent bidirectional stream traffic.
+If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets toward the hook host. Once a hook exists, either side MAY continue exchanging `Data` packets associated with that hook until one side terminates the interaction.
 
 The protocol therefore has two core packet roles:
 
 - `Call` for downwards invocation
-- `Data` for returned data and stream traffic
+- `Data` for returned data, protocol faults, and ongoing hook traffic
 
 This document uses the following notation for readability:
 
@@ -106,8 +106,7 @@ These notations are descriptive only. Leaves and hooks are not encoded as path s
 | Leaf | A named service or object hosted by an endpoint. |
 | Call | A downwards packet that invokes a procedure on an endpoint or leaf. |
 | Procedure | An application-defined operation identified by `procedure_id`. |
-| Hook | A response channel declared inside a `Call`. |
-| Stream | A bidirectional exchange of `Data` packets associated with a hook and a local `stream_id`. |
+| Hook | A bidirectional interaction channel declared inside a `Call` and identified by `hook_id` at the hook host. |
 | Authority | The endpoint that directly maintains a child connection at a local routing boundary. |
 | Subordinate | The lower of two endpoints in a described authority relationship. |
 | Registered | Local connection state in which a peer participates in routing. |
@@ -123,11 +122,19 @@ Leaf identity is carried in `dst_leaf`.
 
 Hook identity is carried in `hook_id`.
 
-Stream identity is carried in `stream_id`.
-
 No path prefixes are reserved by this protocol.
 
 `procedure_id` is the canonical identifier for a procedure contract. A procedure contract includes the source library or namespace, the specific procedure identity, and the expected input and output schema pair.
+
+`procedure_id` MUST use the canonical dotted form `org.product.vN.part.name`, where:
+
+- `org` identifies the owning organization or namespace root
+- `product` identifies the product or system namespace
+- `vN` identifies the contract version, where `N` is a positive integer written in decimal form
+- `part` identifies the subsystem, leaf family, or functional area
+- `name` identifies the exact procedure or payload contract name
+
+Each segment MUST be non-empty. Implementations SHOULD restrict segments to lowercase ASCII letters, digits, and underscores for portability. The version segment MUST appear exactly in the third position.
 
 The same `procedure_id` is used on both `Call` and `Data` packets.
 
@@ -145,7 +152,7 @@ At a local routing boundary:
 
 - a `Call` packet MUST be accepted only if it arrives from the direct parent connection permitted to issue downwards calls into the destination subtree represented by that boundary
 - a `Call` packet that violates that rule MUST be dropped silently
-- a `Data` packet MAY arrive from either direction if it belongs to a valid hook or stream flow and routes correctly by path
+- a `Data` packet MAY arrive from either direction if it belongs to a valid hook flow and routes correctly by path
 
 This protocol does not define a protocol-level authority error packet.
 
@@ -162,11 +169,11 @@ While a connection is `Unregistered`, an implementation:
 
 - MUST NOT forward protocol packets through it
 - MUST NOT trust its path claims for routing
-- MUST NOT allocate hook or stream state on its behalf
+- MUST NOT allocate hook state on its behalf
 
 Transition into `Registered` is implementation-defined and out of scope for this document.
 
-Transition out of `Registered` MUST invalidate all local routing entries, hook state, and stream state associated with that connection.
+Transition out of `Registered` MUST invalidate all local routing entries and hook state associated with that connection.
 
 > **Rationale:** The protocol no longer defines a handshake, but it still needs a hard boundary between connected peers and admitted peers.
 
@@ -196,7 +203,7 @@ This protocol defines exactly two packet types.
 | Packet Type | Value | Meaning |
 |---|---|---|
 | `Call` | `0x01` | Downwards procedure invocation. |
-| `Data` | `0x02` | Hook output, event output, or stream traffic. |
+| `Data` | `0x02` | Hook output, protocol fault output, or ongoing hook traffic. |
 
 Example in the current Rust implementation:
 
@@ -210,9 +217,9 @@ pub enum PacketType {
 
 `Call` is used for downwards invocation.
 
-`Data` is used for hook output, event output, and stream traffic.
+`Data` is used for hook output, protocol fault output, and ongoing hook traffic.
 
-> **Rationale:** This is the canonical simplification of the earlier model. Separate response and stream-close packet types were removed.
+> **Rationale:** This is the canonical simplification of the earlier model. Separate response packet variants were removed.
 
 ## 10. Packet Header
 
@@ -225,15 +232,12 @@ pub enum PacketType {
 | `dst_path` | Path of the destination endpoint. |
 | `dst_leaf` | Target leaf for a `Call`, if any. |
 | `hook_id` | Hook identifier local to the endpoint hosting the hook. |
-| `stream_id` | Stream identifier local to the endpoint receiving the stream traffic. |
 
 Header rules:
 
 - `src_path` and `dst_path` MUST be present on all packets
 - `dst_leaf` MUST be `None` on `Data`
-- `stream_id` MUST NOT appear on `Call` unless the call declares a stream-oriented hook
-- `hook_id` MUST appear on `Data` when the packet belongs to a hook or hook-backed stream
-- `stream_id` MUST appear on `Data` when the packet belongs to a stream
+- `hook_id` MUST appear on `Data` when the packet belongs to a hook flow, including returned data and protocol faults
 
 A packet whose header violates these rules MUST be discarded.
 
@@ -247,7 +251,6 @@ pub struct PacketHeader {
     pub dst_path: Vec<String>,
     pub dst_leaf: Option<String>,
     pub hook_id: Option<u64>,
-    pub stream_id: Option<u32>,
 }
 ```
 
@@ -279,17 +282,17 @@ If the sender on that connection is not the direct parent permitted to issue dow
 
 `Data` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
 
-The sender of a `Data` packet MUST set `dst_path` to the path of the stream peer or the hook host.
+The sender of a `Data` packet MUST set `dst_path` to the path of the hook peer or the hook host.
 
-### 11.4 Stream Fastpath
+### 11.4 Hook Fastpath
 
-An implementation MAY maintain an internal fastpath keyed by `(local_connection, stream_id)` for performance.
+An implementation MAY maintain an internal fastpath keyed by locally validated hook state for performance.
 
 Such an optimization MUST remain behaviorally equivalent to path-based routing.
 
-The protocol itself does not route by `stream_id` alone.
+The protocol itself does not route by `hook_id` alone.
 
-> **Rationale:** `stream_id` is intentionally not treated as a globally routable identifier.
+> **Rationale:** `hook_id` is local to the hook host, so path remains the canonical routing key.
 
 ## 12. Call Definition
 
@@ -299,7 +302,7 @@ The protocol itself does not route by `stream_id` alone.
 |---|---|
 | `procedure_id` | Identifier of the invoked procedure contract. |
 | `data` | Application-defined procedure input payload. |
-| `response_hook` | Optional hook declaration for returned data. |
+| `response_hook` | Optional hook declaration for returned data and follow-on bidirectional hook traffic. |
 
 Rules:
 
@@ -321,9 +324,9 @@ pub struct CallMessage {
 
 ### 12.1 Required Introspection Procedure
 
-The empty string `""` is reserved as the required introspection procedure.
+`org.unshell.protocol.v1.meta.introspect` is reserved as the required introspection procedure.
 
-Every endpoint MUST implement `procedure_id == ""`.
+Every endpoint MUST implement `procedure_id == "org.unshell.protocol.v1.meta.introspect"`.
 
 Behavior:
 
@@ -336,9 +339,9 @@ The result MUST be returned through the declared response hook.
 
 If the destination endpoint does not exist, the packet is dropped during routing.
 
-If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint MUST discard the `Call` silently.
+If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint SHOULD report a protocol fault through the declared hook. If no hook exists, the endpoint MUST discard the `Call` silently.
 
-If `procedure_id` is unknown or unsupported, the endpoint SHOULD report failure through the declared hook using an application-defined error payload. If no hook exists, the endpoint MUST discard the call silently.
+If `procedure_id` is unknown or unsupported, the endpoint SHOULD report a protocol fault through the declared hook. If no hook exists, the endpoint MUST discard the call silently.
 
 ## 13. Hook Definition
 
@@ -350,15 +353,15 @@ There is no standalone hook-open packet.
 
 | Field | Meaning |
 |---|---|
-| `hook_id` | Identifier local to the endpoint that hosts the hook and expects responses. |
+| `hook_id` | Identifier local to the endpoint that hosts the hook and expects returned traffic. |
 | `return_path` | Endpoint path to which returned `Data` packets are sent. |
-| `response_type` | Advisory indication of whether the expected response is event-like or stream-like. |
 
 Rules:
 
 - `hook_id` MUST be unique within the receiving endpoint's active hook set
 - `return_path` MUST name the endpoint hosting the hook
-- `response_type` is advisory and does not itself terminate or prolong hook lifetime
+- once a hook is established, either side MAY send `Data` packets associated with that hook until the interaction ends or is canceled
+- all protocol faults associated with the call MUST use that same `hook_id`
 
 Example in the current Rust implementation:
 
@@ -367,13 +370,6 @@ Example in the current Rust implementation:
 pub struct HookTarget {
     pub hook_id: u64,
     pub return_path: Vec<String>,
-    pub response_type: HookResponseType,
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum HookResponseType {
-    Event = 0,
-    Stream = 1,
 }
 ```
 
@@ -385,14 +381,14 @@ pub enum HookResponseType {
 |---|---|
 | `procedure_id` | Identifier of the procedure contract to which this returned payload belongs. |
 | `data` | Application-defined output payload. |
-| `end` | Sender indicates completion of its participation in the hook or stream. |
-| `cancel` | Sender requests termination of the associated stream processing. |
+| `end` | Sender indicates completion of its participation in the hook interaction. |
+| `cancel` | Sender requests termination of the associated hook processing. |
 
 Rules:
 
 - the receiver MUST interpret `procedure_id` as the contract identifier for the returned payload
 - the router MUST NOT inspect or validate `procedure_id`
-- the receiver MAY validate that the returned `procedure_id` matches the hook or stream context it established
+- the receiver MAY validate that the returned `procedure_id` matches the hook context it established or a reserved protocol fault contract
 
 Example in the current Rust implementation:
 
@@ -406,41 +402,38 @@ pub struct DataMessage {
 }
 ```
 
-### 14.1 Event Data
+### 14.1 Hook Data
 
-For non-stream responses:
+For hook-associated responses:
 
 - `hook_id` MUST be present
-- `stream_id` MUST be absent
 - `end` SHOULD be `true` on the final packet for that hook
 
-An event-style hook MAY still emit multiple `Data` packets if the application requires chunking or phased output.
+A hook MAY emit multiple `Data` packets if the application requires chunking, phased output, or prolonged bidirectional interaction.
 
-### 14.2 Stream Establishment
+### 14.2 Hook Continuation
 
-A stream exists only as part of a hook whose `response_type` is `Stream`.
+A hook exists only as part of a `Call` that declares `response_hook`.
 
-There is no standalone stream-open packet.
+There is no standalone hook-open packet.
 
-The first `Data` packet for a stream MUST:
+The first `Data` packet for a hook MUST:
 
 - carry the hook's `hook_id`
-- carry a `stream_id`
 - set `dst_path` to the hook host's `return_path`
 
-Once established, either side MAY continue exchanging `Data` packets carrying that `stream_id` and the appropriate peer `dst_path`.
+Once established, either side MAY continue exchanging `Data` packets carrying that `hook_id` and the appropriate peer `dst_path`.
 
-`stream_id` is local to the endpoint that receives and demultiplexes that stream.
+`hook_id` is local to the endpoint that hosts and demultiplexes that hook.
 
-An endpoint MUST NOT reuse an active `stream_id` within its local stream table.
+An endpoint MUST NOT reuse an active `hook_id` within its local hook table.
 
-### 14.3 Stream Data
+### 14.3 Bidirectional Hook Data
 
-For stream-associated traffic:
+For ongoing hook traffic:
 
-- `stream_id` MUST be present
-- `hook_id` SHOULD be present on every packet and MUST be present on the first packet
-- `dst_path` MUST identify the peer endpoint for that stream packet
+- `hook_id` MUST be present on every packet
+- `dst_path` MUST identify the peer endpoint for that hook packet
 
 ### 14.4 End and Cancel
 
@@ -449,21 +442,29 @@ Rules:
 - a sender MAY set `end = true` without `cancel = true`
 - a sender MAY set `cancel = true` without `end = true`
 - a sender MAY set both when it intends immediate termination
-- a receiver of `cancel = true` SHOULD stop local processing for that stream as soon as practical
+- a receiver of `cancel = true` SHOULD stop local processing for that hook as soon as practical
 
-There is no separate stream-close or hook-close packet.
+There is no separate hook-close packet.
 
-### 14.5 Unknown Stream IDs
+### 14.5 Protocol Faults
 
-If an endpoint receives `Data` with an unknown or expired `stream_id`, it MUST discard the packet.
+`org.unshell.protocol.v1.meta.fault` is reserved as the protocol fault `procedure_id`.
 
-The protocol does not define a mandatory error response for this case.
+When an endpoint can attribute a protocol-level failure to a specific active hook, it SHOULD send a `Data` packet using:
+
+- the same `hook_id`
+- `procedure_id == "org.unshell.protocol.v1.meta.fault"`
+- an application-independent fault payload describing the condition
+
+At minimum, a protocol fault payload SHOULD identify a fault code and MAY include a human-readable message.
+
+If an endpoint receives `Data` with an unknown or expired `hook_id`, it MUST discard the packet.
 
 ## 15. Introspection Payloads
 
 **Normative**
 
-The required introspection procedure `""` MUST return one of the following payloads through the declared hook.
+When the required blank introspection procedure is called, it MUST return one of the following payloads through the declared hook.
 
 ### 15.1 Endpoint Introspection
 
@@ -520,7 +521,6 @@ Each `ProcedureIntrospection` contains:
 | `name` | Procedure name within the leaf. |
 | `description` | Optional human-readable description. |
 | `params` | Parameter definitions accepted by the procedure. |
-| `response_type` | Advisory indication of whether the procedure normally responds as an event or stream. |
 
 Each `ProcedureParameter` contains:
 
@@ -546,7 +546,6 @@ pub struct ProcedureIntrospection {
     pub name: String,
     pub description: Option<String>,
     pub params: Vec<ProcedureParameter>,
-    pub response_type: HookResponseType,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -571,12 +570,12 @@ The UnShell protocol has a deliberately narrow center:
 - addressing by path
 - one downwards packet type
 - one returned-data packet type
-- hooks for correlation
-- streams as an extension of hook-backed data flow
+- hooks for correlation and ongoing bidirectional interaction
+- protocol faults returned through the same hook path
 
 This is meant to make the protocol easier to reason about and easier to implement in small agents.
 
-`procedure_id` is the main semantic anchor. In this design, the caller and callee are expected to share knowledge of what a procedure contract means. The protocol does not carry a global registry.
+`procedure_id` is the main semantic anchor. In this design, the caller and callee are expected to share knowledge of what a procedure contract means. The protocol does not carry a global registry, but it does require a canonical dotted naming form so independently authored contracts remain distinguishable.
 
 ## 17. Security Considerations
 
@@ -590,7 +589,7 @@ Recommended behavior:
 - rate-limit or expire idle unregistered peers
 - avoid disclosing topology before admission
 - avoid detailed admission failure reasons
-- invalidate hooks and streams on disconnect unless a higher-layer session mechanism exists
+- invalidate hooks on disconnect unless a higher-layer session mechanism exists
 
 ## 18. Serialization and Implementation Notes
 
@@ -604,31 +603,3 @@ Recommended implementation limits:
 |---|---|
 | header length | 64 KiB |
 | payload length | 64 MiB |
-
-## 19. Known Hard Problems
-
-**Non-Normative**
-
-### 19.1 Loop Prevention Outside Strict Trees
-
-The protocol does not carry a hop count, route vector, or loop-detection token.
-
-That keeps packets small, but it means loop prevention must be handled by topology discipline or implementation policy.
-
-### 19.2 Canonical Connection Management
-
-The document defines `Registered` and `Unregistered` states but intentionally does not define how a peer moves between them.
-
-That preserves flexibility, but it means interoperable admission behavior requires a higher-layer convention.
-
-### 19.3 Shared Meaning of `procedure_id`
-
-`procedure_id` is only useful if both sides share its meaning.
-
-The protocol intentionally does not define a global registry or schema negotiation mechanism. That keeps the core minimal, but it pushes interoperability for procedure contracts into shared libraries, operator knowledge, or higher-layer conventions.
-
-### 19.4 Stream Resumption Across Disconnects
-
-Hook and stream state are tied to local connection state.
-
-When a connection disappears, the associated hook and stream context disappears with it. Any resumable behavior therefore requires a higher-layer session mechanism.
