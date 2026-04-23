@@ -1,679 +1,634 @@
-# UnShell Network Protocol Specification
+# UnShell Protocol Specification
 
-**Version:** 0.4.0  
-**Status:** Draft — implementation in progress  
-**Last updated:** 2026-04-22
+**Version:** 0.6.0  
+**Status:** Draft  
+**Last updated:** 2026-04-23
 
----
+## 1. Introduction
 
-## Core Design Tenants
+**Non-Normative**
 
-Two constraints govern every structural decision in this protocol.
+The UnShell protocol is a tree-addressed packet protocol for remote procedure calls, response hooks, and bidirectional streams across a hierarchy of connected endpoints.
 
-**Minimal complexity.** The protocol's minimal form must fit inside shellcode or a small embedded implant. Features that can be implemented as a leaf or an application-layer convention must not be part of the protocol. The protocol exists only to move packets between tree endpoints and to enforce authority relationships at the connection level.
+The protocol is intended to be small, extensible, and canonical.
 
-**Extensibility.** The protocol defines a substrate for arbitrary application-layer capabilities. Content types, leaf procedures, and packet payloads are opaque to the router. New capabilities are added by defining new leaves and content types, not by modifying the protocol itself.
+Small means the core protocol stays narrow enough for constrained implementations. Extensible means new behavior is introduced through leaves, procedures, and payload schemas instead of frequent protocol redesign. Canonical means there should be one clearly defined way to express each core protocol behavior.
 
-When these two principles appear to conflict, prefer the minimal option and delegate complexity to the leaf or application layer.
+This document combines exact protocol definition with rationale. Rationale blocks explain why a rule exists, but do not define interoperability requirements.
 
----
+> **Rationale:** This document uses a formal specification layout: descriptive sections first, exact protocol definition later, and rationale kept adjacent to the rules it explains.
 
-## Glossary
+## 2. Document Conventions
+
+**Normative**
+
+The key words `MUST`, `MUST NOT`, `REQUIRED`, `SHALL`, `SHALL NOT`, `SHOULD`, `SHOULD NOT`, `RECOMMENDED`, `MAY`, and `OPTIONAL` in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119.txt) when, and only when, they appear in all capitals.
+
+Unless a section is explicitly marked otherwise, sections labeled `Normative` define protocol requirements and sections labeled `Non-Normative` provide description, rationale, deployment guidance, or open design commentary.
+
+All `Rationale` blocks in this document are non-normative.
+
+## 3. Purpose and Scope
+
+**Non-Normative**
+
+The purpose of this specification is to define the set of protocol components required to assemble complete UnShell protocol packets and to provide a framework through which the protocol can be extended through leaves and procedure contracts.
+
+To achieve this purpose, the scope of this specification includes:
+
+- endpoint addressing by path
+- packet framing
+- packet structure
+- local authority rules for downwards procedure calls
+- path-based routing behavior
+- upwards and downwards packet semantics
+- hook behavior
+- stream behavior
+- the required introspection procedure
+- extension through leaves, procedures, and payload schemas
+
+The UnShell protocol assumes that a connection already exists, that the local implementation has decided whether a peer should be admitted into routing, and that any required authentication or authorization has already been handled by the surrounding system.
+
+The following items are beyond the scope of this specification:
+
+- authentication
+- authorization
+- connection establishment
+- admission protocol
+- transport selection
+- transport-specific serialization formats
+- encryption
+- obfuscation
+- router management interfaces
+- deployment-specific orchestration behavior
+- sensing, analytics, and decision-making systems above the protocol layer
+
+Every implementation is expected to maintain its own live connection set and its own ground truth about which peers are connected, admitted, and routable.
+
+> **Rationale:** Authentication and handshakes were intentionally removed from the core scope. They are too deployment-specific to define canonically without bloating the protocol.
+
+## 4. Protocol Overview
+
+**Non-Normative**
+
+Endpoints are addressed by path.
+
+Leaves are hosted by endpoints.
+
+A superior endpoint issues a downwards `Call` toward a subordinate endpoint or one of its leaves.
+
+If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets upwards toward the hook host. If that hook is stream-oriented, the same `Data` packet type is also used for subsequent bidirectional stream traffic.
+
+The protocol therefore has two core packet roles:
+
+- `Call` for downwards invocation
+- `Data` for returned data and stream traffic
+
+This document uses the following notation for readability:
+
+- `/a/b/c` for endpoint paths
+- `/a/b/c { leaf: tty0 }` for a leaf on an endpoint
+- `/a/b/c { hook: 7 }` for a hook hosted by an endpoint
+
+These notations are descriptive only. Leaves and hooks are not encoded as path segments.
+
+## 5. Terms and Definitions
+
+**Normative**
 
 | Term | Definition |
-|------|------------|
-| **Tree** | The network of all connected endpoints, addressed by path. |
-| **Endpoint** | Any node connected to the tree, identified by its registered path. |
-| **Leaf** | A hosted service or data object on an endpoint (e.g. a shell session, a file system). Addressed by endpoint path plus leaf name. |
-| **Path** | An ordered sequence of segments uniquely identifying an endpoint. Written as `/seg1/seg2` for readability; transmitted as `Vec<String>`. |
-| **Actual Authority** | The endpoint that directly admitted another into the tree via the handshake. Has protocol-enforced control over that specific connection only. |
-| **Router** | An endpoint that forwards packets rather than handling them. Not a special node type — any endpoint may act as a router. |
-| **Hook** | A response channel declared by the authority inside a `CallProcedure` request. The target leaf fires data back through it. |
-| **Stream** | A persistent bidirectional data channel established as part of a `Stream`-type hook. |
-| **Packet** | A single framed transmission: one header plus one payload. |
+|---|---|
+| Tree | The set of connected endpoints arranged by path. |
+| Endpoint | A participant in the protocol that can send, receive, host leaves, and route packets. |
+| Path | An ordered sequence of segments identifying an endpoint, serialized as `Vec<String>`. |
+| Upwards | In the direction of rising authority, closer to the root node. |
+| Downwards | In the direction of falling authority, farther from the root node. |
+| Leaf | A named service or object hosted by an endpoint. |
+| Call | A downwards packet that invokes a procedure on an endpoint or leaf. |
+| Procedure | An application-defined operation identified by `procedure_id`. |
+| Hook | A response channel declared inside a `Call`. |
+| Stream | A bidirectional exchange of `Data` packets associated with a hook and a local `stream_id`. |
+| Authority | The endpoint that directly maintains a child connection at a local routing boundary. |
+| Subordinate | The lower of two endpoints in a described authority relationship. |
+| Registered | Local connection state in which a peer participates in routing. |
+| Unregistered | Local connection state in which a peer is connected but not routable. |
 
----
+## 6. Naming and Structural Conventions
 
-## Overview
+**Normative**
 
-UnShell is a **tree-addressed, authority-hierarchical, message-passing protocol** for command and control (C2) operations.
+Paths are serialized as `Vec<String>`.
 
-Endpoints are arranged in a tree. Each endpoint owns a path. A parent endpoint is the actual authority over the children it has directly admitted. Communication is directional: authorities send `Request` packets downward to their clients; clients send data upward exclusively through hooks.
+Leaf identity is carried in `dst_leaf`.
 
-```
-/                      ← root (operator or root router)
-/abc123                ← endpoint registered under root
-/abc123/pivot          ← sub-endpoint registered under /abc123
-```
+Hook identity is carried in `hook_id`.
 
-Leaves are addressed by endpoint path plus a leaf name. The notation used throughout this document is:
+Stream identity is carried in `stream_id`.
 
-```
-/abc123 { leaf: tty0 }         ← TTY leaf on /abc123
-/abc123 { leaf: files }        ← filesystem leaf on /abc123
-/abc123/pivot { leaf: tty0 }   ← TTY leaf on /abc123/pivot
-```
+No path prefixes are reserved by this protocol.
 
-The `{ leaf: name }` notation is a documentation convention. On the wire, the endpoint path is carried in `dst_path` and the leaf name is carried in the separate `dst_leaf` field of the packet header. Leaf names are not path segments and are invisible to the router.
+`procedure_id` is the canonical identifier for a procedure contract. A procedure contract includes the source library or namespace, the specific procedure identity, and the expected input and output schema pair.
 
----
+The same `procedure_id` is used on both `Call` and `Data` packets.
 
-## Authority Model
+> **Rationale:** `procedure_id` is intentionally stricter than a method name or content type. It identifies a full callable contract, not just a label.
 
-### Actual Authority
+## 7. Endpoint Model
 
-Each connection has exactly one authority and one client. The authority is the endpoint that accepted the connection and ran the handshake. Actual authority grants:
+**Normative**
 
-1. The right to admit or reject the client's registration.
-2. The right to send unsolicited `Request` packets to the client.
-3. The right to declare hooks on the client via a `CallProcedure`.
+### 7.1 Local Authority
 
-Actual authority is **per-connection and one hop only**. The root has actual authority over `/abc123` because it directly admitted it. The root does not have actual authority over `/abc123/pivot` — that connection is managed by `/abc123` independently. Routers must reject `Request` packets whose sender is not the direct parent of the destination.
+Each endpoint enforces authority only at the connections it directly maintains.
 
-### Hierarchy
+At a local routing boundary:
 
-Endpoints closer to the root have implied precedence over deeper endpoints they did not directly admit. This is an operational expectation and is not enforced by the protocol. The operator at `/` trusts that `/abc123` will not admit hostile sub-endpoints. Only network architecture and pre-shared secrets can enforce this on the protocol's behalf.
+- a `Call` packet MUST be accepted only if it arrives from the direct parent connection permitted to issue downwards calls into the destination subtree represented by that boundary
+- a `Call` packet that violates that rule MUST be dropped silently
+- a `Data` packet MAY arrive from either direction if it belongs to a valid hook or stream flow and routes correctly by path
 
-### Cycles
+This protocol does not define a protocol-level authority error packet.
 
-Two endpoints may each be registered in the other's subtree, creating mutual actual authority. This is useful in multi-datacenter topologies where either site should be able to issue commands to the other's endpoints. A compromised node in a cycle has upward reach into the other side; cycles should be created deliberately and documented explicitly in deployment architecture.
+### 7.2 Local Connection States
 
----
+Each implementation MUST maintain at least the following local states:
 
-## Path Conventions
+| State | Meaning |
+|---|---|
+| `Unregistered` | The connection exists locally but is not part of routing state. |
+| `Registered` | The connection is admitted into local routing state and may send, receive, or forward protocol traffic. |
 
-Paths are transmitted as `Vec<String>`. Each element is one segment. Written in this document as `/seg1/seg2` for readability. The router operates on the segment array directly — no string joining or splitting occurs.
+While a connection is `Unregistered`, an implementation:
 
-Segments beginning with `_` are **protocol-reserved**. External endpoints may not register paths containing `_`-prefixed segments.
+- MUST NOT forward protocol packets through it
+- MUST NOT trust its path claims for routing
+- MUST NOT allocate hook or stream state on its behalf
 
-| Reserved prefix | Owner | Purpose |
-|-----------------|-------|---------|
-| `_router` | Router | Built-in router endpoints (e.g. `/_router/nodes`) |
+Transition into `Registered` is implementation-defined and out of scope for this document.
 
-All other path segments are application-defined. Leaf names, hook IDs, and stream IDs are carried in dedicated header fields — not encoded into path segments.
+Transition out of `Registered` MUST invalidate all local routing entries, hook state, and stream state associated with that connection.
 
----
+> **Rationale:** The protocol no longer defines a handshake, but it still needs a hard boundary between connected peers and admitted peers.
 
-## Packet Format
+## 8. Packet Framing
 
-Every transmission is a two-part framed packet:
+**Normative**
 
-```
-+----------------------------------+------------------------------+
-|  Part 1: Header                  |  Part 2: Payload             |
-|                                  |                              |
-|  [u32 big-endian length]         |  [u32 big-endian length]     |
-|  [rkyv-serialised PacketHeader]  |  [rkyv payload bytes]        |
-|                                  |                              |
-|  Router reads this to route      |  Router forwards opaque      |
-+----------------------------------+------------------------------+
-```
+Each protocol packet consists of two length-prefixed byte sections:
 
-Both length prefixes are big-endian `u32`. The `packet_type` field in the header fully determines the structure of the payload. The router never inspects the payload — it reads only the header to make all routing decisions.
+1. header bytes
+2. payload bytes
 
-Packet types are `u16` discriminants produced by rkyv serialisation of the `PacketType` enum. Parsers in any language should treat them as `u16` values matching the discriminants defined below.
+Both lengths MUST be encoded as big-endian `u32`.
 
-### PacketHeader
+The header MUST be serialized before the payload.
 
-```rust
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct PacketHeader {
-    /// Determines the payload type and routing behaviour.
-    pub packet_type: PacketType,
+Routing decisions MUST be made from header fields only.
 
-    /// Destination endpoint path.
-    /// Required for: Request, HookData.
-    /// None for: Response (routed by request_id),
-    ///           StreamData, StreamClose (routed by stream_id).
-    pub dst_path: Option<Vec<String>>,
+Routers MUST NOT inspect payload structure in order to route a packet.
 
-    /// Destination leaf name. Set when the packet targets a specific leaf
-    /// on the destination endpoint. None for packets targeting the endpoint
-    /// itself (e.g. GetProcedures, Handshake).
-    pub dst_leaf: Option<String>,
+## 9. Packet Types
 
-    /// Source path of the sender. Used by the router to route responses
-    /// and hook data back to the originating endpoint.
-    pub src_path: Vec<String>,
+**Normative**
 
-    /// Correlation ID for Request / Response pairs.
-    /// Set on Request; echoed on Response. None otherwise.
-    pub request_id: Option<u64>,
+This protocol defines exactly two packet types.
 
-    /// Stream ID for StreamData / StreamClose fastpath routing.
-    /// Also set on a CallProcedure that establishes a Stream-type hook,
-    /// pre-assigned by the authority. None otherwise.
-    pub stream_id: Option<u32>,
+| Packet Type | Value | Meaning |
+|---|---|---|
+| `Call` | `0x01` | Downwards procedure invocation. |
+| `Data` | `0x02` | Hook output, event output, or stream traffic. |
 
-    /// Hook ID for HookData packets. Set by the authority when declaring
-    /// the hook in a CallProcedure. Used by the receiving authority to
-    /// demultiplex incoming hook data. None for non-hook packets.
-    pub hook_id: Option<u64>,
-}
-```
-
-### PacketType → Payload Mapping
-
-Each `PacketType` variant maps to exactly one payload type. The router discards packets with unknown variants without closing the connection.
+Example in the current Rust implementation:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum PacketType {
-    // -- Handshake -----------------------------------------------------------
-    /// Authority → Client. Payload: AuthChallenge
-    AuthChallenge  = 0x10,
-    /// Client → Authority. Payload: AuthResponse
-    AuthResponse   = 0x11,
-    /// Client → Authority. Payload: HandshakeMessage
-    Handshake      = 0x12,
-    /// Authority → Client. Payload: HandshakeAck
-    HandshakeAck   = 0x13,
-
-    // -- Request / Response --------------------------------------------------
-    /// Authority → Client. Payload: TreeRequest
-    Request        = 0x01,
-    /// Client → Authority. Payload: TreeResponse
-    Response       = 0x02,
-
-    // -- Streams -------------------------------------------------------------
-    /// Data on an established stream. Fastpath routed by stream_id.
-    /// Payload: raw bytes.
-    StreamData     = 0x04,
-    /// Closes an established stream. Fastpath routed by stream_id.
-    /// Payload: empty.
-    StreamClose    = 0x05,
-
-    // -- Hooks ---------------------------------------------------------------
-    /// Leaf fires a hook declared by the authority in a prior CallProcedure.
-    /// Routed to the authority's base path via dst_path.
-    /// Payload: HookDataMessage
-    HookData       = 0x06,
+    Call = 0x01,
+    Data = 0x02,
 }
 ```
 
----
+`Call` is used for downwards invocation.
 
-## Handshake and Authentication
+`Data` is used for hook output, event output, and stream traffic.
 
-The handshake is **authority-initiated**. The connecting node does not speak until challenged. If a connecting node sends any packet before receiving `AuthChallenge`, the authority closes the connection immediately without sending a response.
+> **Rationale:** This is the canonical simplification of the earlier model. Separate response and stream-close packet types were removed.
 
-```
-Client                                   Authority
-  |                                           |
-  |──── TCP connect ────────────────────────→ |
-  |                                           |
-  |←─── AuthChallenge (nonce: [u8;32]) ───────|
-  |                                           |
-  |──── AuthResponse (hmac: [u8;32]) ───────→ |
-  |                                           |
-  |──── Handshake (registered_paths) ───────→ |
-  |                                           |
-  |←─── HandshakeAck (accepted/rejected) ─────|
-  |                                           |
-  |    [registered; may now send/receive]     |
-```
+## 10. Packet Header
 
-The authority issues a 32-byte random nonce. The client responds with `HMAC-SHA256(pre_shared_secret, nonce)`. The pre-shared secret is provisioned out-of-band. A failed HMAC closes the connection immediately, before any path data is exchanged.
+**Normative**
 
-**Timeouts:**
-- Client must respond to `AuthChallenge` within 5 seconds.
-- Client must send `Handshake` within 10 seconds of sending a valid `AuthResponse`.
-- Client must receive `HandshakeAck` within 5 seconds of sending `Handshake`.
+| Field | Meaning |
+|---|---|
+| `packet_type` | Selects packet semantics. |
+| `src_path` | Path of the sending endpoint. |
+| `dst_path` | Path of the destination endpoint. |
+| `dst_leaf` | Target leaf for a `Call`, if any. |
+| `hook_id` | Hook identifier local to the endpoint hosting the hook. |
+| `stream_id` | Stream identifier local to the endpoint receiving the stream traffic. |
 
-### Payload Types
+Header rules:
+
+- `src_path` and `dst_path` MUST be present on all packets
+- `dst_leaf` MUST be `None` on `Data`
+- `stream_id` MUST NOT appear on `Call` unless the call declares a stream-oriented hook
+- `hook_id` MUST appear on `Data` when the packet belongs to a hook or hook-backed stream
+- `stream_id` MUST appear on `Data` when the packet belongs to a stream
+
+A packet whose header violates these rules MUST be discarded.
+
+Example in the current Rust implementation:
 
 ```rust
-/// Payload for PacketType::AuthChallenge
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct AuthChallenge {
-    pub nonce: [u8; 32],
-}
-
-/// Payload for PacketType::AuthResponse
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct AuthResponse {
-    /// HMAC-SHA256(pre_shared_secret, nonce)
-    pub hmac: [u8; 32],
-}
-
-/// Payload for PacketType::Handshake
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct HandshakeMessage {
-    /// Paths this node wants to own. Each entry must be a single segment,
-    /// exactly one level below the authority's base path.
-    /// Segments beginning with `_` are rejected.
-    pub registered_paths: Vec<Vec<String>>,
-
-    /// Human-readable label for diagnostics. Stored by the router and
-    /// returned via /_router/nodes. Not used for routing.
-    /// Cannot be updated after registration.
-    pub display_name: Option<String>,
-}
-
-/// Payload for PacketType::HandshakeAck
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct HandshakeAck {
-    pub accepted: bool,
-
-    /// The canonical base path the authority assigned. May differ from the
-    /// requested path if the authority adjusts it (e.g. to avoid collisions).
-    pub assigned_base_path: Vec<String>,
-
-    /// Human-readable rejection reason when accepted == false.
-    pub rejection_reason: Option<String>,
+pub struct PacketHeader {
+    pub packet_type: PacketType,
+    pub src_path: Vec<String>,
+    pub dst_path: Vec<String>,
+    pub dst_leaf: Option<String>,
+    pub hook_id: Option<u64>,
+    pub stream_id: Option<u32>,
 }
 ```
 
-**Registration is all-or-nothing.** If any path in `registered_paths` fails validation, the entire handshake is rejected with the reason for the first failed path. Partial registration is not supported.
+## 11. Routing Rules
 
-**Rejection reasons:**
+**Normative**
 
-| Reason | Meaning |
-|--------|---------|
-| `"auth_failed"` | HMAC did not match |
-| `"invalid_path"` | A path segment is malformed |
-| `"duplicate_path"` | Path already registered by another endpoint |
-| `"reserved_segment"` | A segment begins with `_` |
-| `"out_of_subtree"` | Requested path is not within the authority's own subtree |
+### 11.1 Path Routing
 
----
+All protocol routing is path-based.
 
-## Request / Response
+When forwarding a packet, an implementation MUST:
 
-The authority sends a `Request` to an endpoint it has actual authority over. The endpoint replies with a `Response` carrying the same `request_id` in the header.
+1. compare `dst_path` against its locally registered child paths
+2. choose the longest matching prefix
+3. forward the packet toward that child if such a child exists
+4. otherwise, deliver the packet locally if `dst_path` identifies the local endpoint
+5. otherwise, drop the packet silently
 
-**Direction enforcement.** A lower-authority endpoint may never send a `Request` to a higher-authority endpoint. All upward data flow goes through hooks. The router rejects `Request` packets whose sender is not the direct parent of the destination, returning `AuthorityViolation` to the sender.
+The protocol defines no mandatory error packet for unresolved destinations.
 
-**Response routing.** When the router forwards a `Request`, it records `request_id → src_connection` in an internal request table. When the corresponding `Response` arrives, the router forwards it to the recorded source and removes the entry. A `Response` with an unrecognised `request_id` is discarded with a warning.
+### 11.2 Call Enforcement
 
-**Timeouts.** There is no protocol-level timeout on a `Request` / `Response` pair. The calling endpoint is responsible for implementing application-layer timeouts.
+When forwarding or receiving a `Call`, an endpoint MUST verify the local parent-child relationship at the boundary where the packet arrives.
 
-### Payload Types
+If the sender on that connection is not the direct parent permitted to issue downwards calls into the relevant subtree, the endpoint MUST drop the packet silently.
+
+### 11.3 Data Routing
+
+`Data` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
+
+The sender of a `Data` packet MUST set `dst_path` to the path of the stream peer or the hook host.
+
+### 11.4 Stream Fastpath
+
+An implementation MAY maintain an internal fastpath keyed by `(local_connection, stream_id)` for performance.
+
+Such an optimization MUST remain behaviorally equivalent to path-based routing.
+
+The protocol itself does not route by `stream_id` alone.
+
+> **Rationale:** `stream_id` is intentionally not treated as a globally routable identifier.
+
+## 12. Call Definition
+
+**Normative**
+
+| Field | Meaning |
+|---|---|
+| `procedure_id` | Identifier of the invoked procedure contract. |
+| `data` | Application-defined procedure input payload. |
+| `response_hook` | Optional hook declaration for returned data. |
+
+Rules:
+
+- the receiver MUST interpret `procedure_id` as the identifier of the procedure being invoked
+- the protocol does not define argument encoding beyond raw bytes in `data`
+- a `Call` that expects a result MUST include `response_hook`
+- if `response_hook` is absent, the receiver MAY execute the procedure but MUST NOT fabricate an implicit response path
+
+Example in the current Rust implementation:
 
 ```rust
-/// Payload for PacketType::Request
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct TreeRequest {
-    pub request_type: RequestType,
-    pub content_type: String,
+pub struct CallMessage {
+    pub procedure_id: String,
     pub data: Vec<u8>,
-
-    /// Required for CallProcedure; must be None for all other request types.
-    /// If set on a non-CallProcedure request, it is silently ignored.
     pub response_hook: Option<HookTarget>,
 }
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum RequestType {
-    /// Read the current value or state at this path.
-    /// Behavior when targeting a leaf is undefined — see Known Open Problems.
-    Read          = 0,
-    /// List available leaves and their procedures at this endpoint.
-    GetProcedures = 1,
-    /// Write a value to this path.
-    /// Behavior when targeting a leaf is undefined — see Known Open Problems.
-    Write         = 2,
-    /// Invoke a named procedure on a leaf. response_hook must be set.
-    CallProcedure = 3,
-}
-
-/// Payload for PacketType::Response
-/// Used for GetProcedures replies and router-generated error responses.
-/// CallProcedure always responds via hook and never produces a TreeResponse,
-/// except when the router itself cannot resolve the destination path,
-/// in which case it returns NoBranchError.
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct TreeResponse {
-    pub status: ResponseStatus,
-    pub content_type: String,
-    pub data: Vec<u8>,
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum ResponseStatus {
-    Ok                 = 0,
-    /// Destination path not found at this endpoint or router.
-    NoBranchError      = 1,
-    /// Operation not supported at this path.
-    UnsupportedOp      = 2,
-    /// Endpoint-side execution error.
-    ExecutionError     = 3,
-    /// Request payload was malformed.
-    ProtocolError      = 4,
-    /// Attempt by a non-parent endpoint to send a Request downward.
-    /// See Known Open Problems for enforcement details.
-    AuthorityViolation = 5,
-}
 ```
 
----
+### 12.1 Required Introspection Procedure
 
-## Hooks
+The empty string `""` is reserved as the required introspection procedure.
 
-A hook is a response channel declared by the authority inside a `CallProcedure` request. There is no separate hook declaration packet — the hook is born inside the call that establishes it.
+Every endpoint MUST implement `procedure_id == ""`.
 
-### Declaration
+Behavior:
 
-The authority embeds a `HookTarget` in the `response_hook` field of `TreeRequest` when invoking `CallProcedure`:
+- when `dst_leaf` is `None`, the call requests endpoint introspection
+- when `dst_leaf` is set, the call requests introspection for that specific leaf
+
+The result MUST be returned through the declared response hook.
+
+### 12.2 Failure Behavior
+
+If the destination endpoint does not exist, the packet is dropped during routing.
+
+If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint MUST discard the `Call` silently.
+
+If `procedure_id` is unknown or unsupported, the endpoint SHOULD report failure through the declared hook using an application-defined error payload. If no hook exists, the endpoint MUST discard the call silently.
+
+## 13. Hook Definition
+
+**Normative**
+
+Hooks are declared only inside `CallMessage.response_hook`.
+
+There is no standalone hook-open packet.
+
+| Field | Meaning |
+|---|---|
+| `hook_id` | Identifier local to the endpoint that hosts the hook and expects responses. |
+| `return_path` | Endpoint path to which returned `Data` packets are sent. |
+| `response_type` | Advisory indication of whether the expected response is event-like or stream-like. |
+
+Rules:
+
+- `hook_id` MUST be unique within the receiving endpoint's active hook set
+- `return_path` MUST name the endpoint hosting the hook
+- `response_type` is advisory and does not itself terminate or prolong hook lifetime
+
+Example in the current Rust implementation:
 
 ```rust
-/// Embedded in TreeRequest.response_hook for CallProcedure requests.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct HookTarget {
-    /// Authority-assigned identifier, unique within this authority's active hooks.
     pub hook_id: u64,
-
-    /// The authority's own base path. HookData packets are sent here
-    /// and routed by the router using normal path-based routing.
-    pub fire_path: Vec<String>,
-
-    /// Advisory declaration of expected response cardinality.
-    /// Event: the leaf is expected to fire once and set end_hook = true.
-    /// Stream: the leaf is expected to fire repeatedly.
-    /// The protocol does not enforce this — end_hook governs actual termination.
+    pub return_path: Vec<String>,
     pub response_type: HookResponseType,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum HookResponseType {
-    /// Leaf fires exactly once.
-    Event  = 0,
-    /// Leaf fires repeatedly until end_hook = true.
+    Event = 0,
     Stream = 1,
 }
 ```
 
-`hook_id` is assigned by the authority and must be unique within that authority's set of currently active hooks. The router routes `HookData` to `fire_path` using normal path-based routing (longest-prefix match on `dst_path`). The authority demultiplexes incoming `HookData` packets by `hook_id` from the packet header.
+## 14. Data Definition
 
-### HookData Payload
+**Normative**
+
+| Field | Meaning |
+|---|---|
+| `procedure_id` | Identifier of the procedure contract to which this returned payload belongs. |
+| `data` | Application-defined output payload. |
+| `end` | Sender indicates completion of its participation in the hook or stream. |
+| `cancel` | Sender requests termination of the associated stream processing. |
+
+Rules:
+
+- the receiver MUST interpret `procedure_id` as the contract identifier for the returned payload
+- the router MUST NOT inspect or validate `procedure_id`
+- the receiver MAY validate that the returned `procedure_id` matches the hook or stream context it established
+
+Example in the current Rust implementation:
 
 ```rust
-/// Payload for PacketType::HookData
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct HookDataMessage {
-    pub content_type: String,
+pub struct DataMessage {
+    pub procedure_id: String,
     pub data: Vec<u8>,
-    /// When true, the leaf considers this hook complete and will fire
-    /// no further HookData on this hook_id. The authority removes the
-    /// hook from its table on receipt. No protocol response is required.
-    pub end_hook: bool,
+    pub end: bool,
+    pub cancel: bool,
 }
 ```
 
-When `end_hook: true` is received, the hook is complete. The authority removes it from its internal hook table. The router may discard any associated routing state for that `hook_id` after forwarding the final packet.
+### 14.1 Event Data
 
-### Hook Cancellation
+For non-stream responses:
 
-There is no protocol-level mechanism to cancel a running hook. To abort a streaming hook early, the authority invokes a leaf-defined cancel procedure (e.g. `CallProcedure("halt", {})`). Leaf implementers must provide such a procedure if early cancellation is required.
+- `hook_id` MUST be present
+- `stream_id` MUST be absent
+- `end` SHOULD be `true` on the final packet for that hook
 
-### Stream Establishment via Hook
+An event-style hook MAY still emit multiple `Data` packets if the application requires chunking or phased output.
 
-When a `CallProcedure` declares a `Stream`-type hook, a bidirectional `StreamData` channel is established as part of the same call. The authority pre-assigns a `stream_id` (a `u32`) and places it in the `PacketHeader` of the `CallProcedure` packet alongside `stream_id`. The router, upon forwarding the `CallProcedure`, registers this `stream_id` in its stream table, mapping it to the pair `(authority_connection, leaf_connection)`.
+### 14.2 Stream Establishment
 
-The stream is considered live when the leaf sends its first `HookData` packet. Both sides may then exchange `StreamData` packets freely using the pre-assigned `stream_id`. The stream is closed when either side sends `StreamClose`, or when `end_hook: true` is received on the associated hook.
+A stream exists only as part of a hook whose `response_type` is `Stream`.
 
-The authority is responsible for assigning unique `stream_id` values across all streams it currently manages. Because `stream_id` is a `u32` and the router's stream table is a flat `HashMap<u32, ...>`, values from two different authorities that happen to collide will corrupt each other's streams. Authorities should use random or cryptographically generated `stream_id` values to make collision probability negligible in practice.
+There is no standalone stream-open packet.
 
----
+The first `Data` packet for a stream MUST:
 
-## Streams
+- carry the hook's `hook_id`
+- carry a `stream_id`
+- set `dst_path` to the hook host's `return_path`
 
-Streams provide a bidirectional, low-overhead data channel between an authority and a leaf. They are established exclusively via the hook mechanism described above. There is no standalone stream-open packet.
+Once established, either side MAY continue exchanging `Data` packets carrying that `stream_id` and the appropriate peer `dst_path`.
 
-`StreamData` payload is raw bytes. `StreamClose` payload is empty.
+`stream_id` is local to the endpoint that receives and demultiplexes that stream.
 
-The router maintains a `HashMap<u32, (ConnectionHandle, ConnectionHandle)>` for active streams. Populated when a `CallProcedure` establishing a `Stream`-type hook is forwarded. Cleared by `StreamClose` or on endpoint disconnect.
+An endpoint MUST NOT reuse an active `stream_id` within its local stream table.
 
-If a `StreamData` or `StreamClose` packet arrives with an unrecognised `stream_id` — which may occur in the race window following a payload reconnect, before the stale stream entry has been cleared — the router returns an error to the sender and closes the stream entry if it exists. The sender should treat this as a hard stream termination.
+### 14.3 Stream Data
 
-**Flow control.** The protocol has no acknowledgement or backpressure mechanism. Flow control is delegated entirely to the transport. `TcpTransport` inherits TCP's sliding window natively. Any custom transport must implement equivalent backpressure internally. Application-level rate limiting is the responsibility of the leaf implementation.
+For stream-associated traffic:
 
----
+- `stream_id` MUST be present
+- `hook_id` SHOULD be present on every packet and MUST be present on the first packet
+- `dst_path` MUST identify the peer endpoint for that stream packet
 
-## Leaf System
+### 14.4 End and Cancel
 
-### Purpose
+Rules:
 
-Leaves are the application layer of the protocol. A leaf represents a remote service or data object hosted on an endpoint: a shell session, a TCP tunnel, a file system, a running process. The protocol places no constraints on what a leaf does or what procedures it exposes.
+- a sender MAY set `end = true` without `cancel = true`
+- a sender MAY set `cancel = true` without `end = true`
+- a sender MAY set both when it intends immediate termination
+- a receiver of `cancel = true` SHOULD stop local processing for that stream as soon as practical
 
-### Addressing
+There is no separate stream-close or hook-close packet.
 
-A leaf is identified by its host endpoint path and its leaf name:
+### 14.5 Unknown Stream IDs
 
-```
-/abc123 { leaf: tty0 }         ← leaf tty0 on endpoint /abc123
-/abc123 { leaf: files }        ← leaf files on endpoint /abc123
-/abc123/pivot { leaf: tty0 }   ← leaf tty0 on endpoint /abc123/pivot
-```
+If an endpoint receives `Data` with an unknown or expired `stream_id`, it MUST discard the packet.
 
-On the wire, `dst_path` carries the endpoint path and `dst_leaf` carries the leaf name. The leaf name is not part of the path and is not visible to the router.
+The protocol does not define a mandatory error response for this case.
 
-### Procedures and Parameters
+## 15. Introspection Payloads
 
-Leaves expose named procedures invoked via `CallProcedure`. Call parameters directly correspond to the fields of a configurable struct on the leaf.
+**Normative**
 
-- Calling a procedure **with parameters** updates those fields and fires the response hook with the resulting state.
-- Calling a procedure **without parameters** reads the current state via the hook without modifying anything.
+The required introspection procedure `""` MUST return one of the following payloads through the declared hook.
 
-### Leaf Discovery
+### 15.1 Endpoint Introspection
 
-The authority sends `GetProcedures` to an endpoint's base path (with `dst_leaf: None`) to enumerate all leaves and their procedures:
+Returned when `procedure_id == ""` and `dst_leaf == None`.
 
-```
-Request
-  dst_path:     ["abc123"]
-  dst_leaf:     None
-  request_type: GetProcedures
-  content_type: "core/None"
-  data:         []
-```
+| Field | Meaning |
+|---|---|
+| `leaves` | List of introspection summaries for the endpoint's hosted leaves. |
 
-The endpoint replies with a `TreeResponse` whose `data` is an rkyv-serialised `Vec<LeafInfo>`:
+Each `LeafIntrospectionSummary` contains:
+
+| Field | Meaning |
+|---|---|
+| `leaf_name` | The leaf's local name. |
+| `description` | Optional human-readable description. |
+| `procedures` | Introspection records for the leaf's supported procedures. |
+| `state_procedure_id` | Procedure contract identifier associated with the serialized `state` payload. |
+| `state` | Serialized current-state payload. |
+
+Example in the current Rust implementation:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct LeafInfo {
-    /// The name of this leaf (e.g. "tty0", "files").
+pub struct EndpointIntrospection {
+    pub leaves: Vec<LeafIntrospectionSummary>,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct LeafIntrospectionSummary {
     pub leaf_name: String,
-    pub state: LeafState,
-    pub procedures: Vec<ProcedureDescriptor>,
+    pub description: Option<String>,
+    pub procedures: Vec<ProcedureIntrospection>,
+    pub state_procedure_id: String,
+    pub state: Vec<u8>,
+}
+```
+
+### 15.2 Leaf Introspection
+
+Returned when `procedure_id == ""` and `dst_leaf` names a specific leaf.
+
+| Field | Meaning |
+|---|---|
+| `leaf_name` | The leaf's local name. |
+| `description` | Optional human-readable description. |
+| `procedures` | Introspection records for the leaf's supported procedures. |
+| `state_procedure_id` | Procedure contract identifier associated with the serialized `state` payload. |
+| `state` | Serialized current-state payload. |
+
+Each `ProcedureIntrospection` contains:
+
+| Field | Meaning |
+|---|---|
+| `name` | Procedure name within the leaf. |
+| `description` | Optional human-readable description. |
+| `params` | Parameter definitions accepted by the procedure. |
+| `response_type` | Advisory indication of whether the procedure normally responds as an event or stream. |
+
+Each `ProcedureParameter` contains:
+
+| Field | Meaning |
+|---|---|
+| `name` | Parameter name. |
+| `value_type` | Application-defined parameter type name. |
+
+Example in the current Rust implementation:
+
+```rust
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct LeafIntrospection {
+    pub leaf_name: String,
+    pub description: Option<String>,
+    pub procedures: Vec<ProcedureIntrospection>,
+    pub state_procedure_id: String,
+    pub state: Vec<u8>,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct LeafState {
-    pub running: bool,
-    /// Host process ID. None for leaves that do not correspond to an OS process.
-    pub pid: Option<u32>,
-    pub error: Option<String>,
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub enum LeafValue {
-    Int(i64),
-    Bool(bool),
-    String(String),
-    Bytes(Vec<u8>),
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct ProcedureDescriptor {
+pub struct ProcedureIntrospection {
     pub name: String,
     pub description: Option<String>,
-    /// Parameter names and their current values, in call order.
-    pub params: Vec<(String, LeafValue)>,
-    /// Advisory: whether the hook fires once or streams repeatedly.
-    pub hook_response_type: HookResponseType,
+    pub params: Vec<ProcedureParameter>,
+    pub response_type: HookResponseType,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct ProcedureParameter {
+    pub name: String,
+    pub value_type: String,
 }
 ```
 
-### Unresolvable CallProcedure
+Rules:
 
-If the router cannot resolve the destination endpoint path, it returns `NoBranchError` to the sender. If the path resolves but the leaf name specified in `dst_leaf` is unknown to the endpoint, the endpoint silently discards the request. In either case, no hook fires. The calling endpoint is responsible for implementing an application-layer timeout.
+- `state_procedure_id` MUST identify the procedure contract associated with the serialized `state` payload
+- `params` MUST describe the accepted parameter names and parameter types for that procedure
+- introspection SHOULD describe current state, but does not establish a cache coherence guarantee
 
-### Reference Implementation: TTY Leaf
+## 16. Protocol Description
 
-| Procedure | Parameters | Hook Type | Description |
-|-----------|-----------|-----------|-------------|
-| `start` | `shell: String, rows: u16, cols: u16` | Event | Spawn a PTY with the given config |
-| `halt` | — | Event | Kill the PTY process |
-| `resize` | `rows: u16, cols: u16` | Event | Update terminal dimensions |
-| `state` | — | Event | Read current leaf state without modifying it |
-| `stream` | `name: String ("input"\|"output"\|"both")` | Stream | Attach to PTY I/O bidirectionally |
+**Non-Normative**
 
-Calling `start` with no arguments uses the leaf's stored defaults. Calling with arguments updates the stored defaults and spawns the process. The `stream` procedure establishes a `Stream`-type hook; the authority must pre-assign a `stream_id` in the `CallProcedure` header as described in the Hooks section.
+The UnShell protocol has a deliberately narrow center:
 
----
+- addressing by path
+- one downwards packet type
+- one returned-data packet type
+- hooks for correlation
+- streams as an extension of hook-backed data flow
 
-## Path Routing
+This is meant to make the protocol easier to reason about and easier to implement in small agents.
 
-The router uses three routing mechanisms, selected by `PacketType`.
+`procedure_id` is the main semantic anchor. In this design, the caller and callee are expected to share knowledge of what a procedure contract means. The protocol does not carry a global registry.
 
-### 1. Path-Based Routing (Request, HookData)
+## 17. Security Considerations
 
-Longest-prefix match on `dst_path`:
+**Non-Normative**
 
-```
-Registered paths    Incoming dst_path           Routes to
-["abc123"]          ["abc123"]                  → node abc123
-["abc123","pivot"]  ["abc123","pivot"]          → node pivot
-["_router"]         ["_router","nodes"]         → router built-in
-```
+Although security is not defined by the protocol itself, implementations should treat the `Unregistered` state as a strict quarantine boundary.
 
-**Rules:**
-1. Find all registered paths that are a prefix of `dst_path`.
-2. Choose the longest matching prefix.
-3. No match → return `TreeResponse { status: NoBranchError }` to sender.
-4. Tie → route to the most recently registered node.
+Recommended behavior:
 
-### 2. Stream ID Fastpath (StreamData, StreamClose)
+- authenticate or otherwise validate a peer before moving it to `Registered`
+- rate-limit or expire idle unregistered peers
+- avoid disclosing topology before admission
+- avoid detailed admission failure reasons
+- invalidate hooks and streams on disconnect unless a higher-layer session mechanism exists
 
-O(1) lookup in `HashMap<u32, (ConnectionHandle, ConnectionHandle)>`. The entry is created when a `CallProcedure` carrying a `stream_id` is forwarded. The entry is removed on `StreamClose` or on endpoint disconnect. If `stream_id` is not found, the packet is discarded and an error is returned to the sender.
+## 18. Serialization and Implementation Notes
 
-### 3. Response Routing (Response)
+**Non-Normative**
 
-When a `Request` is forwarded, the router records `request_id → src_connection`. When the corresponding `Response` arrives, the router forwards it to the recorded source connection and removes the entry. A `Response` with an unrecognised `request_id` is discarded with a warning.
+This document uses Rust-like `rkyv` struct notation to describe fields because it matches the current implementation language. The notation is explanatory. The protocol semantics are language-agnostic.
 
----
+Recommended implementation limits:
 
-## Router Built-in Endpoints
-
-Router built-ins are addressed at `/_router`. Sending any `RequestType` other than the one listed returns `UnsupportedOp`.
-
-| Path | RequestType | Returns |
-|------|-------------|---------|
-| `/_router/nodes` | `GetProcedures` | All connected endpoints, their registered paths, and their `display_name` values |
-| `/_router/ping` | `Read` | `"pong"` as `core/Utf8String` |
-
----
-
-## Content Types
-
-`content_type` is a free-form string namespaced by module. The protocol does not validate or interpret it — it is an application-layer concern. The router forwards it opaquely as part of the payload.
-
-| Content type | Meaning |
+| Item | Recommended limit |
 |---|---|
-| `"core/None"` | No data |
-| `"core/Utf8String"` | Raw UTF-8 string |
-| `"core/Bytes"` | Raw bytes |
-| `"core/LeafList"` | rkyv `Vec<LeafInfo>` |
-| `"tty/Data"` | PTY byte stream |
-| `"tty/Output"` | Shell stdout/stderr (UTF-8) |
-| `"files/Bytes"` | Raw file contents |
+| header length | 64 KiB |
+| payload length | 64 MiB |
 
-Custom modules use their module name as the namespace: `"mymodule/MyType"`.
+## 19. Known Hard Problems
 
----
+**Non-Normative**
 
-## Transport Trait
+### 19.1 Loop Prevention Outside Strict Trees
 
-The `Transport` trait abstracts the underlying network mechanism. The protocol layer is fully independent of transport.
+The protocol does not carry a hop count, route vector, or loop-detection token.
 
-```rust
-pub trait Transport: Send {
-    fn send(&mut self, header: &PacketHeader, payload: &[u8]) -> Result<(), TransportError>;
-    fn recv(&mut self) -> Result<(PacketHeader, Vec<u8>), TransportError>;
-}
+That keeps packets small, but it means loop prevention must be handled by topology discipline or implementation policy.
 
-#[derive(Debug, thiserror::Error)]
-pub enum TransportError {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("header too large: {0} bytes (max {1})")]
-    HeaderTooLarge(usize, usize),
-    #[error("payload too large: {0} bytes (max {1})")]
-    PayloadTooLarge(usize, usize),
-    #[error("connection closed cleanly")]
-    Disconnected,
-    #[error("rkyv deserialisation failed")]
-    DeserialiseError,
-    #[error("authentication failed")]
-    AuthFailed,
-}
-```
+### 19.2 Canonical Connection Management
 
-| Transport | Use case |
-|-----------|----------|
-| `TcpTransport` | Default |
-| `TlsTransport` | Encrypted channel |
-| `HttpTransport` | Tunnel over HTTP |
-| `DnsTransport` | Tunnel over DNS |
-| `IcmpTransport` | Tunnel over ICMP |
+The document defines `Registered` and `Unregistered` states but intentionally does not define how a peer moves between them.
 
-**Reconnect policy (payloads):** On `Disconnected` or `Io(_)`: close transport, wait 5 seconds, reconnect, run full auth and handshake. No maximum retry limit. All hook and stream state from the previous session is lost on disconnect. The authority must reissue any `CallProcedure` requests whose hooks it still needs after the payload reconnects.
+That preserves flexibility, but it means interoperable admission behavior requires a higher-layer convention.
 
-**Reconnect policy (operator CLI):** Print a message and exit. The operator restarts manually.
+### 19.3 Shared Meaning of `procedure_id`
 
----
+`procedure_id` is only useful if both sides share its meaning.
 
-## Packet Size Limits
+The protocol intentionally does not define a global registry or schema negotiation mechanism. That keeps the core minimal, but it pushes interoperability for procedure contracts into shared libraries, operator knowledge, or higher-layer conventions.
 
-| Limit | Value | Reason |
-|---|---|---|
-| Max header length | 64 KB | Anything larger is a bug or attack |
-| Max payload length | 64 MB | Sufficient for most single-packet transfers |
-| Auth challenge timeout | 5 s (client) | Fail fast on unresponsive authority |
-| Auth response timeout | 5 s (authority) | Prevent connection table exhaustion |
-| Handshake timeout | 10 s (authority) | After successful auth challenge |
-| Handshake ack timeout | 5 s (client) | Keep reconnect loops responsive |
+### 19.4 Stream Resumption Across Disconnects
 
----
+Hook and stream state are tied to local connection state.
 
-## Known Open Problems
-
-The following issues have no clean resolution within the current design. They are documented here so that implementers understand the tradeoffs and can make informed decisions.
-
----
-
-### 1. `AuthorityViolation` enforcement is unspecified
-
-`ResponseStatus::AuthorityViolation` is defined for the case where a non-parent endpoint attempts to send a `Request` downward past a node it did not directly admit. The spec states that routers must reject such packets, but no mechanism for performing this check is defined.
-
-To enforce this, the router would need to verify the authority relationship between a packet's sender and its destination before forwarding. The information is available in the routing table populated during admission. However, producing `AuthorityViolation` requires the router to generate a `TreeResponse` — an application-layer packet type — which conflicts with the design principle that the router is opaque to payloads and does not generate protocol-level responses of its own.
-
-The options are:
-
-- **Enforce it, accept the exception.** The router generates `AuthorityViolation` as a special case, accepting that this is the one place where the router produces application-layer content. This provides clear operational feedback but breaks the design principle.
-- **Drop silently.** Consistent with the behavior of unresolvable `CallProcedure` destinations (no response, timeout at the application layer), but provides no diagnostic signal to a misbehaving or misconfigured endpoint.
-- **Remove `AuthorityViolation`.** Drop the status code entirely on the grounds that a correctly implemented client will never send an upward `Request`. The check becomes a deploy-time correctness property rather than a runtime one.
-
-Each option is a legitimate design choice. A decision should be made explicitly before v1.0.
-
----
-
-### 2. `Read` and `Write` request types have no defined behavior
-
-`RequestType::Read` and `RequestType::Write` are defined in the enum but no section of the spec describes what they do, what `data` should contain, or how an endpoint should respond to them. Every actual leaf interaction in the spec uses `CallProcedure`.
-
-The coherent role for `Read` and `Write` would be for plain data endpoints — nodes that store a value without hosting a full leaf. However, the spec has no concept of a non-leaf data endpoint anywhere else. Introducing one would require defining how such nodes are registered, what types they hold, and how reads and writes are serialised.
-
-The alternative is to remove `Read` and `Write` from `RequestType`, leaving only `GetProcedures` and `CallProcedure`. This is a deliberate narrowing of the protocol's scope: all structured interaction goes through leaves and procedures, and there is no raw read/write layer below that. This is consistent with the complexity budget and the extensibility tenant, but should be an explicit decision rather than an implicit one made by leaving the types undefined.
-
----
-
-### 3. `LeafInfo` contains overlapping state representations
-
-`GetProcedures` returns a `Vec<LeafInfo>`, each containing a `LeafState` (running, pid, error) and a `Vec<ProcedureDescriptor>` whose `params` fields carry current parameter values. `CallProcedure("state", {})` returns the same information through a hook. There are three overlapping paths to the current state of a leaf, with no stated difference in authority, freshness, or purpose.
-
-The problem is that these serve roles that are conceptually distinct but practically redundant. `GetProcedures` is a discovery call — the operator asks what the leaf can do and what its current configuration is. `LeafState` answers whether the process is alive. `ProcedureDescriptor.params` answers what the current settings are. `CallProcedure("state")` is a live query that returns the same data.
-
-The question is whether discovery should return live state at all. One approach is to separate static schema from dynamic state: `GetProcedures` returns only the shape of the leaf (available procedures, parameter names, and their types) with no live values, and all live state queries go through `CallProcedure`. This removes the redundancy but requires a separate round-trip to learn current state after discovery. The other approach is to keep the current design and simply document that `GetProcedures` returns a snapshot that may be stale by the time it is acted on, and that `CallProcedure("state")` is the authoritative live query. Either is defensible; the spec needs to commit to one.
+When a connection disappears, the associated hook and stream context disappears with it. Any resumable behavior therefore requires a higher-layer session mechanism.
