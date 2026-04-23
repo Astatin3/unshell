@@ -8,8 +8,12 @@
 //! nc 127.0.0.1 1337
 //! ```
 
-use libc::{accept, bind, listen, socket, sockaddr_in, socklen_t, read, write, close, AF_INET, SOCK_STREAM};
+#![no_std]
+
 use core::mem::zeroed;
+use libc::{
+    AF_INET, SOCK_STREAM, accept, bind, close, listen, read, sockaddr_in, socket, socklen_t, write,
+};
 
 const PORT: u16 = 1337;
 const BACKLOG: i32 = 128;
@@ -20,31 +24,36 @@ fn main() -> Result<(), NetError> {
     listen_socket(server_fd, BACKLOG)?;
 
     println!("TCP Server listening on port {}", PORT);
-    println!("Connect with: nc 127.0.0.1 {}", PORT);
 
     let mut counter: u32 = 0;
 
     loop {
         match accept_client(server_fd) {
             Ok(client_fd) => {
+                println!("Connect with: nc 127.0.0.1 {}", PORT);
                 counter += 1;
                 let message = make_packet(counter);
 
                 unsafe {
-                    let _ = write(client_fd, message.as_bytes().as_ptr() as *const libc::c_void, message.len());
+                    let _ = write(
+                        client_fd,
+                        message.as_bytes().as_ptr() as *const libc::c_void,
+                        message.len(),
+                    );
                 }
 
-                let mut buf = [0u8; 1024];
-                loop {
-                    let n = unsafe {
-                        read(client_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
-                    };
-                    if n <= 0 {
-                        break;
-                    }
-                }
+                // let mut buf = [0u8; 1024];
+                // loop {
+                //     let n = unsafe {
+                //         read(client_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+                //     };
+                //     if n <= 0 {
+                //         break;
+                //     }
+                // }
 
                 unsafe {
+                    println!("Closed");
                     close(client_fd);
                 }
             }
@@ -54,9 +63,7 @@ fn main() -> Result<(), NetError> {
 }
 
 fn create_socket() -> Result<i32, NetError> {
-    let fd = unsafe {
-        socket(AF_INET, SOCK_STREAM, 0)
-    };
+    let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
     if fd < 0 {
         return Err(NetError::DeviceError);
     }
@@ -66,7 +73,11 @@ fn create_socket() -> Result<i32, NetError> {
 fn bind_socket(fd: i32, port: u16) -> Result<(), NetError> {
     let addr = build_sockaddr(port);
     let result = unsafe {
-        bind(fd, &addr as *const sockaddr_in as *const libc::sockaddr, std::mem::size_of::<sockaddr_in>() as socklen_t)
+        bind(
+            fd,
+            &addr as *const sockaddr_in as *const libc::sockaddr,
+            std::mem::size_of::<sockaddr_in>() as socklen_t,
+        )
     };
     if result < 0 {
         return Err(NetError::BindFailed);
@@ -87,7 +98,11 @@ fn accept_client(server_fd: i32) -> Result<i32, NetError> {
     let mut client_len: socklen_t = std::mem::size_of::<sockaddr_in>() as socklen_t;
 
     let client_fd = unsafe {
-        accept(server_fd, &mut client_addr as *mut sockaddr_in as *mut libc::sockaddr, &mut client_len)
+        accept(
+            server_fd,
+            &mut client_addr as *mut sockaddr_in as *mut libc::sockaddr,
+            &mut client_len,
+        )
     };
 
     if client_fd < 0 {
@@ -157,7 +172,10 @@ pub struct SmallStr<const N: usize> {
 
 impl<const N: usize> SmallStr<N> {
     pub const fn new() -> Self {
-        Self { data: [0u8; N], len: 0 }
+        Self {
+            data: [0u8; N],
+            len: 0,
+        }
     }
     pub fn push(&mut self, byte: u8) {
         if self.len < N {
