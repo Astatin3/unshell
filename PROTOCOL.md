@@ -222,7 +222,7 @@ This protocol defines exactly three packet types.
 | `Data` | `0x02` | Hook output or ongoing hook traffic. |
 | `Fault` | `0xFF` | Upstream protocol failure reporting for a hook. |
 
-Example in the current Rust implementation:
+The canonical archived payload of a `Call` packet MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -263,7 +263,7 @@ Header rules:
 
 A packet whose header violates these rules MUST be discarded.
 
-Example in the current Rust implementation:
+The canonical archived header layout MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -353,7 +353,7 @@ Rules:
 - if `response_hook` is present, `response_hook.return_path` MUST be present and MUST equal `src_path`
 - if `response_hook` is absent, the receiver MAY execute the procedure but MUST NOT fabricate an implicit response path
 
-Example in the current Rust implementation:
+The canonical archived payload of a `Call` packet MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -428,7 +428,7 @@ Rules:
 
 > **Rationale:** Pending call context exists because some failures are discovered before normal application execution begins. The callee still needs enough validated state to attribute an upstream `Fault` to the declared hook without pretending that the hook was fully active for ordinary bidirectional traffic.
 
-Example in the current Rust implementation:
+The canonical archived hook target layout MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -457,7 +457,7 @@ Rules:
 
 > **Rationale:** Ordinary hook traffic is part of the same procedure contract that created the hook, so the returned `procedure_id` stays anchored to the originating `Call`. This keeps hook validation simple and avoids treating a response as a separate contract lookup. Introspection therefore uses `""` on both the `Call` and the `Data` it produces. Protocol faults are separate packets and therefore do not need to overload `Data` semantics.
 
-Example in the current Rust implementation:
+The canonical archived payload of a `Data` packet MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -541,13 +541,11 @@ The `Fault` payload is the following enum identified by fixed byte discriminants
 |---|---|---|
 | `UnknownLeaf` | `0x01` | The addressed `dst_leaf` does not exist on the destination endpoint. |
 | `UnknownProcedure` | `0x02` | The destination does not support the requested `procedure_id`. |
-| `InvalidCallHeader` | `0x03` | A received `Call` header was invalid for protocol processing. |
-| `InvalidSourcePath` | `0x04` | The packet `src_path` was invalid for the connection on which it arrived. |
-| `InvalidHookPeer` | `0x05` | The `Data` or `Fault` sender did not match the expected peer recorded in hook state. |
-| `PermissionDenied` | `0x06` | The sender was not permitted to perform the requested protocol action. |
-| `InternalError` | `0x07` | The endpoint encountered an internal protocol-processing failure. |
+| `InvalidSourcePath` | `0x03` | The packet `src_path` was invalid for the connection on which it arrived. |
+| `InvalidHookPeer` | `0x04` | The `Data` or `Fault` sender did not match the expected peer recorded in hook state. |
+| `InternalError` | `0x05` | The endpoint encountered an internal protocol-processing failure. |
 
-Example in the current Rust implementation:
+The canonical archived payload of a `Fault` packet MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -560,11 +558,9 @@ pub struct FaultMessage {
 pub enum ProtocolFault {
     UnknownLeaf = 0x01,
     UnknownProcedure = 0x02,
-    InvalidCallHeader = 0x03,
-    InvalidSourcePath = 0x04,
-    InvalidHookPeer = 0x05,
-    PermissionDenied = 0x06,
-    InternalError = 0x07,
+    InvalidSourcePath = 0x03,
+    InvalidHookPeer = 0x04,
+    InternalError = 0x05,
 }
 ```
 
@@ -624,7 +620,7 @@ Each `LeafIntrospectionSummary` contains:
 | `leaf_name` | The leaf's local name. |
 | `procedures` | Full canonical `procedure_id` values supported by the leaf. |
 
-Example in the current Rust implementation:
+The canonical archived payload of endpoint introspection MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -648,7 +644,7 @@ Returned when `procedure_id == ""` and `dst_leaf` names a specific leaf.
 | `leaf_name` | The leaf's local name. |
 | `procedures` | Full canonical `procedure_id` values supported by the leaf. |
 
-Example in the current Rust implementation:
+The canonical archived payload of leaf introspection MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
