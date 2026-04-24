@@ -10,13 +10,9 @@
 
 The UnShell protocol is a tree-addressed packet protocol for remote procedure calls and bidirectional hook-backed data exchange across a hierarchy of connected endpoints.
 
-The protocol is intended to be small, extensible, and canonical.
-
-Small means the core protocol stays narrow enough for constrained implementations. Extensible means new behavior is introduced through leaves, procedures, and payload schemas instead of frequent protocol redesign. Canonical means there should be one clearly defined way to express each core protocol behavior.
+The protocol is intended to be small, extensible, and canonical. The core stays narrow enough for constrained implementations, new behavior is introduced through leaves, procedures, and payload schemas instead of frequent protocol redesign, and each core protocol behavior has one clearly defined expression.
 
 This document combines exact protocol definition with rationale. Rationale blocks explain why a rule exists, but do not define interoperability requirements.
-
-> **Rationale:** This document uses a formal specification layout: descriptive sections first, exact protocol definition later, and rationale kept adjacent to the rules it explains.
 
 ## 2. Document Conventions
 
@@ -47,7 +43,7 @@ To achieve this purpose, the scope of this specification includes:
 - the required introspection procedure
 - extension through leaves, procedures, and payload schemas
 
-The UnShell protocol assumes that a connection already exists, that the local implementation has decided whether a peer should be admitted into routing, and that any required authentication or authorization has already been handled by the surrounding system.
+The UnShell protocol assumes that a connection already exists and that any required authentication, authorization, and routing admission decisions have already been handled by the surrounding system.
 
 The following items are beyond the scope of this specification:
 
@@ -222,7 +218,7 @@ This protocol defines exactly three packet types.
 | `Data` | `0x02` | Hook output or ongoing hook traffic. |
 | `Fault` | `0xFF` | Upstream protocol failure reporting for a hook. |
 
-The canonical archived payload of a `Call` packet MUST be:
+The canonical archived representation of packet type identifiers MUST be:
 
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -232,12 +228,6 @@ pub enum PacketType {
     Fault = 0xFF,
 }
 ```
-
-`Call` is used for downwards invocation.
-
-`Data` is used for hook output and ongoing hook traffic.
-
-`Fault` is used for upstream protocol failure reporting associated with a hook.
 
 > **Rationale:** `Fault` is separated from `Data` so ordinary application output does not need to share semantics with protocol failure signaling. A receiver can distinguish successful hook traffic from protocol failure immediately from `packet_type`, without inspecting `procedure_id` or the payload contract.
 
@@ -311,9 +301,7 @@ The protocol defines no mandatory error packet for unresolved destinations.
 
 ### 11.2 Call Enforcement
 
-When forwarding or receiving a `Call`, an endpoint MUST verify the local parent-child relationship at the boundary where the packet arrives.
-
-If the sender on that connection is not the direct parent permitted to issue downwards calls into the relevant subtree, the endpoint MUST drop the packet silently.
+When forwarding or receiving a `Call`, an endpoint MUST apply the local-authority rules defined in Section 7.1 at the boundary where the packet arrives.
 
 ### 11.3 Data and Fault Routing
 
@@ -472,18 +460,13 @@ pub struct DataMessage {
 
 For hook-associated responses:
 
-- `hook_id` MUST be present
 - `end_hook` SHOULD be `true` on the final packet a sender emits for that hook
 
 A hook MAY emit multiple `Data` packets if the application requires chunking, phased output, or prolonged bidirectional interaction.
 
 ### 14.2 Hook Continuation
 
-A hook exists only as part of a `Call` that declares `response_hook`.
-
-There is no standalone hook-open packet.
-
-A hook becomes active when the destination endpoint accepts the `Call` and allocates local hook state for the declared `response_hook`.
+A hook continuation follows the declaration and activation rules in Section 13.
 
 Once active, either side MAY send the first `Data` packet for that hook.
 
@@ -493,7 +476,6 @@ If an endpoint sends hook `Data` before the peer has activated local hook state 
 
 Every `Data` packet for a hook MUST:
 
-- carry the hook's `hook_id`
 - set `dst_path` to the path of the peer endpoint for that hook packet
 
 There is no protocol-level requirement that the callee send the first `Data` packet.
@@ -508,14 +490,7 @@ When allocating a new hook, an implementation SHOULD choose the lowest available
 
 > **Rationale:** The protocol needs a clear uniqueness rule for active hooks, but it does not need to over-specify local allocator policy after normal completion. Some implementations may want to retain inactive entries briefly for diagnostics, duplicate suppression, or transport reordering tolerance. Recommending the lowest available inactive `hook_id` keeps allocation predictable without forcing immediate recycling.
 
-### 14.3 Bidirectional Hook Data
-
-For ongoing hook traffic:
-
-- `hook_id` MUST be present on every packet
-- `dst_path` MUST identify the peer endpoint for that hook packet
-
-### 14.4 Hook End
+### 14.3 Hook End
 
 Rules:
 
@@ -529,7 +504,7 @@ After normal completion without a `Fault` packet, the moment at which a hook bec
 
 > **Rationale:** `end_hook` only communicates that one sender is finished. The core protocol intentionally avoids defining a universal half-close or close-ack state machine because different applications want different shutdown behavior. A simple request-response hook can retire immediately after the final packet, while a richer bidirectional protocol can define a stricter end-of-stream sequence above this layer.
 
-### 14.5 Fault Definition
+### 14.4 Fault Definition
 
 `Fault` is a distinct packet type used for protocol-level failure reporting associated with a hook.
 
@@ -575,15 +550,11 @@ When an endpoint can attribute a protocol-level failure to a specific hook or de
 - the same `hook_id`
 - a `ProtocolFault` payload describing the condition
 
-When an endpoint rejects a `Call` for `UnknownLeaf` or `UnknownProcedure` and the `Call` declared `response_hook`, the endpoint MUST send a `Fault` packet upstream using that declared `hook_id` and `return_path` even if normal application execution never began.
-
 Sending a `Fault` packet ends the hook immediately. After sending or receiving a `Fault` packet, an implementation MUST remove that hook from active state.
 
 If an endpoint receives a fault value it does not recognize, it MUST still treat the packet as a protocol fault and close the hook.
 
 > **Rationale:** Protocol faults are part of interoperability, so they need a fixed canonical payload contract rather than a free-form error blob. A small enum with stable byte discriminants is cheap to encode, easy to evolve, and avoids coupling core protocol behavior to human-readable messages. Receivers can make deterministic decisions from the fault kind alone.
-
-> **Rationale:** Separating `Fault` from `Data` keeps application output and protocol failure signaling visibly distinct on the wire. It also removes the need for a reserved fault `procedure_id`, because failure is already expressed by `packet_type`.
 
 > **Rationale:** The fault set is intentionally small. Silent drop remains the canonical behavior for traffic that cannot be safely attributed to a valid call or hook, such as an unknown `hook_id`, malformed returned traffic, or a routing miss discovered by an intermediate router. `Fault` is reserved for failures that a receiver can attribute to a specific call flow and report upstream deterministically.
 
@@ -602,8 +573,6 @@ Introspection MUST NOT include human-readable descriptions, parameter definition
 The caller is expected to know the meaning of each discovered `procedure_id` from the pre-shared contract identified by that `procedure_id`.
 
 When the required blank introspection procedure is called, it MUST return one of the following payloads through the declared hook.
-
-> **Rationale:** Introspection is intentionally narrow. It tells a caller what can be called, not how to explain or rediscover the contract. `procedure_id` already names a pre-shared callable contract, so repeating human-readable descriptions, parameter metadata, or live state inside introspection would make the protocol less canonical rather than more useful.
 
 ### 15.1 Endpoint Introspection
 
@@ -665,17 +634,7 @@ Rules:
 
 **Non-Normative**
 
-The UnShell protocol has a deliberately narrow center:
-
-- addressing by path
-- one downwards packet type
-- one returned-data packet type
-- hooks for correlation and ongoing bidirectional interaction
-- protocol faults returned through their own packet type on the same hook path
-
-This is meant to make the protocol easier to reason about and easier to implement in small agents.
-
-`procedure_id` is the main semantic anchor. In this design, the caller and callee are expected to share knowledge of what a procedure contract means. The protocol does not carry a global registry, but it does require a canonical dotted naming form so independently authored contracts remain distinguishable.
+The UnShell protocol keeps its core narrow: path addressing, downwards `Call`, hook-backed `Data`, and upstream `Fault`. `procedure_id` is the main semantic anchor, so callers and callees are expected to share knowledge of each procedure contract without relying on a protocol-level registry.
 
 ## 17. Security Considerations
 
