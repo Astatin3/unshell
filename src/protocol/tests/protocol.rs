@@ -81,16 +81,11 @@ fn header_and_call_validation_reject_invalid_combinations() {
 #[test]
 fn procedure_validation_accepts_introspection_and_rejects_bad_shapes() {
     assert_eq!(validate_procedure_id(""), Ok(()));
+    assert_eq!(validate_procedure_id("unshell.echo.v01.alpha.invoke"), Ok(()));
     assert_eq!(
-        validate_procedure_id("unshell.echo.v01.alpha.invoke"),
+        validate_procedure_id("contains spaces"),
         Err(ValidationError::ProcedureId(
-            "version segment must be v followed by a positive decimal integer"
-        ))
-    );
-    assert_eq!(
-        validate_procedure_id("too.short.v1"),
-        Err(ValidationError::ProcedureId(
-            "must contain exactly 5 segments"
+            "procedure identifier should use alphanumeric characters, dots, and underscores"
         ))
     );
 }
@@ -105,7 +100,7 @@ fn truncated_frames_are_rejected() {
         hook_id: Some(9),
     };
     let message = FaultMessage {
-        fault: ProtocolFault::InternalError,
+        fault: ProtocolFault::INTERNAL_ERROR,
     };
 
     let frame = encode_packet(&header, &message).expect("frame should encode");

@@ -6,7 +6,7 @@ use crate::protocol::tree::{
 };
 use crate::protocol::{
     DataMessage, EndpointIntrospection, FaultMessage, PacketHeader, PacketType, ProtocolFault,
-    decode_frame, deserialize_archived_bytes, encode_packet,
+    deserialize_archived_bytes, encode_packet,
 };
 
 fn path(parts: &[&str]) -> Vec<String> {
@@ -77,16 +77,16 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
         .receive(&Ingress::Local, frame)
         .expect("endpoint should handle introspection");
 
-    assert!(outcome.events.is_empty());
-    assert_eq!(outcome.forwards.len(), 1);
-    assert_eq!(outcome.forwards[0].0, RouteDecision::Parent);
+    assert!(outcome.forwards.is_empty());
+    assert_eq!(outcome.events.len(), 1);
 
-    let parsed = decode_frame(&outcome.forwards[0].1).expect("response should decode");
-    let response = parsed
-        .deserialize_data()
-        .expect("response data should deserialize");
+    let LocalEvent::Data { header, message: response } = &outcome.events[0] else {
+        panic!("expected local data event");
+    };
+    assert_eq!(header.packet_type, PacketType::Data);
+    assert_eq!(header.dst_path, path(&["root"]));
     let introspection = deserialize_archived_bytes::<
-        rkyv::Archived<EndpointIntrospection>,
+        crate::protocol::introspection::ArchivedEndpointIntrospection,
         EndpointIntrospection,
     >(&response.data)
     .expect("introspection payload should deserialize");
@@ -146,7 +146,7 @@ fn invalid_hook_peer_emits_local_fault_event() {
             assert_eq!(
                 message,
                 &FaultMessage {
-                    fault: ProtocolFault::InvalidHookPeer,
+                    fault: ProtocolFault::INVALID_HOOK_PEER,
                 }
             );
         }

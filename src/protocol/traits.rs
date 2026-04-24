@@ -8,7 +8,7 @@ use alloc::{string::String, vec::Vec};
 use super::{
     FrameBytes, FrameCodec, LeafIntrospection, LeafIntrospectionSummary,
     tree::{
-        ActiveHook, Endpoint, EndpointError, EndpointOutcome, HookKey, HookTable, Ingress,
+        ActiveHook, Endpoint, EndpointError, EndpointOutcome, HookConflict, HookKey, HookTable, Ingress,
         LeafNode, LeafSpec, PendingHook, RouteProvider,
     },
 };
@@ -26,8 +26,8 @@ impl<T> RouteResolution for T where T: RouteProvider + ?Sized {}
 /// Hook storage contract for pending and active protocol flows.
 pub trait HookStore {
     fn allocate_hook_id(&mut self, return_path: &[String]) -> u64;
-    fn insert_pending(&mut self, pending: PendingHook) -> Result<(), ()>;
-    fn insert_active(&mut self, active: ActiveHook) -> Result<(), ()>;
+    fn insert_pending(&mut self, pending: PendingHook) -> Result<(), HookConflict>;
+    fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict>;
     fn activate_pending(&mut self, key: &HookKey, peer_path: Vec<String>) -> Option<()>;
     fn remove_pending(&mut self, key: &HookKey) -> Option<PendingHook>;
     fn remove_active(&mut self, key: &HookKey) -> Option<ActiveHook>;
@@ -41,11 +41,11 @@ impl HookStore for HookTable {
         HookTable::allocate_hook_id(self, return_path)
     }
 
-    fn insert_pending(&mut self, pending: PendingHook) -> Result<(), ()> {
+    fn insert_pending(&mut self, pending: PendingHook) -> Result<(), HookConflict> {
         HookTable::insert_pending(self, pending)
     }
 
-    fn insert_active(&mut self, active: ActiveHook) -> Result<(), ()> {
+    fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict> {
         HookTable::insert_active(self, active)
     }
 

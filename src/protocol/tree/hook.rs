@@ -41,7 +41,10 @@ pub struct ActiveHook {
     pub peer_finished: bool,
 }
 
-/// Durable hook state tables.
+/// Duplicate hook insertion error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HookConflict;
+
 /// Durable hook state tables.
 #[derive(Debug)]
 pub struct HookTable {
@@ -67,19 +70,19 @@ impl HookTable {
         id
     }
 
-    pub fn insert_pending(&mut self, pending: PendingHook) -> Result<(), ()> {
+    pub fn insert_pending(&mut self, pending: PendingHook) -> Result<(), HookConflict> {
         let key = HookKey::new(pending.return_path.clone(), pending.hook_id);
         if self.pending.contains_key(&key) || self.active.contains_key(&key) {
-            return Err(());
+            return Err(HookConflict);
         }
         self.pending.insert(key, pending);
         Ok(())
     }
 
-    pub fn insert_active(&mut self, active: ActiveHook) -> Result<(), ()> {
+    pub fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict> {
         let key = HookKey::new(active.return_path.clone(), active.hook_id);
         if self.pending.contains_key(&key) || self.active.contains_key(&key) {
-            return Err(());
+            return Err(HookConflict);
         }
         self.active.insert(key, active);
         Ok(())

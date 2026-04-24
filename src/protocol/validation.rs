@@ -98,7 +98,3 @@ pub fn validate_call(header: &PacketHeader, call: &CallMessage) -> Result<(), Va
 
     Ok(())
 }
-
-fn is_portable_procedure_char(ch: char) -> bool {
-    ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'
-}
