@@ -56,7 +56,6 @@ The following items are beyond the scope of this specification:
 - connection establishment
 - admission protocol
 - transport selection
-- transport-specific serialization formats
 - encryption
 - obfuscation
 - router management interfaces
@@ -66,6 +65,8 @@ The following items are beyond the scope of this specification:
 Every implementation is expected to maintain its own live connection set and its own ground truth about which peers are connected, admitted, and routable.
 
 > **Rationale:** Authentication and handshakes were intentionally removed from the core scope. They are too deployment-specific to define canonically without bloating the protocol.
+
+> **Rationale:** Packet serialization is in scope because independently authored endpoints need one canonical byte representation in order to interoperate. Transport selection remains out of scope because the same framed packet bytes can be carried over different transports.
 
 ## 4. Protocol Overview
 
@@ -193,9 +194,21 @@ Both lengths MUST be encoded as big-endian `u32`.
 
 The header MUST be serialized before the payload.
 
+`header bytes` and `payload bytes` MUST use the `rkyv` archived format.
+
+The canonical `rkyv` format-control settings for this protocol are:
+
+- little-endian primitives
+- aligned primitives
+- 32-bit relative pointers
+
+An implementation that uses different `rkyv` format-control settings is not protocol-compatible.
+
 Routing decisions MUST be made from header fields only.
 
 Routers MUST NOT inspect payload structure in order to route a packet.
+
+> **Rationale:** `rkyv` does not define one single universal format independent of configuration. Its archived representation depends on format-control settings such as endianness, alignment, and pointer width. This specification therefore fixes those settings so "use rkyv" means one exact interoperable byte format rather than a family of related formats.
 
 ## 9. Packet Types
 
@@ -275,6 +288,12 @@ Each registered endpoint path in the tree MUST be unique.
 
 At a local routing boundary, an implementation MUST NOT maintain two registered child routes with the same claimed endpoint path.
 
+An endpoint's local subtree consists of the endpoint's own path and every descendant path whose segment sequence begins with the endpoint's path as a prefix.
+
+A path `A` lies within the subtree of path `B` if and only if `B` is a prefix of `A`.
+
+The root endpoint's path is the empty path, and its subtree contains all paths.
+
 When forwarding a packet, an implementation MUST:
 
 1. compare `dst_path` against its locally registered child paths
@@ -287,6 +306,8 @@ When forwarding a packet, an implementation MUST:
 The protocol defines no mandatory error packet for unresolved destinations.
 
 > **Rationale:** Longest-prefix routing is defined as a path-selection rule, not as a way to resolve duplicate ownership. The tree model assumes each endpoint path names exactly one place in the topology. If two child routes claim the same path, the local routing table is already invalid.
+
+> **Rationale:** The upward-routing rule can look backwards at first glance because it is phrased from the perspective of the current endpoint rather than from the root. Defining subtree membership by path-prefix makes the decision mechanical: if the destination is not inside the current endpoint's subtree and no child owns a more specific prefix, the only remaining path is upward.
 
 ### 11.2 Call Enforcement
 
@@ -362,9 +383,9 @@ A `Call` with `procedure_id == ""` MUST include `response_hook`.
 
 If the destination endpoint does not exist, the packet is dropped during routing.
 
-If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint SHOULD treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
+If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint MUST treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
 
-If `procedure_id` is unknown or unsupported, the endpoint SHOULD treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
+If `procedure_id` is unknown or unsupported, the endpoint MUST treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
 
 > **Rationale:** Fault reporting for an invalid call would be self-defeating if the callee first had to prove that the application procedure was valid before it could use the declared hook. The hook exists to carry either normal returned data or a protocol fault explaining why normal execution could not proceed.
 
@@ -381,14 +402,31 @@ There is no standalone hook-open packet.
 | `hook_id` | Identifier scoped to the calling endpoint that declared the hook. |
 | `return_path` | Endpoint path to which returned `Data` or `Fault` packets are sent. |
 
+Pending call context is local transient state created when an endpoint receives a `Call` that declares `response_hook` and before that call has either been accepted into active hook state, rejected with `Fault`, or discarded.
+
+Each pending call context MUST contain at least:
+
+- the caller `src_path`
+- the declared `return_path`
+- the declared `hook_id`
+- the invoked `procedure_id`
+- the destination `dst_leaf`
+
+A pending call context MUST be keyed by the pair `(`return_path`, `hook_id`)`.
+
 Rules:
 
 - `hook_id` MUST be unique within the active hook set of the calling endpoint identified by `return_path`
 - `return_path` MUST name the calling endpoint that hosts the hook
 - a hook is declared by `response_hook` inside a `Call`
+- a pending call context MAY be used only to validate and emit an upstream `Fault` for that received `Call`
 - a hook becomes active when the destination endpoint accepts that `Call` and allocates local hook state for it
+- when a `Call` is accepted, its pending call context MUST transition into active hook state
+- when a `Call` is rejected with `Fault` or discarded, its pending call context MUST be removed
 - once active, either side MAY send `Data` packets associated with that hook until the interaction ends or is canceled
 - all protocol faults associated with the call MUST use that same `hook_id`
+
+> **Rationale:** Pending call context exists because some failures are discovered before normal application execution begins. The callee still needs enough validated state to attribute an upstream `Fault` to the declared hook without pretending that the hook was fully active for ordinary bidirectional traffic.
 
 Example in the current Rust implementation:
 
@@ -504,13 +542,10 @@ The `Fault` payload is the following enum identified by fixed byte discriminants
 | `UnknownLeaf` | `0x01` | The addressed `dst_leaf` does not exist on the destination endpoint. |
 | `UnknownProcedure` | `0x02` | The destination does not support the requested `procedure_id`. |
 | `InvalidCallHeader` | `0x03` | A received `Call` header was invalid for protocol processing. |
-| `InvalidDataHeader` | `0x04` | A received `Data` or `Fault` header was invalid for protocol processing. |
-| `InvalidSourcePath` | `0x05` | The packet `src_path` was invalid for the connection on which it arrived. |
-| `InvalidHookPeer` | `0x06` | The `Data` or `Fault` sender did not match the expected peer recorded in hook state. |
-| `DestinationUnreachable` | `0x07` | The packet could not be delivered to its destination subtree. |
-| `HookNotActive` | `0x08` | The referenced `hook_id` was not active at the receiving endpoint. |
-| `PermissionDenied` | `0x09` | The sender was not permitted to perform the requested protocol action. |
-| `InternalError` | `0x0A` | The endpoint encountered an internal protocol-processing failure. |
+| `InvalidSourcePath` | `0x04` | The packet `src_path` was invalid for the connection on which it arrived. |
+| `InvalidHookPeer` | `0x05` | The `Data` or `Fault` sender did not match the expected peer recorded in hook state. |
+| `PermissionDenied` | `0x06` | The sender was not permitted to perform the requested protocol action. |
+| `InternalError` | `0x07` | The endpoint encountered an internal protocol-processing failure. |
 
 Example in the current Rust implementation:
 
@@ -526,13 +561,10 @@ pub enum ProtocolFault {
     UnknownLeaf = 0x01,
     UnknownProcedure = 0x02,
     InvalidCallHeader = 0x03,
-    InvalidDataHeader = 0x04,
-    InvalidSourcePath = 0x05,
-    InvalidHookPeer = 0x06,
-    DestinationUnreachable = 0x07,
-    HookNotActive = 0x08,
-    PermissionDenied = 0x09,
-    InternalError = 0x0A,
+    InvalidSourcePath = 0x04,
+    InvalidHookPeer = 0x05,
+    PermissionDenied = 0x06,
+    InternalError = 0x07,
 }
 ```
 
@@ -541,13 +573,13 @@ Rules:
 - a `Fault` packet MUST carry `hook_id`
 - a receiver of a `Fault` packet MUST validate `src_path` against the expected subordinate hook peer recorded in local hook state or pending call context
 
-When an endpoint can attribute a protocol-level failure to a specific hook or declared `response_hook`, it SHOULD send a `Fault` packet upstream using:
+When an endpoint can attribute a protocol-level failure to a specific hook or declared `response_hook`, it MUST send a `Fault` packet upstream using:
 
 - `dst_path` set to the path of the hook host recorded in the active hook context or pending call context
 - the same `hook_id`
 - a `ProtocolFault` payload describing the condition
 
-When an endpoint rejects a `Call` for `UnknownLeaf` or `UnknownProcedure` and the `Call` declared `response_hook`, the endpoint SHOULD send a `Fault` packet upstream using that declared `hook_id` and `return_path` even if normal application execution never began.
+When an endpoint rejects a `Call` for `UnknownLeaf` or `UnknownProcedure` and the `Call` declared `response_hook`, the endpoint MUST send a `Fault` packet upstream using that declared `hook_id` and `return_path` even if normal application execution never began.
 
 Sending a `Fault` packet ends the hook immediately. After sending or receiving a `Fault` packet, an implementation MUST remove that hook from active state.
 
@@ -556,6 +588,8 @@ If an endpoint receives a fault value it does not recognize, it MUST still treat
 > **Rationale:** Protocol faults are part of interoperability, so they need a fixed canonical payload contract rather than a free-form error blob. A small enum with stable byte discriminants is cheap to encode, easy to evolve, and avoids coupling core protocol behavior to human-readable messages. Receivers can make deterministic decisions from the fault kind alone.
 
 > **Rationale:** Separating `Fault` from `Data` keeps application output and protocol failure signaling visibly distinct on the wire. It also removes the need for a reserved fault `procedure_id`, because failure is already expressed by `packet_type`.
+
+> **Rationale:** The fault set is intentionally small. Silent drop remains the canonical behavior for traffic that cannot be safely attributed to a valid call or hook, such as an unknown `hook_id`, malformed returned traffic, or a routing miss discovered by an intermediate router. `Fault` is reserved for failures that a receiver can attribute to a specific call flow and report upstream deterministically.
 
 > **Rationale:** An unrecognized protocol fault still means the application contract has failed and the hook can no longer continue safely. Requiring unknown fault values to terminate the hook preserves forward compatibility: newer peers may introduce additional fault kinds without causing older peers to accidentally keep a broken hook alive.
 
@@ -665,7 +699,7 @@ Recommended behavior:
 
 **Non-Normative**
 
-This document uses Rust-like `rkyv` struct notation to describe fields because it matches the current implementation language. The notation is explanatory. The protocol semantics are language-agnostic.
+This document uses Rust-like `rkyv` struct notation to describe fields because it matches the current implementation language. The notation is explanatory, but the on-wire byte format is normatively fixed in Section 8.
 
 Recommended implementation limits:
 
