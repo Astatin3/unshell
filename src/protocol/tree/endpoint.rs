@@ -353,7 +353,7 @@ impl ProtocolEndpoint {
                 leaf_name: leaf_name.clone(),
                 procedures: leaf.procedures.clone(),
             })
-            .expect("serialize")
+            .map_err(|e| EndpointError::Frame(FrameError::Serialize(e)))?
             .to_vec()
         } else {
             to_bytes::<RkyvError>(&EndpointIntrospection {
@@ -366,9 +366,9 @@ impl ProtocolEndpoint {
                     })
                     .collect(),
             })
-            .expect("serialize")
+            .map_err(|e| EndpointError::Frame(FrameError::Serialize(e)))?
             .to_vec()
-        };
+        };;
 
         let response_header = PacketHeader {
             packet_type: PacketType::Data,
