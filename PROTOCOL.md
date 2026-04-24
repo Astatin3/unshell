@@ -381,8 +381,7 @@ pub struct HookTarget {
 |---|---|
 | `procedure_id` | Identifier of the procedure contract to which this returned payload belongs. |
 | `data` | Application-defined output payload. |
-| `end` | Sender indicates completion of its participation in the hook interaction. |
-| `cancel` | Sender requests termination of the associated hook processing. |
+| `end_hook` | Sender indicates that its application protocol is ending the hook interaction. |
 
 Rules:
 
@@ -397,8 +396,7 @@ Example in the current Rust implementation:
 pub struct DataMessage {
     pub procedure_id: String,
     pub data: Vec<u8>,
-    pub end: bool,
-    pub cancel: bool,
+    pub end_hook: bool,
 }
 ```
 
@@ -407,7 +405,7 @@ pub struct DataMessage {
 For hook-associated responses:
 
 - `hook_id` MUST be present
-- `end` SHOULD be `true` on the final packet for that hook
+- `end_hook` SHOULD be `true` on the final packet a sender emits for that hook
 
 A hook MAY emit multiple `Data` packets if the application requires chunking, phased output, or prolonged bidirectional interaction.
 
@@ -435,14 +433,13 @@ For ongoing hook traffic:
 - `hook_id` MUST be present on every packet
 - `dst_path` MUST identify the peer endpoint for that hook packet
 
-### 14.4 End and Cancel
+### 14.4 Hook End
 
 Rules:
 
-- a sender MAY set `end = true` without `cancel = true`
-- a sender MAY set `cancel = true` without `end = true`
-- a sender MAY set both when it intends immediate termination
-- a receiver of `cancel = true` SHOULD stop local processing for that hook as soon as practical
+- a sender MAY set `end_hook = true` when its application protocol has decided to end the hook interaction
+- a receiver of `end_hook = true` SHOULD treat the sender as finished with that hook
+- any finer-grained shutdown, acknowledgment, or cancellation sequencing MUST be defined by the application protocol carried in `procedure_id` and `data`
 
 There is no separate hook-close packet.
 
