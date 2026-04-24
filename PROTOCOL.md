@@ -265,6 +265,10 @@ pub struct PacketHeader {
 
 All protocol routing is path-based.
 
+Each registered endpoint path in the tree MUST be unique.
+
+At a local routing boundary, an implementation MUST NOT maintain two registered child routes with the same claimed endpoint path.
+
 When forwarding a packet, an implementation MUST:
 
 1. compare `dst_path` against its locally registered child paths
@@ -275,6 +279,8 @@ When forwarding a packet, an implementation MUST:
 6. otherwise, drop the packet silently
 
 The protocol defines no mandatory error packet for unresolved destinations.
+
+> **Rationale:** Longest-prefix routing is defined as a path-selection rule, not as a way to resolve duplicate ownership. The tree model assumes each endpoint path names exactly one place in the topology. If two child routes claim the same path, the local routing table is already invalid.
 
 ### 11.2 Call Enforcement
 
@@ -346,9 +352,11 @@ A `Call` with `procedure_id == ""` MUST include `response_hook`.
 
 If the destination endpoint does not exist, the packet is dropped during routing.
 
-If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint SHOULD report an upstream protocol fault through the declared hook. If no hook exists, the endpoint MUST discard the `Call` silently.
+If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint SHOULD treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
 
-If `procedure_id` is unknown or unsupported, the endpoint SHOULD report an upstream protocol fault through the declared hook. If no hook exists, the endpoint MUST discard the `Call` silently.
+If `procedure_id` is unknown or unsupported, the endpoint SHOULD treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
+
+> **Rationale:** Fault reporting for an invalid call would be self-defeating if the callee first had to prove that the application procedure was valid before it could use the declared hook. The hook exists to carry either normal returned data or a protocol fault explaining why normal execution could not proceed.
 
 ## 13. Hook Definition
 
@@ -400,7 +408,7 @@ Rules:
 - for protocol fault `Data`, the receiver MUST validate that `procedure_id == "org.unshell.protocol.v1.meta.fault"`
 - for hook-associated `Data`, the receiver MUST validate `src_path` against the expected hook peer recorded in local hook state
 
-> **Rationale:** Ordinary hook traffic is part of the same procedure contract that created the hook, so the returned `procedure_id` stays anchored to the originating `Call`. This keeps hook validation simple and makes introspection responses unambiguous: introspection uses `""` on both the `Call` and the non-fault `Data` it produces. Protocol faults are the only exception because they intentionally replace the application contract with a protocol-defined failure contract.
+> **Rationale:** Ordinary hook traffic is part of the same procedure contract that created the hook, so the returned `procedure_id` stays anchored to the originating `Call`. This keeps hook validation simple and avoids treating a response as a separate contract lookup. Introspection therefore uses `""` on both the `Call` and the non-fault `Data` it produces. Protocol faults are the only exception because they intentionally replace the application contract with a protocol-defined failure contract.
 
 Example in the current Rust implementation:
 
@@ -536,7 +544,15 @@ If an endpoint receives `Data` with an unknown or expired `hook_id`, it MUST dis
 
 **Normative**
 
+Introspection is a machine-readable discovery mechanism for hosted leaves and supported `procedure_id` values.
+
+Introspection MUST NOT include human-readable descriptions, parameter definitions, or serialized current state.
+
+The caller is expected to know the meaning of each discovered `procedure_id` from the pre-shared contract identified by that `procedure_id`.
+
 When the required blank introspection procedure is called, it MUST return one of the following payloads through the declared hook.
+
+> **Rationale:** Introspection is intentionally narrow. It tells a caller what can be called, not how to explain or rediscover the contract. `procedure_id` already names a pre-shared callable contract, so repeating human-readable descriptions, parameter metadata, or live state inside introspection would make the protocol less canonical rather than more useful.
 
 ### 15.1 Endpoint Introspection
 
@@ -551,10 +567,7 @@ Each `LeafIntrospectionSummary` contains:
 | Field | Meaning |
 |---|---|
 | `leaf_name` | The leaf's local name. |
-| `description` | Optional human-readable description. |
-| `procedures` | Introspection records for the leaf's supported procedures. |
-| `state_procedure_id` | Procedure contract identifier associated with the serialized `state` payload. |
-| `state` | Serialized current-state payload. |
+| `procedures` | Full canonical `procedure_id` values supported by the leaf. |
 
 Example in the current Rust implementation:
 
@@ -567,10 +580,7 @@ pub struct EndpointIntrospection {
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct LeafIntrospectionSummary {
     pub leaf_name: String,
-    pub description: Option<String>,
-    pub procedures: Vec<ProcedureIntrospection>,
-    pub state_procedure_id: String,
-    pub state: Vec<u8>,
+    pub procedures: Vec<String>,
 }
 ```
 
@@ -581,25 +591,7 @@ Returned when `procedure_id == ""` and `dst_leaf` names a specific leaf.
 | Field | Meaning |
 |---|---|
 | `leaf_name` | The leaf's local name. |
-| `description` | Optional human-readable description. |
-| `procedures` | Introspection records for the leaf's supported procedures. |
-| `state_procedure_id` | Procedure contract identifier associated with the serialized `state` payload. |
-| `state` | Serialized current-state payload. |
-
-Each `ProcedureIntrospection` contains:
-
-| Field | Meaning |
-|---|---|
-| `name` | Procedure name within the leaf. |
-| `description` | Optional human-readable description. |
-| `params` | Parameter definitions accepted by the procedure. |
-
-Each `ProcedureParameter` contains:
-
-| Field | Meaning |
-|---|---|
-| `name` | Parameter name. |
-| `value_type` | Application-defined parameter type name. |
+| `procedures` | Full canonical `procedure_id` values supported by the leaf. |
 
 Example in the current Rust implementation:
 
@@ -607,31 +599,16 @@ Example in the current Rust implementation:
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct LeafIntrospection {
     pub leaf_name: String,
-    pub description: Option<String>,
-    pub procedures: Vec<ProcedureIntrospection>,
-    pub state_procedure_id: String,
-    pub state: Vec<u8>,
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct ProcedureIntrospection {
-    pub name: String,
-    pub description: Option<String>,
-    pub params: Vec<ProcedureParameter>,
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct ProcedureParameter {
-    pub name: String,
-    pub value_type: String,
+    pub procedures: Vec<String>,
 }
 ```
 
 Rules:
 
-- `state_procedure_id` MUST identify the procedure contract associated with the serialized `state` payload
-- `params` MUST describe the accepted parameter names and parameter types for that procedure
-- introspection SHOULD describe current state, but does not establish a cache coherence guarantee
+- each listed procedure MUST be identified by its full canonical `procedure_id`, not by a leaf-local short name
+- endpoint introspection and leaf introspection MUST use the same per-leaf discovery shape
+
+> **Rationale:** Returning full `procedure_id` values avoids forcing the caller to reconstruct contract names from leaf-local fragments. Endpoint introspection and leaf introspection deliberately share the same leaf record shape so the endpoint-wide form is just a list of the leaf-specific form.
 
 ## 16. Protocol Description
 
