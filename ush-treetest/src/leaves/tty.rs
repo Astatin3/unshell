@@ -31,23 +31,23 @@ impl fmt::Debug for PtySession {
 }
 
 /// TTY endpoint - provides PTY streaming functionality.
-pub struct TTY {
+pub struct Tty {
     name: String,
     sessions: HashMap<u16, Box<PtySession>>,
     #[allow(dead_code)]
     next_id: u16,
 }
 
-impl fmt::Debug for TTY {
+impl fmt::Debug for Tty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TTY")
+        f.debug_struct("Tty")
             .field("name", &self.name)
             .field("sessions", &self.sessions.len())
             .finish()
     }
 }
 
-impl TTY {
+impl Tty {
     /// Create a new TTY endpoint.
     ///
     /// # Arguments
@@ -118,11 +118,11 @@ impl TTY {
             }
 
             unsafe {
-                libc::execl(
-                    "/bin/sh\0".as_ptr() as *const libc::c_char,
-                    "sh\0".as_ptr() as *const libc::c_char,
-                    std::ptr::null::<libc::c_char>(),
-                );
+libc::execl(
+    c"/bin/sh\0".as_ptr() as *const libc::c_char,
+    c"sh\0".as_ptr() as *const libc::c_char,
+    std::ptr::null::<libc::c_char>(),
+);
             }
 
             unsafe { libc::exit(1) };
@@ -175,7 +175,7 @@ impl TTY {
     }
 }
 
-impl Endpoint for TTY {
+impl Endpoint for Tty {
     fn handle_request(
         &mut self,
         request: &TreeRequest,

@@ -211,6 +211,10 @@ where
 }
 
 fn align_section(bytes: &[u8]) -> AlignedVec {
+    if bytes.as_ptr().align_offset(16) == 0 {
+        // Still need to return AlignedVec for the API, but maybe we can avoid 
+        // some overhead. Actually, AlignedVec is just a wrapper around Vec.
+    }
     let mut aligned = AlignedVec::with_capacity(bytes.len());
     aligned.extend_from_slice(bytes);
     aligned

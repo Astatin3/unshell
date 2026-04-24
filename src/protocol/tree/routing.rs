@@ -78,35 +78,46 @@ pub fn is_prefix(prefix: &[String], path: &[String]) -> bool {
 
 /// Trait for resolving a destination path to a routing decision.
 pub trait RouteProvider {
-    /// Computes the routing decision for a destination path.
-    fn route_destination(
+    fn route_destination<I>(
         &self,
         local_path: &[String],
-        child_paths: &[Vec<String>],
+        child_paths: I,
         has_parent: bool,
         dst_path: &[String],
-    ) -> RouteDecision;
+    ) -> RouteDecision
+    where
+        I: IntoIterator,
+        I::Item: AsRef<[String]>,
+    ;
 }
 
 /// Default routing implementation using the protocol's longest-prefix rule.
 pub struct DefaultRouteProvider;
 
 impl RouteProvider for DefaultRouteProvider {
-    fn route_destination(
+    fn route_destination<I>(
         &self,
         local_path: &[String],
-        child_paths: &[Vec<String>],
+        child_paths: I,
         has_parent: bool,
         dst_path: &[String],
-    ) -> RouteDecision {
-        let child = child_paths
-            .iter()
-            .enumerate()
-            .filter(|(_, child_path)| is_prefix(child_path, dst_path))
-            .max_by_key(|(_, child_path)| child_path.len())
-            .map(|(index, _)| index);
+    ) -> RouteDecision
+    where
+        I: IntoIterator,
+        I::Item: AsRef<[String]>,
+    {
+        let mut best_index = None;
+        let mut max_len = 0;
 
-        if let Some(index) = child {
+        for (index, child_path) in child_paths.into_iter().enumerate() {
+            let path = child_path.as_ref();
+            if is_prefix(path, dst_path) && path.len() > max_len {
+                max_len = path.len();
+                best_index = Some(index);
+            }
+        }
+
+        if let Some(index) = best_index {
             return RouteDecision::Child(index);
         }
         if local_path == dst_path {
@@ -119,12 +130,16 @@ impl RouteProvider for DefaultRouteProvider {
     }
 }
 
-pub fn route_destination(
+pub fn route_destination<I>(
     local_path: &[String],
-    child_paths: &[Vec<String>],
+    child_paths: I,
     has_parent: bool,
     dst_path: &[String],
-) -> RouteDecision {
+) -> RouteDecision
+where
+    I: IntoIterator,
+    I::Item: AsRef<[String]>,
+{
     DefaultRouteProvider.route_destination(local_path, child_paths, has_parent, dst_path)
 }
 
@@ -143,7 +158,7 @@ mod tests {
         assert_eq!(
             provider.route_destination(
                 &Vec::<String>::new(),
-                &children,
+                children,
                 false,
                 &[String::from("a"), String::from("b"), String::from("c")]
             ),

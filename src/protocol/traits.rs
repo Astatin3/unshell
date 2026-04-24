@@ -25,9 +25,9 @@ impl<T> RouteResolution for T where T: RouteProvider + ?Sized {}
 
 /// Hook storage contract for pending and active protocol flows.
 pub trait HookStore {
-    fn allocate_hook_id(&self, return_path: &[String]) -> u64;
-    fn insert_pending(&mut self, pending: PendingHook);
-    fn insert_active(&mut self, active: ActiveHook);
+    fn allocate_hook_id(&mut self, return_path: &[String]) -> u64;
+    fn insert_pending(&mut self, pending: PendingHook) -> Result<(), ()>;
+    fn insert_active(&mut self, active: ActiveHook) -> Result<(), ()>;
     fn activate_pending(&mut self, key: &HookKey, peer_path: Vec<String>) -> Option<()>;
     fn remove_pending(&mut self, key: &HookKey) -> Option<PendingHook>;
     fn remove_active(&mut self, key: &HookKey) -> Option<ActiveHook>;
@@ -37,16 +37,16 @@ pub trait HookStore {
 }
 
 impl HookStore for HookTable {
-    fn allocate_hook_id(&self, return_path: &[String]) -> u64 {
+    fn allocate_hook_id(&mut self, return_path: &[String]) -> u64 {
         HookTable::allocate_hook_id(self, return_path)
     }
 
-    fn insert_pending(&mut self, pending: PendingHook) {
-        HookTable::insert_pending(self, pending);
+    fn insert_pending(&mut self, pending: PendingHook) -> Result<(), ()> {
+        HookTable::insert_pending(self, pending)
     }
 
-    fn insert_active(&mut self, active: ActiveHook) {
-        HookTable::insert_active(self, active);
+    fn insert_active(&mut self, active: ActiveHook) -> Result<(), ()> {
+        HookTable::insert_active(self, active)
     }
 
     fn activate_pending(&mut self, key: &HookKey, peer_path: Vec<String>) -> Option<()> {

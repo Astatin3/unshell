@@ -1,5 +1,5 @@
 use crate::{base62::Base62, hash};
-use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use cbc::cipher::block_padding::Pkcs7;
 use regex::Regex;
 
@@ -38,7 +38,7 @@ pub fn encrypt_aes(plaintext: &str, key_str: &str, iv: [u8; 16]) -> String {
     buf[..pt_len].copy_from_slice(&plaintext);
 
     let mut ct = cbc::Encryptor::<aes::Aes256>::new(&key_salted.into(), &iv.into())
-        .encrypt_padded_mut::<Pkcs7>(&mut buf, pt_len)
+        .encrypt_padded::<Pkcs7>(&mut buf, pt_len)
         .unwrap()
         .to_vec();
 
@@ -73,7 +73,7 @@ pub fn decrypt_aes(input: &str, key_str: &str, iv: [u8; 16]) -> Result<String, S
     buf[..cipher_bytes.len()].copy_from_slice(&cipher_bytes);
 
     let pt = cbc::Decryptor::<aes::Aes256>::new(&key.into(), &iv.into())
-        .decrypt_padded_mut::<Pkcs7>(&mut buf)
+        .decrypt_padded::<Pkcs7>(&mut buf)
         .map_err(|_| "decryption failed".to_string())?;
 
     Ok(String::from_utf8_lossy(pt).to_string())

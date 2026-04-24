@@ -16,9 +16,12 @@ use std::result::Result;
 use std::sync::{Arc, Mutex};
 use std::fmt;
 
+/// A shared, thread-safe endpoint handler.
+pub type SharedEndpoint = Arc<Mutex<Box<dyn Endpoint>>>;
+
 /// A node in the tree - contains an optional endpoint and child nodes.
 pub struct Node {
-    endpoint: Option<Arc<Mutex<Box<dyn Endpoint + 'static>>>>,
+    endpoint: Option<SharedEndpoint>,
     children: BTreeMap<String, Node>,
     streams: BTreeMap<u16, Stream>,
     next_stream_id: u16,
@@ -234,7 +237,7 @@ impl Tree {
     /// Find the handler for a given path using longest-prefix matching
     /// 
     /// Returns the endpoint and the matched path
-    pub fn find_handler(&self, path: &str) -> Option<(Arc<Mutex<Box<dyn Endpoint>>>, &str)> {
+    pub fn find_handler(&self, path: &str) -> Option<(SharedEndpoint, &str)> {
         if path == "/" {
             return self.root.endpoint.as_ref().map(|e| (e.clone(), "/"));
         }
@@ -443,10 +446,10 @@ impl Tree {
         let stream_id = header.stream_id.ok_or("no stream_id")?;
         
         // Find the node containing this stream
-        fn find_stream_handler(node: &mut Node, sid: u16) -> Option<Arc<Mutex<Box<dyn Endpoint>>>> {
-            if node.streams.get(&sid).is_some() {
-                return node.endpoint.clone();
-            }
+    fn find_stream_handler(node: &mut Node, sid: u16) -> Option<SharedEndpoint> {
+        if node.streams.contains_key(&sid) {
+            return node.endpoint.clone();
+        }
             
             for child in node.children.values_mut() {
                 if let Some(h) = find_stream_handler(child, sid) {

@@ -1,10 +1,7 @@
 [workspace]
 members = [
-    # "ush-router",
-    # "ush-payload",
-    # "ush-cli",
-    # "ush-obfuscate",
-    # "base62", "no-alloc-network-test",
+    "ush-obfuscate",
+    "base62",
 ]
 resolver = "2"
 

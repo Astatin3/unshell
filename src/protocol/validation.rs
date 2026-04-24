@@ -14,6 +14,8 @@ pub enum ValidationError {
     ProcedureId(&'static str),
     /// Call-specific invariants were violated.
     CallInvariant(&'static str),
+    /// The hook identifier is already in use.
+    InvalidHookId,
 }
 
 impl fmt::Display for ValidationError {
@@ -22,6 +24,7 @@ impl fmt::Display for ValidationError {
             Self::HeaderInvariant(message) => write!(f, "invalid header: {message}"),
             Self::ProcedureId(message) => write!(f, "invalid procedure id: {message}"),
             Self::CallInvariant(message) => write!(f, "invalid call: {message}"),
+            Self::InvalidHookId => write!(f, "invalid hook identifier"),
         }
     }
 }
@@ -60,42 +63,15 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
         return Ok(());
     }
 
-    let mut segments = procedure_id.split('.');
-    let mut collected = [""; 5];
-    for (index, slot) in collected.iter_mut().enumerate() {
-        let Some(segment) = segments.next() else {
-            return Err(ValidationError::ProcedureId(
-                "must contain exactly 5 segments",
-            ));
-        };
-        if segment.is_empty() {
-            return Err(ValidationError::ProcedureId("segments must be non-empty"));
-        }
-        *slot = segment;
-        if index != 2 && !segment.chars().all(is_portable_procedure_char) {
-            return Err(ValidationError::ProcedureId(
-                "segments should use lowercase ASCII, digits, and underscores",
-            ));
-        }
-    }
-
-    if segments.next().is_some() {
+    if procedure_id.is_empty() {
         return Err(ValidationError::ProcedureId(
-            "must contain exactly 5 segments",
+            "procedure identifier cannot be empty except for introspection",
         ));
     }
 
-    let version = collected[2];
-    let Some(suffix) = version.strip_prefix('v') else {
+    if !procedure_id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.') {
         return Err(ValidationError::ProcedureId(
-            "third segment must be a version like v1",
-        ));
-    };
-
-    if suffix.is_empty() || suffix.starts_with('0') || !suffix.chars().all(|ch| ch.is_ascii_digit())
-    {
-        return Err(ValidationError::ProcedureId(
-            "version segment must be v followed by a positive decimal integer",
+            "procedure identifier should use alphanumeric characters, dots, and underscores",
         ));
     }
 

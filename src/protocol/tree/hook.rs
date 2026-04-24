@@ -42,34 +42,47 @@ pub struct ActiveHook {
 }
 
 /// Durable hook state tables.
-#[derive(Debug, Default)]
+/// Durable hook state tables.
+#[derive(Debug)]
 pub struct HookTable {
     pending: BTreeMap<HookKey, PendingHook>,
     active: BTreeMap<HookKey, ActiveHook>,
+    next_id: u64,
+}
+
+impl Default for HookTable {
+    fn default() -> Self {
+        Self {
+            pending: BTreeMap::new(),
+            active: BTreeMap::new(),
+            next_id: 1,
+        }
+    }
 }
 
 impl HookTable {
-    pub fn allocate_hook_id(&self, return_path: &[String]) -> u64 {
-        let mut hook_id = 0u64;
-        loop {
-            let key = HookKey::new(return_path.to_vec(), hook_id);
-            if !self.pending.contains_key(&key) && !self.active.contains_key(&key) {
-                return hook_id;
-            }
-            hook_id = hook_id.saturating_add(1);
-        }
+    pub fn allocate_hook_id(&mut self, _return_path: &[String]) -> u64 {
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
+        id
     }
 
-    pub fn insert_pending(&mut self, pending: PendingHook) {
-        // WARNING: hook tables intentionally own their path and procedure strings.
-        // Hook state must outlive any individual frame buffer.
+    pub fn insert_pending(&mut self, pending: PendingHook) -> Result<(), ()> {
         let key = HookKey::new(pending.return_path.clone(), pending.hook_id);
+        if self.pending.contains_key(&key) || self.active.contains_key(&key) {
+            return Err(());
+        }
         self.pending.insert(key, pending);
+        Ok(())
     }
 
-    pub fn insert_active(&mut self, active: ActiveHook) {
+    pub fn insert_active(&mut self, active: ActiveHook) -> Result<(), ()> {
         let key = HookKey::new(active.return_path.clone(), active.hook_id);
+        if self.pending.contains_key(&key) || self.active.contains_key(&key) {
+            return Err(());
+        }
         self.active.insert(key, active);
+        Ok(())
     }
 
     pub fn activate_pending(&mut self, key: &HookKey, peer_path: Vec<String>) -> Option<()> {

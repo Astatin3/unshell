@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::rngs::{SmallRng, StdRng};
+use rand::{Rng, RngExt, SeedableRng};
 use syn::{LitFloat, parse_macro_input};
 
 // const MIN_TAGS: u32 = 1; // Maximum instructions per recursive block
@@ -177,7 +177,7 @@ pub fn junk_asm(input: TokenStream) -> TokenStream {
     // let final_weight = input_weight.unwrap_or(WEIGHT);
 
     // 2. Setup
-    let mut rng = SmallRng::from_os_rng();
+    let mut rng = SmallRng::from_seed(rand::random());
 
     let count = {
         let mut n = 1;

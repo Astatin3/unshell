@@ -240,7 +240,7 @@ impl Transport for TcpTransport {
 
         let header_bytes = self.read_exact(header_len)?;
         let header =
-            FrameHeader::from_bytes(&header_bytes).map_err(|e| TransportError::InvalidFrame(e))?;
+            FrameHeader::from_bytes(&header_bytes).map_err(TransportError::InvalidFrame)?;
 
         let payload_len_bytes = self.read_exact(4)?;
         let payload_len =

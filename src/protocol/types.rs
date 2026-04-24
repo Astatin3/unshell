@@ -72,17 +72,13 @@ pub struct FaultMessage {
 }
 
 /// Stable protocol fault set.
-#[repr(u8)]
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProtocolFault {
-    /// The destination leaf does not exist.
-    UnknownLeaf = 0x01,
-    /// The destination does not support the requested procedure.
-    UnknownProcedure = 0x02,
-    /// The source path was invalid for the receiving connection.
-    InvalidSourcePath = 0x03,
-    /// The sender did not match the expected hook peer.
-    InvalidHookPeer = 0x04,
-    /// The endpoint encountered an internal processing failure.
-    InternalError = 0x05,
+pub struct ProtocolFault(pub u8);
+
+impl ProtocolFault {
+    pub const UNKNOWN_LEAF: Self = Self(0x01);
+    pub const UNKNOWN_PROCEDURE: Self = Self(0x02);
+    pub const INVALID_SOURCE_PATH: Self = Self(0x03);
+    pub const INVALID_HOOK_PEER: Self = Self(0x04);
+    pub const INTERNAL_ERROR: Self = Self(0x05);
 }
