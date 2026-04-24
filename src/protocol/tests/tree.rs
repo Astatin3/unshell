@@ -80,7 +80,11 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
     assert!(outcome.forwards.is_empty());
     assert_eq!(outcome.events.len(), 1);
 
-    let LocalEvent::Data { header, message: response } = &outcome.events[0] else {
+    let LocalEvent::Data {
+        header,
+        message: response,
+    } = &outcome.events[0]
+    else {
         panic!("expected local data event");
     };
     assert_eq!(header.packet_type, PacketType::Data);

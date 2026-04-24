@@ -69,7 +69,10 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
         ));
     }
 
-    if !procedure_id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.') {
+    if !procedure_id
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
+    {
         return Err(ValidationError::ProcedureId(
             "procedure identifier should use alphanumeric characters, dots, and underscores",
         ));

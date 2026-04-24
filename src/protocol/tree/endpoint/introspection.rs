@@ -11,8 +11,8 @@ use crate::protocol::{
     PacketHeader, PacketType, ProtocolFault, encode_packet,
 };
 
-use super::core::{EndpointError, EndpointOutcome, ProtocolEndpoint};
 use super::super::HookKey;
+use super::core::{EndpointError, EndpointOutcome, ProtocolEndpoint};
 
 impl ProtocolEndpoint {
     /// Handles the reserved introspection procedure.

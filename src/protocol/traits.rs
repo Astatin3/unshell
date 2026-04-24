@@ -8,8 +8,8 @@ use alloc::{string::String, vec::Vec};
 use super::{
     FrameBytes, FrameCodec, LeafIntrospection, LeafIntrospectionSummary,
     tree::{
-        ActiveHook, Endpoint, EndpointError, EndpointOutcome, HookConflict, HookKey, HookTable, Ingress,
-        LeafNode, LeafSpec, PendingHook, RouteProvider,
+        ActiveHook, Endpoint, EndpointError, EndpointOutcome, HookConflict, HookKey, HookTable,
+        Ingress, LeafNode, LeafSpec, PendingHook, RouteProvider,
     },
 };
 

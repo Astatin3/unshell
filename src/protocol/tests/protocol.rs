@@ -81,7 +81,10 @@ fn header_and_call_validation_reject_invalid_combinations() {
 #[test]
 fn procedure_validation_accepts_introspection_and_rejects_bad_shapes() {
     assert_eq!(validate_procedure_id(""), Ok(()));
-    assert_eq!(validate_procedure_id("unshell.echo.v01.alpha.invoke"), Ok(()));
+    assert_eq!(
+        validate_procedure_id("unshell.echo.v01.alpha.invoke"),
+        Ok(())
+    );
     assert_eq!(
         validate_procedure_id("contains spaces"),
         Err(ValidationError::ProcedureId(

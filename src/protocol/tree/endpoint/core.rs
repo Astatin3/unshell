@@ -12,8 +12,9 @@ use alloc::{
 };
 use core::fmt;
 
-use crate::protocol::{CallMessage, DataMessage, FaultMessage, FrameBytes, FrameError, PacketHeader,
-    ValidationError};
+use crate::protocol::{
+    CallMessage, DataMessage, FaultMessage, FrameBytes, FrameError, PacketHeader, ValidationError,
+};
 
 use super::super::{HookTable, RouteDecision};
 

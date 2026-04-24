@@ -5,10 +5,12 @@
 
 use alloc::{string::String, vec};
 
-use crate::protocol::{DataMessage, FaultMessage, PacketHeader, PacketType, ProtocolFault, encode_packet};
+use crate::protocol::{
+    DataMessage, FaultMessage, PacketHeader, PacketType, ProtocolFault, encode_packet,
+};
 
-use super::core::{EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint};
 use super::super::{HookKey, RouteDecision, route_destination};
+use super::core::{EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint};
 
 impl ProtocolEndpoint {
     /// Emits a protocol fault only when the original call declared a response hook.
@@ -167,11 +169,7 @@ impl ProtocolEndpoint {
     /// Rationale: this looks backwards at first because parent ingress accepts
     /// non-local source paths. That is required for multi-hop routing, where a
     /// parent forwards traffic originating from ancestors or siblings.
-    pub(crate) fn valid_source_for_ingress(
-        &self,
-        ingress: &Ingress,
-        src_path: &[String],
-    ) -> bool {
+    pub(crate) fn valid_source_for_ingress(&self, ingress: &Ingress, src_path: &[String]) -> bool {
         match ingress {
             Ingress::Parent => {
                 if src_path.len() < self.path.len() {

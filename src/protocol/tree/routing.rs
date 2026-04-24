@@ -87,8 +87,7 @@ pub trait RouteProvider {
     ) -> RouteDecision
     where
         I: IntoIterator,
-        I::Item: AsRef<[String]>,
-    ;
+        I::Item: AsRef<[String]>;
 }
 
 /// Default routing implementation using the protocol's longest-prefix rule.

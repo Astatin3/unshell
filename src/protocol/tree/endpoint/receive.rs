@@ -10,8 +10,10 @@ use crate::protocol::{
     introspection::INTROSPECTION_PROCEDURE_ID, validate_call, validate_header,
 };
 
-use super::core::{Endpoint, EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint};
 use super::super::{HookKey, PendingHook, RouteDecision};
+use super::core::{
+    Endpoint, EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint,
+};
 
 impl ProtocolEndpoint {
     /// Handles a locally delivered `Call` packet after routing selected `Local`.
@@ -49,7 +51,11 @@ impl ProtocolEndpoint {
             Some(leaf_name) => self
                 .leaves
                 .get(leaf_name)
-                .map(|leaf| leaf.procedures.iter().any(|procedure| procedure == &message.procedure_id))
+                .map(|leaf| {
+                    leaf.procedures
+                        .iter()
+                        .any(|procedure| procedure == &message.procedure_id)
+                })
                 .unwrap_or(false),
             None => self.endpoint_procedures.contains(&message.procedure_id),
         };
@@ -71,7 +77,11 @@ impl ProtocolEndpoint {
             self.hooks.activate_pending(key, header.src_path.clone());
         }
 
-        match header.dst_leaf.as_ref().and_then(|name| self.leaves.get(name)) {
+        match header
+            .dst_leaf
+            .as_ref()
+            .and_then(|name| self.leaves.get(name))
+        {
             Some(leaf) if leaf.behavior == super::core::LeafBehavior::Echo && key.is_some() => {
                 let hook = message.response_hook.expect("synchronized");
                 let response = DataMessage {
