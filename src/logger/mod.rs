@@ -248,7 +248,12 @@ impl Logger for StderrLogger {
             if location.is_empty() {
                 eprintln!("[{}] {}", record.level.as_str(), record.message);
             } else {
-                eprintln!("[{}] {} - {}", record.level.as_str(), record.message, location);
+                eprintln!(
+                    "[{}] {} - {}",
+                    record.level.as_str(),
+                    record.message,
+                    location
+                );
             }
         }
     }

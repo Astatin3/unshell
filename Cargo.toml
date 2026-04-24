@@ -19,16 +19,7 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 #   minimize        — size-optimized, for the payload binary
 
 [workspace]
-members = [
-    # Core binaries
-    "ush-router",
-    "ush-payload",
-    "ush-cli",
-
-    # Libraries
-    "ush-obfuscate",
-    "base62", "no-alloc-network-test",
-]
+members = []
 resolver = "2"
 
 # ---------------------------------------------------------------------------
@@ -48,7 +39,7 @@ include     = ["LICENSE", "**/*.rs", "Cargo.toml"]
 # ---------------------------------------------------------------------------
 [workspace.dependencies]
 # Serialisation
-rkyv             = "0.8.15"    # zero-copy deserialisation framework
+rkyv             = "0.8.16"    # zero-copy deserialisation framework
 serde            = { version = "1.0.228", features = ["derive"] }
 serde_json       = "1.0.149"
 
@@ -59,7 +50,7 @@ crossbeam-channel = "0.5.15"   # multi-producer multi-consumer channels
 thiserror = "2.0.18"           # derive(Error) macro
 
 # Logging / time
-chrono           = "0.4.42"
+chrono           = "0.4.44"
 
 # Utilities
 static_init = "1.0.4"          # safe static initialisation
@@ -85,15 +76,21 @@ description = "UnShell core library: protocol types, transport, and tree routing
 # The payload binary also links std for now but the library itself is no_std.
 
 [features]
-default = []
+default = ["std", "sim"]
+
+# Enable std-backed modules such as simulated transports and richer runtime helpers.
+std = []
 
 # Enable the structured logger (uses chrono for timestamps)
-log       = []
+log       = ["std"]
 log_debug = ["log", "dep:chrono"]
 
 # Enable TCP transport (requires std). All std binaries enable this.
 # The payload binary can also enable it; only omit it for bare-metal embedded targets.
-tcp = []
+tcp = ["std"]
+
+# Enable the crossbeam-channel simulated transport.
+sim = ["std"]
 
 # Obfuscation support (compile-time string obfuscation via proc-macro)
 obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
@@ -168,7 +165,6 @@ manual_string_new                  = "warn"
 needless_borrow                    = "warn"
 needless_pass_by_value             = "warn"
 str_to_string                      = "warn"
-string_to_string                   = "warn"
 uninlined_format_args              = "warn"
 use_self                           = "warn"
 # --- Documentation ---

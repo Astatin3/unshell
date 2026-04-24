@@ -1,47 +1,39 @@
-//! # UnShell Core Library
+//! UnShell core protocol crate.
 //!
-//! This crate provides the core building blocks for the UnShell C2 framework:
+//! The crate now models the draft protocol in `PROTOCOL.md` directly:
 //!
-//! - **[`protocol`]** — wire types: `PacketHeader`, `TreeRequest`, `TreeResponse`,
-//!   `HandshakeMessage`, `HandshakeAck`, and associated enums.
-//! - **[`transport`]** — the `Transport` trait and its TCP implementation.
-//! - **[`tree`]** — the `Tree` and `Endpoint` abstractions for module dispatch.
-//! - **[`logger`]** — lightweight logging (no dependency on `std::io`).
+//! - [`protocol`] provides the canonical wire types, framing helpers, validation,
+//!   and introspection payloads.
+//! - [`tree`] provides an explicit enum-based tree declaration, longest-prefix
+//!   routing helpers, and a small endpoint runtime for tests.
+//! - [`transport`] provides framed transport implementations for simulated
+//!   channel-based links and TCP links.
+//! - [`logger`] remains available for lightweight logging.
 //!
-//! ## `no_std` Compatibility
+//! ```rust
+//! use unshell::protocol::{CallMessage, HookTarget, PacketHeader, PacketType, encode_packet};
 //!
-//! This crate is `no_std` but requires `alloc`. It can be used in the payload
-//! binary which runs without a full standard library.
+//! let header = PacketHeader {
+//!     packet_type: PacketType::Call,
+//!     src_path: Vec::new(),
+//!     dst_path: vec!["child".into()],
+//!     dst_leaf: Some("echo".into()),
+//!     hook_id: None,
+//! };
+//! let call = CallMessage {
+//!     procedure_id: "org.product.v1.echo.roundtrip".into(),
+//!     data: b"ping".to_vec(),
+//!     response_hook: Some(HookTarget {
+//!         hook_id: 1,
+//!         return_path: Vec::new(),
+//!     }),
+//! };
 //!
-//! Binaries that have `std` available (the router, the CLI) can also use this
-//! crate; they simply get `alloc` types backed by the system allocator.
-//!
-//! ## Architecture
-//!
-//! ```text
-//! ┌────────────────────────────────────────────────────────────────┐
-//! │                    Router / Relay                               │
-//! │  Reads PacketHeader → longest-prefix routes to node            │
-//! │  Payload bytes forwarded opaque                                 │
-//! └───────────┬─────────────────────────┬──────────────────────────┘
-//!             │ TCP                     │ TCP
-//!    ┌────────▼────────┐      ┌─────────▼──────────────────────────┐
-//!    │  Operator Node  │      │  Payload Node(s)                    │
-//!    │  (ush-cli)      │      │  Local Tree + Endpoint modules      │
-//!    │  Interactive    │      │  Reverse-connects to router         │
-//!    │  REPL           │      │  Recv loop → dispatch → respond     │
-//!    └─────────────────┘      └─────────────────────────────────────┘
+//! let frame = encode_packet(&header, &call).expect("call should encode");
+//! assert!(!frame.is_empty());
 //! ```
-//!
-//! For the full protocol specification, see `PROTOCOL.md` in the repository root.
 
-// Enable std when the `tcp` feature is active (TCP transport requires it).
-// Without tcp, we stay fully no_std for bare-metal payload targets.
-#![cfg_attr(not(feature = "tcp"), no_std)]
-// no_main is only applied in non-test builds.
-// The test harness generates its own main function, so we must NOT suppress it.
-#![cfg_attr(not(test), no_main)]
-
+#![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
 pub mod logger;
@@ -49,5 +41,4 @@ pub mod protocol;
 pub mod transport;
 pub mod tree;
 
-// Re-export the obfuscation crate so payloads only need to depend on `unshell`.
 pub use ush_obfuscate as obfuscate;
