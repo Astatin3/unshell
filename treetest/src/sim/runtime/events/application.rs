@@ -1,4 +1,9 @@
 //! Application-procedure handling layered over protocol calls.
+//!
+//! The core `unshell` runtime validates routing, hooks, and introspection, but
+//! it intentionally does not know what a demo procedure should do. This module
+//! is the thin application layer that turns validated local calls into concrete
+//! demo behavior.
 
 use unshell::protocol::{CallMessage, PacketHeader};
 
@@ -7,6 +12,8 @@ use crate::model::{EndpointProcedureKind, EndpointProcedureSpec, NodeId};
 use super::super::super::types::{SimError, Simulation};
 
 impl Simulation {
+    /// Handles an application-visible `Call` that the protocol runtime already
+    /// accepted and delivered locally.
     pub(super) fn handle_application_call(
         &mut self,
         node_id: NodeId,
@@ -17,6 +24,8 @@ impl Simulation {
             return Ok(());
         };
 
+        // Clone the procedure spec once so later reply generation can borrow the
+        // rest of the simulator state freely.
         let procedure = self
             .lookup_endpoint_procedure(node_id, &message.procedure_id)?
             .clone();
@@ -60,6 +69,8 @@ impl Simulation {
                 }
             }
             EndpointProcedureKind::Chat => {
+                // Persist chat state outside the protocol runtime because the
+                // protocol itself does not define chat semantics.
                 self.chat_sessions.insert(
                     hook.hook_id,
                     super::super::super::types::ChatSession {
@@ -86,6 +97,7 @@ impl Simulation {
         Ok(())
     }
 
+    /// Resolves one endpoint procedure from the ground-truth node metadata.
     pub(super) fn lookup_endpoint_procedure(
         &self,
         node_id: NodeId,
@@ -101,6 +113,7 @@ impl Simulation {
             })
     }
 
+    /// Ensures one named leaf exists on the target node.
     pub(crate) fn require_leaf(
         &self,
         node_id: NodeId,
@@ -116,6 +129,7 @@ impl Simulation {
             })
     }
 
+    /// Ensures one endpoint procedure exists on the target node.
     pub(crate) fn require_endpoint_procedure(
         &self,
         node_id: NodeId,

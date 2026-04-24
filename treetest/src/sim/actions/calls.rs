@@ -1,4 +1,9 @@
 //! Root-issued calls and injected traffic.
+//!
+//! These helpers form the high-level API that both the TUI and the tests use.
+//! Each helper prepares the right destination metadata, teaches the root what it
+//! can know locally, and then hands one concrete call or data packet to the
+//! runtime layer.
 
 use crate::model::{NodeId, format_hook_ref, format_leaf_ref, format_path};
 use unshell::protocol::{DataMessage, PacketHeader, PacketType};
@@ -21,6 +26,8 @@ impl Simulation {
         &mut self,
         node_id: NodeId,
     ) -> Result<ActionResult, SimError> {
+        // Snapshot the destination path now so the later packet build cannot be
+        // confused by any further selection or scenario changes.
         let path = self.tree.node(node_id).path.clone();
         self.dispatch_root_call(path.clone(), None, "", Vec::new())?;
         Ok(ActionResult {
@@ -36,12 +43,18 @@ impl Simulation {
         leaf_name: &str,
     ) -> Result<ActionResult, SimError> {
         let node_path = self.tree.node(node_id).path.clone();
+
+        // Fail fast if the selected leaf name is not valid in ground truth.
         self.require_leaf(node_id, leaf_name)?;
+
         let node = self.tree.node(node_id).clone();
         if let Some(leaf_spec) = node.leaves.iter().find(|leaf| leaf.name == leaf_name) {
+            // The root already knows a leaf exists because the user targeted it
+            // directly, even before the remote introspection result returns.
             self.root_knowledge
                 .remember_leaf_from_spec(&node, leaf_spec);
         }
+
         self.dispatch_root_call(node_path, Some(leaf_name.to_owned()), "", Vec::new())?;
         Ok(ActionResult {
             label: format!(
@@ -62,6 +75,8 @@ impl Simulation {
         let node_path = self.tree.node(node_id).path.clone();
         let node_display = self.tree.node(node_id).display_path();
         let node = self.tree.node(node_id).clone();
+
+        // Clone the procedure list out before mutating learned state below.
         let procedures = self.require_leaf(node_id, leaf_name)?.procedures.clone();
         if let Some(leaf_spec) = node
             .leaves
@@ -71,6 +86,7 @@ impl Simulation {
             self.root_knowledge
                 .remember_leaf_from_spec(&node, leaf_spec);
         }
+
         let procedure_id =
             procedures
                 .first()
@@ -79,6 +95,7 @@ impl Simulation {
                     node_path: node_display.clone(),
                     procedure_id: "<missing>".to_owned(),
                 })?;
+
         self.dispatch_root_call(
             node_path,
             Some(leaf_name.to_owned()),
@@ -103,7 +120,11 @@ impl Simulation {
     ) -> Result<ActionResult, SimError> {
         let node_path = self.tree.node(node_id).path.clone();
         let node_display = self.tree.node(node_id).display_path();
+
+        // Keep the public helper strict so ordinary UI actions cannot target a
+        // non-existent endpoint procedure by mistake.
         self.require_endpoint_procedure(node_id, procedure_id)?;
+
         let node = self.tree.node(node_id).clone();
         if let Some(procedure) = node
             .endpoint_procedures
@@ -113,6 +134,7 @@ impl Simulation {
             self.root_knowledge
                 .remember_endpoint_procedure(&node, procedure);
         }
+
         self.dispatch_root_call(node_path, None, procedure_id, data)?;
         Ok(ActionResult {
             label: format!("Call {procedure_id} on {}", node_display),
@@ -120,8 +142,10 @@ impl Simulation {
         })
     }
 
-    /// Sends a raw call without demo-side validation so tests can exercise
-    /// remote `UnknownLeaf` and `UnknownProcedure` fault behavior.
+    /// Sends a raw call without demo-side validation.
+    ///
+    /// Rationale: tests need one escape hatch that can deliberately trigger
+    /// remote `UnknownLeaf` and `UnknownProcedure` faults.
     pub fn call_unchecked(
         &mut self,
         node_id: NodeId,
@@ -159,11 +183,13 @@ impl Simulation {
         text: &str,
         end_hook: bool,
     ) -> Result<ActionResult, SimError> {
+        // Fetch the peer path and procedure contract from the active hook model.
         let snapshot = self
             .hooks
             .get(&hook_id)
             .cloned()
             .ok_or(SimError::UnknownHook(hook_id))?;
+
         let frame = self.nodes[self.root_id.0]
             .endpoint
             .make_data(
@@ -174,6 +200,7 @@ impl Simulation {
                 end_hook,
             )
             .map_err(|error| SimError::Protocol(error.to_string()))?;
+
         self.record_trace(
             self.root_id,
             format!(
@@ -199,6 +226,9 @@ impl Simulation {
     ) -> Result<ActionResult, SimError> {
         let from_path = self.tree.node(from_node_id).path.clone();
         let to_path = self.tree.node(to_node_id).path.clone();
+
+        // Build the packet by hand so the sender path can intentionally violate
+        // the active hook's expected peer relationship.
         let header = PacketHeader {
             packet_type: PacketType::Data,
             src_path: from_path.clone(),

@@ -1,4 +1,7 @@
 //! Protocol local-event handling.
+//!
+//! These handlers translate validated protocol events into trace entries,
+//! learned root knowledge, and higher-level demo state such as the chat helper.
 
 use unshell::protocol::tree::LocalEvent;
 
@@ -7,6 +10,7 @@ use crate::model::{NodeId, format_hook_ref, format_leaf_ref};
 use super::super::super::types::{RecordedEvent, SimError, Simulation};
 
 impl Simulation {
+    /// Handles one local event emitted by the protocol runtime.
     pub(crate) fn handle_local_event(
         &mut self,
         node_id: NodeId,
@@ -26,8 +30,10 @@ impl Simulation {
                         )
                     ),
                 );
+
                 if let Some(hook_id) = header.hook_id {
                     if let Some(snapshot) = self.hooks.get_mut(&hook_id) {
+                        // Keep the most recent human-readable payload in the UI.
                         snapshot.last_message = if text.is_empty() {
                             format!("binary payload ({} bytes)", message.data.len())
                         } else {
@@ -102,6 +108,7 @@ impl Simulation {
                         snapshot.closed = true;
                         snapshot.last_message = format!("fault 0x{:02X}", message.fault.0);
                     }
+                    // Any protocol fault ends the application-level chat too.
                     self.chat_sessions.remove(&hook_id);
                 }
                 self.recorded_events.push(RecordedEvent::Fault {
