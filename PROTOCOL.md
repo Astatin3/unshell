@@ -77,12 +77,13 @@ Leaves are hosted by endpoints.
 
 A superior endpoint issues a downwards `Call` toward a subordinate endpoint or one of its leaves.
 
-If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets toward the hook host. Once a hook exists, either side MAY continue exchanging `Data` packets associated with that hook until one side terminates the interaction.
+If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets toward the hook host. Once a hook exists, either side MAY continue exchanging `Data` packets associated with that hook until one side terminates the interaction. If normal execution cannot proceed, the endpoint MAY instead send a `Fault` packet upstream for that hook.
 
-The protocol therefore has two core packet roles:
+The protocol therefore has three core packet roles:
 
 - `Call` for downwards invocation
-- `Data` for returned data, protocol faults, and ongoing hook traffic
+- `Data` for returned data and ongoing hook traffic
+- `Fault` for upstream protocol failure reporting tied to a hook
 
 This document uses the following notation for readability:
 
@@ -136,7 +137,7 @@ No path prefixes are reserved by this protocol.
 
 Each segment MUST be non-empty. Implementations SHOULD restrict segments to lowercase ASCII letters, digits, and underscores for portability. The version segment MUST appear exactly in the third position.
 
-For non-fault `Data` packets, the same `procedure_id` is used on both `Call` and `Data` packets.
+For `Data` packets, the same `procedure_id` is used on both `Call` and `Data` packets.
 
 > **Rationale:** `procedure_id` is intentionally stricter than a method name or content type. It identifies a full callable contract, not just a label.
 
@@ -153,6 +154,7 @@ At a local routing boundary:
 - a `Call` packet MUST be accepted only if it arrives from the direct parent connection permitted to issue downwards calls into the destination subtree represented by that boundary
 - a `Call` packet that violates that rule MUST be dropped silently
 - a `Data` packet MAY arrive from either direction if it belongs to a valid hook flow, routes correctly by path, and its `src_path` matches the expected peer recorded in local hook state
+- a `Fault` packet MAY arrive only from the subordinate side of a hook-attributable call flow, and its `src_path` MUST match the expected subordinate peer recorded in local hook state or pending call context
 
 This protocol does not define a protocol-level authority error packet.
 
@@ -199,12 +201,13 @@ Routers MUST NOT inspect payload structure in order to route a packet.
 
 **Normative**
 
-This protocol defines exactly two packet types.
+This protocol defines exactly three packet types.
 
 | Packet Type | Value | Meaning |
 |---|---|---|
 | `Call` | `0x01` | Downwards procedure invocation. |
-| `Data` | `0x02` | Hook output, protocol fault output, or ongoing hook traffic. |
+| `Data` | `0x02` | Hook output or ongoing hook traffic. |
+| `Fault` | `0xFF` | Upstream protocol failure reporting for a hook. |
 
 Example in the current Rust implementation:
 
@@ -213,14 +216,17 @@ Example in the current Rust implementation:
 pub enum PacketType {
     Call = 0x01,
     Data = 0x02,
+    Fault = 0xFF,
 }
 ```
 
 `Call` is used for downwards invocation.
 
-`Data` is used for hook output, protocol fault output, and ongoing hook traffic.
+`Data` is used for hook output and ongoing hook traffic.
 
-> **Rationale:** This is the canonical simplification of the earlier model. Separate response packet variants were removed.
+`Fault` is used for upstream protocol failure reporting associated with a hook.
+
+> **Rationale:** `Fault` is separated from `Data` so ordinary application output does not need to share semantics with protocol failure signaling. A receiver can distinguish successful hook traffic from protocol failure immediately from `packet_type`, without inspecting `procedure_id` or the payload contract.
 
 ## 10. Packet Header
 
@@ -232,15 +238,15 @@ pub enum PacketType {
 | `src_path` | Path of the sending endpoint. |
 | `dst_path` | Path of the destination endpoint. |
 | `dst_leaf` | Target leaf for a `Call`, if any. |
-| `hook_id` | Hook identifier scoped to the calling endpoint that declared the hook. |
+| `hook_id` | Hook identifier scoped to the calling endpoint that declared the hook, for hook-associated packets. |
 
 Header rules:
 
 - `src_path` and `dst_path` MUST be present on all packets
 - the immediate receiver MUST validate that `src_path` is valid for the connection on which the packet arrived
-- `dst_leaf` MUST be `None` on `Data`
+- `dst_leaf` MUST be `None` on `Data` and `Fault`
 - `hook_id` MUST be `None` on `Call`
-- `hook_id` MUST appear on `Data` when the packet belongs to a hook flow, including returned data and protocol faults
+- `hook_id` MUST appear on `Data` and `Fault`
 
 A packet whose header violates these rules MUST be discarded.
 
@@ -288,11 +294,15 @@ When forwarding or receiving a `Call`, an endpoint MUST verify the local parent-
 
 If the sender on that connection is not the direct parent permitted to issue downwards calls into the relevant subtree, the endpoint MUST drop the packet silently.
 
-### 11.3 Data Routing
+### 11.3 Data and Fault Routing
 
 `Data` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
 
 The sender of a `Data` packet MUST set `dst_path` to the path of the peer endpoint for that hook packet.
+
+`Fault` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
+
+The sender of a `Fault` packet MUST set `dst_path` to the path of the hook host recorded in the active hook context or pending call context.
 
 ### 11.4 Hook Fastpath
 
@@ -312,7 +322,7 @@ The protocol itself does not route by `hook_id` alone.
 |---|---|
 | `procedure_id` | Identifier of the invoked procedure contract. |
 | `data` | Application-defined procedure input payload. |
-| `response_hook` | Optional hook declaration for returned data and follow-on bidirectional hook traffic. |
+| `response_hook` | Optional hook declaration for returned data, fault delivery, and follow-on bidirectional hook traffic. |
 
 Rules:
 
@@ -369,7 +379,7 @@ There is no standalone hook-open packet.
 | Field | Meaning |
 |---|---|
 | `hook_id` | Identifier scoped to the calling endpoint that declared the hook. |
-| `return_path` | Endpoint path to which returned `Data` packets are sent. |
+| `return_path` | Endpoint path to which returned `Data` or `Fault` packets are sent. |
 
 Rules:
 
@@ -404,11 +414,10 @@ Rules:
 
 - the receiver MUST interpret `procedure_id` as the contract identifier for the returned payload
 - the router MUST NOT inspect or validate `procedure_id`
-- for non-fault `Data`, the receiver MUST validate that `procedure_id` matches the `procedure_id` of the `Call` that established the hook
-- for protocol fault `Data`, the receiver MUST validate that `procedure_id == "org.unshell.protocol.v1.meta.fault"`
+- the receiver MUST validate that `procedure_id` matches the `procedure_id` of the `Call` that established the hook
 - for hook-associated `Data`, the receiver MUST validate `src_path` against the expected hook peer recorded in local hook state
 
-> **Rationale:** Ordinary hook traffic is part of the same procedure contract that created the hook, so the returned `procedure_id` stays anchored to the originating `Call`. This keeps hook validation simple and avoids treating a response as a separate contract lookup. Introspection therefore uses `""` on both the `Call` and the non-fault `Data` it produces. Protocol faults are the only exception because they intentionally replace the application contract with a protocol-defined failure contract.
+> **Rationale:** Ordinary hook traffic is part of the same procedure contract that created the hook, so the returned `procedure_id` stays anchored to the originating `Call`. This keeps hook validation simple and avoids treating a response as a separate contract lookup. Introspection therefore uses `""` on both the `Call` and the `Data` it produces. Protocol faults are separate packets and therefore do not need to overload `Data` semantics.
 
 Example in the current Rust implementation:
 
@@ -455,7 +464,7 @@ There is no protocol-level requirement that the callee send the first `Data` pac
 
 An endpoint MUST NOT reuse an active `hook_id` within its own local hook table.
 
-After normal non-fault completion, the protocol does not require immediate retirement or reuse of the `hook_id`. An implementation MAY retain inactive hook records for any implementation-defined period.
+After normal completion without a `Fault` packet, the protocol does not require immediate retirement or reuse of the `hook_id`. An implementation MAY retain inactive hook records for any implementation-defined period.
 
 When allocating a new hook, an implementation SHOULD choose the lowest available inactive `hook_id`.
 
@@ -478,26 +487,26 @@ Rules:
 
 There is no separate hook-close packet.
 
-After normal non-fault completion, the moment at which a hook becomes inactive is implementation-defined unless a higher-layer protocol carried on that hook defines a stricter rule.
+After normal completion without a `Fault` packet, the moment at which a hook becomes inactive is implementation-defined unless a higher-layer protocol carried on that hook defines a stricter rule.
 
 > **Rationale:** `end_hook` only communicates that one sender is finished. The core protocol intentionally avoids defining a universal half-close or close-ack state machine because different applications want different shutdown behavior. A simple request-response hook can retire immediately after the final packet, while a richer bidirectional protocol can define a stricter end-of-stream sequence above this layer.
 
-### 14.5 Protocol Faults
+### 14.5 Fault Definition
 
-`org.unshell.protocol.v1.meta.fault` is reserved as the protocol fault `procedure_id`.
+`Fault` is a distinct packet type used for protocol-level failure reporting associated with a hook.
 
-Protocol faults are upstream-only. An endpoint MUST NOT send a protocol fault to a subordinate endpoint.
+Protocol faults are upstream-only. An endpoint MUST NOT send a `Fault` packet to a subordinate endpoint.
 
-The protocol fault payload is the following enum identified by fixed byte discriminants:
+The `Fault` payload is the following enum identified by fixed byte discriminants:
 
 | Fault | Value | Meaning |
 |---|---|---|
 | `UnknownLeaf` | `0x01` | The addressed `dst_leaf` does not exist on the destination endpoint. |
 | `UnknownProcedure` | `0x02` | The destination does not support the requested `procedure_id`. |
 | `InvalidCallHeader` | `0x03` | A received `Call` header was invalid for protocol processing. |
-| `InvalidDataHeader` | `0x04` | A received `Data` header was invalid for protocol processing. |
+| `InvalidDataHeader` | `0x04` | A received `Data` or `Fault` header was invalid for protocol processing. |
 | `InvalidSourcePath` | `0x05` | The packet `src_path` was invalid for the connection on which it arrived. |
-| `InvalidHookPeer` | `0x06` | The `Data` sender did not match the expected peer recorded in hook state. |
+| `InvalidHookPeer` | `0x06` | The `Data` or `Fault` sender did not match the expected peer recorded in hook state. |
 | `DestinationUnreachable` | `0x07` | The packet could not be delivered to its destination subtree. |
 | `HookNotActive` | `0x08` | The referenced `hook_id` was not active at the receiving endpoint. |
 | `PermissionDenied` | `0x09` | The sender was not permitted to perform the requested protocol action. |
@@ -506,6 +515,11 @@ The protocol fault payload is the following enum identified by fixed byte discri
 Example in the current Rust implementation:
 
 ```rust
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct FaultMessage {
+    pub fault: ProtocolFault,
+}
+
 #[repr(u8)]
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolFault {
@@ -522,23 +536,30 @@ pub enum ProtocolFault {
 }
 ```
 
+Rules:
+
+- a `Fault` packet MUST carry `hook_id`
+- a receiver of a `Fault` packet MUST validate `src_path` against the expected subordinate hook peer recorded in local hook state or pending call context
+
+When an endpoint can attribute a protocol-level failure to a specific hook or declared `response_hook`, it SHOULD send a `Fault` packet upstream using:
+
+- `dst_path` set to the path of the hook host recorded in the active hook context or pending call context
+- the same `hook_id`
+- a `ProtocolFault` payload describing the condition
+
+When an endpoint rejects a `Call` for `UnknownLeaf` or `UnknownProcedure` and the `Call` declared `response_hook`, the endpoint SHOULD send a `Fault` packet upstream using that declared `hook_id` and `return_path` even if normal application execution never began.
+
+Sending a `Fault` packet ends the hook immediately. After sending or receiving a `Fault` packet, an implementation MUST remove that hook from active state.
+
+If an endpoint receives a fault value it does not recognize, it MUST still treat the packet as a protocol fault and close the hook.
+
 > **Rationale:** Protocol faults are part of interoperability, so they need a fixed canonical payload contract rather than a free-form error blob. A small enum with stable byte discriminants is cheap to encode, easy to evolve, and avoids coupling core protocol behavior to human-readable messages. Receivers can make deterministic decisions from the fault kind alone.
 
-When an endpoint can attribute a protocol-level failure to a specific active hook, it SHOULD send a `Data` packet upstream using:
-
-- `dst_path` set to the path of the hook host recorded in the active hook context
-- the same `hook_id`
-- `procedure_id == "org.unshell.protocol.v1.meta.fault"`
-- a `ProtocolFault` payload describing the condition
-- `end_hook == true`
-
-Sending a protocol fault ends the hook immediately. After sending or receiving a protocol fault, an implementation MUST remove that hook from active state.
-
-If an endpoint receives a protocol fault value it does not recognize, it MUST still treat the packet as a protocol fault and close the hook.
+> **Rationale:** Separating `Fault` from `Data` keeps application output and protocol failure signaling visibly distinct on the wire. It also removes the need for a reserved fault `procedure_id`, because failure is already expressed by `packet_type`.
 
 > **Rationale:** An unrecognized protocol fault still means the application contract has failed and the hook can no longer continue safely. Requiring unknown fault values to terminate the hook preserves forward compatibility: newer peers may introduce additional fault kinds without causing older peers to accidentally keep a broken hook alive.
 
-If an endpoint receives `Data` with an unknown or expired `hook_id`, it MUST discard the packet.
+If an endpoint receives `Data` or `Fault` with an unknown or expired `hook_id`, it MUST discard the packet.
 
 ## 15. Introspection Payloads
 
@@ -620,7 +641,7 @@ The UnShell protocol has a deliberately narrow center:
 - one downwards packet type
 - one returned-data packet type
 - hooks for correlation and ongoing bidirectional interaction
-- protocol faults returned through the same hook path
+- protocol faults returned through their own packet type on the same hook path
 
 This is meant to make the protocol easier to reason about and easier to implement in small agents.
 
