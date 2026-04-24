@@ -5,11 +5,11 @@
 
 use alloc::{collections::BTreeSet, string::String, vec::Vec};
 
-use crate::protocol::{
-    validate_call, validate_header, validate_procedure_id, CallMessage, DataMessage, FrameBytes,
-    HookTarget, PacketHeader, PacketType, ValidationError, encode_packet,
-};
 use crate::protocol::tree::ActiveHook;
+use crate::protocol::{
+    CallMessage, DataMessage, FrameBytes, HookTarget, PacketHeader, PacketType, ValidationError,
+    encode_packet, validate_call, validate_header, validate_procedure_id,
+};
 
 use super::core::{ChildRoute, EndpointError, ProtocolEndpoint};
 use crate::protocol::tree::LeafSpec;
