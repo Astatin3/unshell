@@ -1,17 +1,29 @@
 //! User-triggered TUI actions.
+//!
+//! These handlers intentionally stay thin: each one maps one keypress to one
+//! simulator operation, then updates UI-local state such as the selected row and
+//! status message. Keeping them small makes it easier to audit which user action
+//! changed which part of the app state.
 
 use super::{App, AppError, NodeId, Selection};
 
 impl App {
+    /// Performs protocol introspection for the current selection.
+    ///
+    /// Rationale: node and leaf introspection share one key because the protocol
+    /// also shares one reserved procedure id for both operations.
     pub(super) fn perform_introspection(&mut self) -> Result<(), AppError> {
         match self.selected().clone() {
             Selection::Node(node_id) => {
+                // Route the blank procedure to endpoint-wide introspection.
                 let result = self.simulation.call_endpoint_introspection(node_id)?;
+                // Drain immediately so the inspector reflects the learned state.
                 let steps = self.simulation.drain()?;
                 self.refresh_selections(Some(node_id));
                 self.status = format!("{} ({steps} steps)", result.label);
             }
             Selection::Leaf { node_id, leaf_name } => {
+                // Route the blank procedure to one specific leaf.
                 let result = self
                     .simulation
                     .call_leaf_introspection(node_id, &leaf_name)?;
@@ -23,6 +35,10 @@ impl App {
         Ok(())
     }
 
+    /// Calls the currently selected echo leaf.
+    ///
+    /// Rationale: the payload is fixed so the demo highlights packet flow rather
+    /// than turning the TUI into a line editor.
     pub(super) fn perform_echo(&mut self) -> Result<(), AppError> {
         if let Selection::Leaf { node_id, leaf_name } = self.selected().clone() {
             let result =
@@ -37,6 +53,7 @@ impl App {
         Ok(())
     }
 
+    /// Calls the first endpoint-level procedure on the selected node.
     pub(super) fn perform_ping(&mut self) -> Result<(), AppError> {
         if let Selection::Node(node_id) = self.selected().clone() {
             if let Some(procedure_id) = self
@@ -63,6 +80,7 @@ impl App {
         Ok(())
     }
 
+    /// Calls the chunked-response procedure on the selected node.
     pub(super) fn perform_chunked(&mut self) -> Result<(), AppError> {
         if let Selection::Node(node_id) = self.selected().clone() {
             if let Some(procedure_id) = self
@@ -93,6 +111,7 @@ impl App {
         Ok(())
     }
 
+    /// Opens a long-lived chat hook on the selected node.
     pub(super) fn perform_chat_call(&mut self) -> Result<(), AppError> {
         if let Selection::Node(node_id) = self.selected().clone() {
             if let Some(procedure_id) = self
@@ -120,6 +139,10 @@ impl App {
         Ok(())
     }
 
+    /// Sends follow-up data on the newest known hook.
+    ///
+    /// Rationale: using the latest hook keeps the demo simple while still
+    /// exposing bidirectional hook behavior.
     pub(super) fn perform_chat_data(&mut self) -> Result<(), AppError> {
         if let Some(hook_id) = self.simulation.hook_ids().last().copied() {
             let result =
@@ -134,6 +157,7 @@ impl App {
         Ok(())
     }
 
+    /// Ends the newest known chat hook from the root side.
     pub(super) fn perform_chat_bye(&mut self) -> Result<(), AppError> {
         if let Some(hook_id) = self.simulation.hook_ids().last().copied() {
             let result = self.simulation.send_root_hook_data(hook_id, "bye", true)?;
@@ -146,10 +170,13 @@ impl App {
         Ok(())
     }
 
+    /// Injects intentionally invalid hook data to exercise fault handling.
     pub(super) fn perform_invalid_fault_demo(&mut self) -> Result<(), AppError> {
         if let Some(hook_id) = self.simulation.hook_ids().last().copied() {
+            // The root is always node zero in every built-in scenario.
             let root_id = NodeId(0);
             if self.simulation.tree.nodes.len() > 1 {
+                // The first child is enough to spoof a wrong peer path.
                 let attacker = NodeId(1);
                 let result = self.simulation.inject_invalid_peer_data(
                     attacker,

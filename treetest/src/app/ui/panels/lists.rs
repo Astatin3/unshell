@@ -14,6 +14,7 @@ use crate::{
 use super::super::super::App;
 
 impl App {
+    /// Renders the selection list for nodes and leaves.
     pub(super) fn render_selection_list(&self, frame: &mut Frame<'_>, area: Rect) {
         let items = self
             .selections
@@ -53,6 +54,10 @@ impl App {
     }
 }
 
+/// Builds the visible selection rows for the current inspector mode.
+///
+/// Rationale: realistic mode can only offer rows the root host already knows,
+/// while ground-truth mode intentionally exposes the entire scenario tree.
 pub(crate) fn build_selections(simulation: &Simulation) -> Vec<Selection> {
     let mut selections = Vec::new();
     let node_ids: Vec<_> = match simulation.inspector_mode {

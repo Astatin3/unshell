@@ -16,7 +16,10 @@ use crate::{
 use super::super::super::App;
 
 impl App {
+    /// Renders the full non-modal application chrome.
     pub(crate) fn render(&self, frame: &mut Frame<'_>) {
+        // Split the screen into a small header, a large working area, and a
+        // persistent status/footer region.
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -31,6 +34,7 @@ impl App {
         self.render_footer(frame, chunks[2]);
     }
 
+    /// Renders the scenario header bar.
     fn render_header(&self, frame: &mut Frame<'_>, area: Rect) {
         let mode = match self.simulation.inspector_mode {
             InspectorMode::GroundTruth => "ground truth",
@@ -49,6 +53,7 @@ impl App {
         );
     }
 
+    /// Renders the middle area with scenarios, tree, inspector, and trace panes.
     fn render_body(&self, frame: &mut Frame<'_>, area: Rect) {
         let columns = Layout::default()
             .direction(Direction::Horizontal)
@@ -59,6 +64,8 @@ impl App {
             ])
             .split(area);
 
+        // Keep scenario selection visible at all times so the user always knows
+        // which canned topology produced the current trace.
         let scenario_items = self
             .scenarios
             .iter()
@@ -93,6 +100,7 @@ impl App {
         self.render_hooks(frame, right[1]);
     }
 
+    /// Renders the trace pane.
     fn render_trace(&self, frame: &mut Frame<'_>, area: Rect) {
         let items = self
             .simulation
@@ -113,6 +121,7 @@ impl App {
         );
     }
 
+    /// Renders the hook table.
     fn render_hooks(&self, frame: &mut Frame<'_>, area: Rect) {
         let items = self
             .simulation
@@ -135,6 +144,7 @@ impl App {
         );
     }
 
+    /// Renders the footer with controls and the latest local event summary.
     fn render_footer(&self, frame: &mut Frame<'_>, area: Rect) {
         let help = vec![
             Line::from(self.status.clone()).style(Style::default().add_modifier(Modifier::BOLD)),

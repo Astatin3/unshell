@@ -14,6 +14,8 @@ impl Simulation {
         for node_id in 0..self.nodes.len() {
             match self.nodes[node_id].rx.try_recv() {
                 Ok(envelope) => {
+                    // Record ingress before handing the frame to the protocol
+                    // runtime so the trace shows the channel-level hop too.
                     self.record_trace(
                         NodeId(node_id),
                         format!("received frame via {:?}", envelope.ingress),
@@ -36,6 +38,7 @@ impl Simulation {
 
     /// Runs frames until the network becomes idle.
     pub fn drain(&mut self) -> Result<usize, SimError> {
+        // Count steps so callers can surface how much work one action caused.
         let mut steps = 0;
         while self.step()? {
             steps += 1;

@@ -1,4 +1,8 @@
 //! Ratatui application shell for the protocol demo.
+//!
+//! The `app` module only defines the high-level pieces and re-exports the entry
+//! point. The actual behavior is split into shell, actions, and UI modules so
+//! the control flow reads from broad orchestration down to specific rendering.
 
 mod actions;
 mod shell;

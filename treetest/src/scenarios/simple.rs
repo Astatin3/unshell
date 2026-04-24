@@ -1,15 +1,24 @@
 //! Smaller onboarding scenarios.
+//!
+//! These scenarios are intentionally compact. Each one isolates one major part
+//! of the protocol so users can learn the tree, hook, and fault mechanics before
+//! switching to the larger sandbox topology.
 
 use crate::model::{
     EndpointProcedureKind, EndpointProcedureSpec, LeafKind, LeafSpec, NodeId, NodeSpec,
     ScenarioDefinition, Selection,
 };
 
+/// Single-response endpoint procedure used in small scenarios.
 pub(super) const PROC_PING: &str = "demo.endpoint.v1.control.ping";
+/// Multi-packet endpoint procedure used to visualize chunked responses.
 pub(super) const PROC_CHUNKED: &str = "demo.endpoint.v1.stream.chunked_greeting";
+/// Long-lived endpoint procedure used for bidirectional hook traffic.
 pub(super) const PROC_CHAT: &str = "demo.endpoint.v1.chat.session";
+/// Leaf echo contract used throughout the demos.
 pub(super) const PROC_ECHO: &str = "demo.leaf.v1.echo.invoke";
 
+/// Returns the onboarding scenarios in the order they should be explored.
 pub(super) fn scenarios() -> Vec<ScenarioDefinition> {
     vec![
         local_introspection(),
@@ -20,6 +29,7 @@ pub(super) fn scenarios() -> Vec<ScenarioDefinition> {
     ]
 }
 
+/// Minimal introspection walkthrough.
 fn local_introspection() -> ScenarioDefinition {
     ScenarioDefinition {
         name: "Local Introspection".to_owned(),
@@ -58,6 +68,7 @@ fn local_introspection() -> ScenarioDefinition {
     }
 }
 
+/// Simple leaf-call scenario.
 fn echo_leaf() -> ScenarioDefinition {
     ScenarioDefinition {
         name: "Echo Leaf".to_owned(),
@@ -97,6 +108,7 @@ fn echo_leaf() -> ScenarioDefinition {
     }
 }
 
+/// Multi-branch routing scenario.
 fn branch_routing() -> ScenarioDefinition {
     ScenarioDefinition {
         name: "Branch Routing".to_owned(),
@@ -156,10 +168,12 @@ fn branch_routing() -> ScenarioDefinition {
     }
 }
 
+/// Long-lived hook scenario.
 fn bidirectional_chat() -> ScenarioDefinition {
     ScenarioDefinition {
         name: "Bidirectional Chat".to_owned(),
-        description: "Keeps a hook active so the root can continue sending `Data` packets.".to_owned(),
+        description: "Keeps a hook active so the root can continue sending `Data` packets."
+            .to_owned(),
         highlights: vec![
             "After activation, either side may send hook data first.".to_owned(),
             "The chat handler exists outside the core runtime so the demo can show application-level behavior without changing the protocol.".to_owned(),
@@ -187,6 +201,7 @@ fn bidirectional_chat() -> ScenarioDefinition {
     }
 }
 
+/// Protocol-fault walkthrough.
 fn fault_showcase() -> ScenarioDefinition {
     ScenarioDefinition {
         name: "Fault Showcase".to_owned(),

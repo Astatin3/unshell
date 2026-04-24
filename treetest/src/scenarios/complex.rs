@@ -1,4 +1,8 @@
 //! Larger sandbox scenarios.
+//!
+//! The complex scenarios intentionally trade brevity for breadth. They combine
+//! several procedures and branches so the UI can serve as a sandbox after the
+//! smaller scenarios teach the mechanics.
 
 use crate::model::{
     EndpointProcedureKind, EndpointProcedureSpec, LeafKind, LeafSpec, NodeId, NodeSpec,
@@ -7,10 +11,12 @@ use crate::model::{
 
 use super::simple::{PROC_CHAT, PROC_CHUNKED, PROC_ECHO, PROC_PING};
 
+/// Returns the larger sandbox scenarios.
 pub(super) fn scenarios() -> Vec<ScenarioDefinition> {
     vec![complex_tree()]
 }
 
+/// Larger mixed-topology tree used as the free-play sandbox.
 fn complex_tree() -> ScenarioDefinition {
     ScenarioDefinition {
         name: "Complex Tree".to_owned(),
