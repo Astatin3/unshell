@@ -182,3 +182,13 @@ pub fn format_path(path: &[String]) -> String {
         format!("/{}", path.join("/"))
     }
 }
+
+/// Formats a leaf reference using the protocol document's descriptive syntax.
+pub fn format_leaf_ref(path: &[String], leaf_name: &str) -> String {
+    format!("{} {{ leaf: {} }}", format_path(path), leaf_name)
+}
+
+/// Formats a hook reference using the protocol document's descriptive syntax.
+pub fn format_hook_ref(path: &[String], hook_id: u64) -> String {
+    format!("{} {{ hook: {} }}", format_path(path), hook_id)
+}

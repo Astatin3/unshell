@@ -12,13 +12,54 @@ use unshell::protocol::tree::{
     ChildRoute, ConnectionState, Endpoint, Ingress, LeafBehavior, LocalEvent, ProtocolEndpoint,
 };
 use unshell::protocol::{
-    CallMessage, DataMessage, FaultMessage, FrameBytes, PacketHeader, PacketType, decode_frame,
+    CallMessage, DataMessage, EndpointIntrospection, FaultMessage, FrameBytes, LeafIntrospection,
+    PacketHeader, PacketType, decode_frame, deserialize_archived_bytes,
 };
 
 use crate::model::{
     DemoTree, EndpointProcedureKind, EndpointProcedureSpec, LeafKind, NodeId, ScenarioDefinition,
-    Selection, format_path,
+    Selection, format_hook_ref, format_leaf_ref, format_path,
 };
+
+/// Root inspector mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorMode {
+    GroundTruth,
+    Realistic,
+}
+
+/// Learned procedure metadata stored by the root host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LearnedProcedure {
+    pub procedure_id: String,
+    pub description: Option<String>,
+}
+
+/// Learned leaf metadata stored by the root host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LearnedLeaf {
+    pub leaf_name: String,
+    pub description: Option<String>,
+    pub procedures: Vec<LearnedProcedure>,
+}
+
+/// Learned endpoint metadata stored by the root host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LearnedNode {
+    pub path: Vec<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub direct_child: bool,
+    pub endpoint_procedures: Vec<LearnedProcedure>,
+    pub leaves: Vec<LearnedLeaf>,
+    pub endpoint_introspected: bool,
+}
+
+/// Root-host knowledge accumulated from local configuration and observed traffic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootKnowledge {
+    pub nodes: BTreeMap<Vec<String>, LearnedNode>,
+}
 
 /// User-facing outcome of a root-originated action.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +75,7 @@ pub struct HookSnapshot {
     pub host_path: Vec<String>,
     pub peer_path: Vec<String>,
     pub procedure_id: String,
+    pub target_leaf: Option<String>,
     pub closed: bool,
     pub last_message: String,
 }
@@ -121,7 +163,206 @@ pub struct Simulation {
     pub trace: VecDeque<TraceEvent>,
     pub recorded_events: Vec<RecordedEvent>,
     pub hooks: BTreeMap<u64, HookSnapshot>,
+    pub inspector_mode: InspectorMode,
+    pub root_knowledge: RootKnowledge,
     chat_sessions: BTreeMap<u64, ChatSession>,
+}
+
+impl RootKnowledge {
+    fn new(tree: &DemoTree) -> Self {
+        let mut knowledge = Self {
+            nodes: BTreeMap::new(),
+        };
+        for node in &tree.nodes {
+            if node.path.is_empty() || node.path.len() == 1 {
+                let direct_child = node.path.len() == 1;
+                let mut learned = LearnedNode {
+                    path: node.path.clone(),
+                    title: Some(node.title.clone()),
+                    description: Some(node.description.clone()),
+                    direct_child,
+                    endpoint_procedures: Vec::new(),
+                    leaves: Vec::new(),
+                    endpoint_introspected: node.path.is_empty(),
+                };
+
+                if node.path.is_empty() {
+                    learned.endpoint_procedures = node
+                        .endpoint_procedures
+                        .iter()
+                        .map(|procedure| LearnedProcedure {
+                            procedure_id: procedure.procedure_id.clone(),
+                            description: Some(procedure.description.clone()),
+                        })
+                        .collect();
+                    learned.leaves = node
+                        .leaves
+                        .iter()
+                        .map(|leaf| LearnedLeaf {
+                            leaf_name: leaf.name.clone(),
+                            description: Some(leaf.description.clone()),
+                            procedures: leaf
+                                .procedures
+                                .iter()
+                                .map(|procedure_id| LearnedProcedure {
+                                    procedure_id: procedure_id.clone(),
+                                    description: Some(leaf.description.clone()),
+                                })
+                                .collect(),
+                        })
+                        .collect();
+                }
+
+                knowledge.nodes.insert(node.path.clone(), learned);
+            }
+        }
+        knowledge
+    }
+
+    fn ensure_node(&mut self, demo_node: &crate::model::DemoNode) -> &mut LearnedNode {
+        let direct_child = demo_node.path.len() == 1;
+        self.nodes
+            .entry(demo_node.path.clone())
+            .or_insert_with(|| LearnedNode {
+                path: demo_node.path.clone(),
+                title: Some(demo_node.title.clone()),
+                description: Some(demo_node.description.clone()),
+                direct_child,
+                endpoint_procedures: Vec::new(),
+                leaves: Vec::new(),
+                endpoint_introspected: false,
+            })
+    }
+
+    fn remember_endpoint_procedure(
+        &mut self,
+        demo_node: &crate::model::DemoNode,
+        procedure: &EndpointProcedureSpec,
+    ) {
+        let learned_node = self.ensure_node(demo_node);
+        push_procedure(
+            &mut learned_node.endpoint_procedures,
+            procedure.procedure_id.clone(),
+            Some(procedure.description.clone()),
+        );
+    }
+
+    fn remember_leaf_from_spec(
+        &mut self,
+        demo_node: &crate::model::DemoNode,
+        leaf_spec: &crate::model::LeafSpec,
+    ) {
+        let learned_node = self.ensure_node(demo_node);
+        let leaf = ensure_leaf(
+            &mut learned_node.leaves,
+            leaf_spec.name.clone(),
+            Some(leaf_spec.description.clone()),
+        );
+        for procedure_id in &leaf_spec.procedures {
+            push_procedure(
+                &mut leaf.procedures,
+                procedure_id.clone(),
+                Some(leaf_spec.description.clone()),
+            );
+        }
+    }
+
+    fn remember_endpoint_introspection(
+        &mut self,
+        demo_node: &crate::model::DemoNode,
+        introspection: &EndpointIntrospection,
+    ) {
+        let learned_node = self.ensure_node(demo_node);
+        learned_node.endpoint_introspected = true;
+        for summary in &introspection.leaves {
+            let description = demo_node
+                .leaves
+                .iter()
+                .find(|leaf| leaf.name == summary.leaf_name)
+                .map(|leaf| leaf.description.clone());
+            let leaf = ensure_leaf(
+                &mut learned_node.leaves,
+                summary.leaf_name.clone(),
+                description,
+            );
+            for procedure_id in &summary.procedures {
+                push_procedure(&mut leaf.procedures, procedure_id.clone(), None);
+            }
+        }
+    }
+
+    fn remember_leaf_introspection(
+        &mut self,
+        demo_node: &crate::model::DemoNode,
+        introspection: &LeafIntrospection,
+    ) {
+        let learned_node = self.ensure_node(demo_node);
+        let description = demo_node
+            .leaves
+            .iter()
+            .find(|leaf| leaf.name == introspection.leaf_name)
+            .map(|leaf| leaf.description.clone());
+        let leaf = ensure_leaf(
+            &mut learned_node.leaves,
+            introspection.leaf_name.clone(),
+            description,
+        );
+        for procedure_id in &introspection.procedures {
+            push_procedure(&mut leaf.procedures, procedure_id.clone(), None);
+        }
+    }
+
+    fn clear_deeper_than_one_hop(&mut self) {
+        self.nodes.retain(|path, _| path.len() <= 1);
+    }
+
+    pub fn node(&self, path: &[String]) -> Option<&LearnedNode> {
+        self.nodes.get(path)
+    }
+
+    pub fn known_paths(&self) -> Vec<Vec<String>> {
+        self.nodes.keys().cloned().collect()
+    }
+}
+
+fn ensure_leaf<'a>(
+    leaves: &'a mut Vec<LearnedLeaf>,
+    leaf_name: String,
+    description: Option<String>,
+) -> &'a mut LearnedLeaf {
+    if let Some(index) = leaves.iter().position(|leaf| leaf.leaf_name == leaf_name) {
+        if leaves[index].description.is_none() {
+            leaves[index].description = description;
+        }
+        return &mut leaves[index];
+    }
+
+    leaves.push(LearnedLeaf {
+        leaf_name,
+        description,
+        procedures: Vec::new(),
+    });
+    leaves.last_mut().expect("just pushed")
+}
+
+fn push_procedure(
+    procedures: &mut Vec<LearnedProcedure>,
+    procedure_id: String,
+    description: Option<String>,
+) {
+    if let Some(existing) = procedures
+        .iter_mut()
+        .find(|procedure| procedure.procedure_id == procedure_id)
+    {
+        if existing.description.is_none() {
+            existing.description = description;
+        }
+        return;
+    }
+    procedures.push(LearnedProcedure {
+        procedure_id,
+        description,
+    });
 }
 
 impl Simulation {
@@ -172,6 +413,8 @@ impl Simulation {
             });
         }
 
+        let root_knowledge = RootKnowledge::new(&tree);
+
         Ok(Self {
             scenario,
             tree,
@@ -181,6 +424,8 @@ impl Simulation {
             trace: VecDeque::new(),
             recorded_events: Vec::new(),
             hooks: BTreeMap::new(),
+            inspector_mode: InspectorMode::GroundTruth,
+            root_knowledge,
             chat_sessions: BTreeMap::new(),
         })
     }
@@ -193,6 +438,25 @@ impl Simulation {
     /// Returns a node by id.
     pub fn node(&self, id: NodeId) -> &crate::model::DemoNode {
         self.tree.node(id)
+    }
+
+    /// Clears deeper root memory and switches the inspector into realistic mode.
+    pub fn enable_realistic_mode_with_memory_reset(&mut self) {
+        self.root_knowledge.clear_deeper_than_one_hop();
+        self.inspector_mode = InspectorMode::Realistic;
+    }
+
+    /// Toggles the inspector between learned state and ground truth.
+    pub fn toggle_inspector_mode(&mut self) {
+        self.inspector_mode = match self.inspector_mode {
+            InspectorMode::GroundTruth => InspectorMode::Realistic,
+            InspectorMode::Realistic => InspectorMode::GroundTruth,
+        };
+    }
+
+    /// Returns whether the inspector is using learned state.
+    pub fn is_realistic_mode(&self) -> bool {
+        self.inspector_mode == InspectorMode::Realistic
     }
 
     /// Builds and routes an endpoint introspection call from the root.
@@ -215,11 +479,18 @@ impl Simulation {
         leaf_name: &str,
     ) -> Result<ActionResult, SimError> {
         let node_path = self.tree.node(node_id).path.clone();
-        let node_display = self.tree.node(node_id).display_path();
         self.require_leaf(node_id, leaf_name)?;
+        let node = self.tree.node(node_id).clone();
+        if let Some(leaf_spec) = node.leaves.iter().find(|leaf| leaf.name == leaf_name) {
+            self.root_knowledge
+                .remember_leaf_from_spec(&node, leaf_spec);
+        }
         self.dispatch_root_call(node_path, Some(leaf_name.to_owned()), "", Vec::new())?;
         Ok(ActionResult {
-            label: format!("Inspect leaf {} on {}", leaf_name, node_display),
+            label: format!(
+                "Inspect {}",
+                format_leaf_ref(&self.node(node_id).path, leaf_name)
+            ),
             hook_id: self.hooks.last_key_value().map(|(hook_id, _)| *hook_id),
         })
     }
@@ -233,9 +504,18 @@ impl Simulation {
     ) -> Result<ActionResult, SimError> {
         let node_path = self.tree.node(node_id).path.clone();
         let node_display = self.tree.node(node_id).display_path();
-        let leaf = self.require_leaf(node_id, leaf_name)?;
+        let node = self.tree.node(node_id).clone();
+        let procedures = self.require_leaf(node_id, leaf_name)?.procedures.clone();
+        if let Some(leaf_spec) = node
+            .leaves
+            .iter()
+            .find(|known_leaf| known_leaf.name == leaf_name)
+        {
+            self.root_knowledge
+                .remember_leaf_from_spec(&node, leaf_spec);
+        }
         let procedure_id =
-            leaf.procedures
+            procedures
                 .first()
                 .cloned()
                 .ok_or_else(|| SimError::UnknownProcedure {
@@ -249,7 +529,10 @@ impl Simulation {
             text.as_bytes().to_vec(),
         )?;
         Ok(ActionResult {
-            label: format!("Echo via {leaf_name} on {}", node_display),
+            label: format!(
+                "Echo via {}",
+                format_leaf_ref(&self.node(node_id).path, leaf_name)
+            ),
             hook_id: self.hooks.last_key_value().map(|(hook_id, _)| *hook_id),
         })
     }
@@ -264,6 +547,15 @@ impl Simulation {
         let node_path = self.tree.node(node_id).path.clone();
         let node_display = self.tree.node(node_id).display_path();
         self.require_endpoint_procedure(node_id, procedure_id)?;
+        let node = self.tree.node(node_id).clone();
+        if let Some(procedure) = node
+            .endpoint_procedures
+            .iter()
+            .find(|known_procedure| known_procedure.procedure_id == procedure_id)
+        {
+            self.root_knowledge
+                .remember_endpoint_procedure(&node, procedure);
+        }
         self.dispatch_root_call(node_path, None, procedure_id, data)?;
         Ok(ActionResult {
             label: format!("Call {procedure_id} on {}", node_display),
@@ -293,7 +585,10 @@ impl Simulation {
                 },
                 node_display,
                 dst_leaf
-                    .map(|leaf_name| format!(" leaf {leaf_name}"))
+                    .map(|leaf_name| format!(
+                        " {}",
+                        format_leaf_ref(&self.node(node_id).path, leaf_name)
+                    ))
                     .unwrap_or_default()
             ),
             hook_id: self.hooks.last_key_value().map(|(hook_id, _)| *hook_id),
@@ -324,7 +619,10 @@ impl Simulation {
             .map_err(|error| SimError::Protocol(error.to_string()))?;
         self.record_trace(
             self.root_id,
-            format!("root queued hook data for hook #{hook_id}: {text}"),
+            format!(
+                "root queued hook data for {}: {text}",
+                format_hook_ref(self.node(self.root_id).path.as_slice(), hook_id)
+            ),
         );
         self.process_local_frame(self.root_id, frame)?;
         Ok(ActionResult {
@@ -362,13 +660,17 @@ impl Simulation {
         self.record_trace(
             from_node_id,
             format!(
-                "injected invalid peer data toward {} for hook #{hook_id}",
-                format_path(&to_path)
+                "injected invalid peer data toward {} for {}",
+                format_path(&to_path),
+                format_hook_ref(self.node(to_node_id).path.as_slice(), hook_id)
             ),
         );
         self.process_local_frame(from_node_id, frame)?;
         Ok(ActionResult {
-            label: format!("Inject invalid peer data for hook #{hook_id}"),
+            label: format!(
+                "Inject invalid peer data for {}",
+                format_hook_ref(self.node(to_node_id).path.as_slice(), hook_id)
+            ),
             hook_id: Some(hook_id),
         })
     }
@@ -432,6 +734,7 @@ impl Simulation {
                 host_path: Vec::new(),
                 peer_path: dst_path.clone(),
                 procedure_id: procedure_id.to_owned(),
+                target_leaf: dst_leaf.clone(),
                 closed: false,
                 last_message: format!("created for {}", format_path(&dst_path)),
             },
@@ -448,7 +751,7 @@ impl Simulation {
                 format_path(&dst_path),
                 dst_leaf
                     .as_ref()
-                    .map(|leaf| format!(" leaf {leaf}"))
+                    .map(|leaf| format!(" {}", format_leaf_ref(&dst_path, leaf)))
                     .unwrap_or_default()
             ),
         );
@@ -543,8 +846,11 @@ impl Simulation {
                 self.record_trace(
                     node_id,
                     format!(
-                        "local Data on hook #{}: {text}",
-                        header.hook_id.unwrap_or(0)
+                        "local Data on {}: {text}",
+                        format_hook_ref(
+                            self.node(node_id).path.as_slice(),
+                            header.hook_id.unwrap_or(0)
+                        )
                     ),
                 );
                 if let Some(hook_id) = header.hook_id {
@@ -557,6 +863,10 @@ impl Simulation {
                         if message.end_hook {
                             snapshot.closed = true;
                         }
+                    }
+
+                    if node_id == self.root_id {
+                        self.learn_from_root_data(hook_id, &message);
                     }
                 }
 
@@ -606,8 +916,11 @@ impl Simulation {
                 self.record_trace(
                     node_id,
                     format!(
-                        "local Fault on hook #{}: 0x{:02X}",
-                        header.hook_id.unwrap_or(0),
+                        "local Fault on {}: 0x{:02X}",
+                        format_hook_ref(
+                            self.node(node_id).path.as_slice(),
+                            header.hook_id.unwrap_or(0)
+                        ),
                         message.fault.0
                     ),
                 );
@@ -633,7 +946,7 @@ impl Simulation {
                         header
                             .dst_leaf
                             .as_ref()
-                            .map(|leaf| format!("leaf {leaf}"))
+                            .map(|leaf| format_leaf_ref(&header.dst_path, leaf))
                             .unwrap_or_else(|| "endpoint".to_owned())
                     ),
                 );
@@ -835,8 +1148,55 @@ impl Simulation {
                 format!("{}: {}", node.display_path(), node.title)
             }
             Selection::Leaf { node_id, leaf_name } => {
-                format!("{} leaf {}", self.node(*node_id).display_path(), leaf_name)
+                format_leaf_ref(&self.node(*node_id).path, leaf_name)
             }
+        }
+    }
+
+    fn learn_from_root_data(&mut self, hook_id: u64, message: &DataMessage) {
+        let Some(snapshot) = self.hooks.get(&hook_id).cloned() else {
+            return;
+        };
+        let Some(node_id) = self.tree.find_by_path(&snapshot.peer_path) else {
+            return;
+        };
+        let demo_node = self.node(node_id).clone();
+
+        if snapshot.procedure_id.is_empty() {
+            if snapshot.target_leaf.is_some() {
+                if let Ok(introspection) = deserialize_archived_bytes::<
+                    unshell::protocol::introspection::ArchivedLeafIntrospection,
+                    LeafIntrospection,
+                >(&message.data)
+                {
+                    self.root_knowledge
+                        .remember_leaf_introspection(&demo_node, &introspection);
+                }
+            } else if let Ok(introspection) = deserialize_archived_bytes::<
+                unshell::protocol::introspection::ArchivedEndpointIntrospection,
+                EndpointIntrospection,
+            >(&message.data)
+            {
+                self.root_knowledge
+                    .remember_endpoint_introspection(&demo_node, &introspection);
+            }
+            return;
+        }
+
+        if let Some(procedure) = demo_node
+            .endpoint_procedures
+            .iter()
+            .find(|procedure| procedure.procedure_id == snapshot.procedure_id)
+        {
+            self.root_knowledge
+                .remember_endpoint_procedure(&demo_node, procedure);
+        }
+
+        if let Some(leaf_name) = &snapshot.target_leaf
+            && let Some(leaf_spec) = demo_node.leaves.iter().find(|leaf| &leaf.name == leaf_name)
+        {
+            self.root_knowledge
+                .remember_leaf_from_spec(&demo_node, leaf_spec);
         }
     }
 }

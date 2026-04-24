@@ -11,7 +11,11 @@ use crossterm::{
 };
 use ratatui::DefaultTerminal;
 
-use crate::{model::Selection, scenarios::built_in_scenarios, sim::Simulation};
+use crate::{
+    model::{NodeId, Selection},
+    scenarios::built_in_scenarios,
+    sim::Simulation,
+};
 
 /// Errors returned by the TUI application.
 #[derive(Debug, thiserror::Error)]
@@ -113,6 +117,21 @@ impl App {
             KeyCode::Char('d') => self.perform_chat_data()?,
             KeyCode::Char('b') => self.perform_chat_bye()?,
             KeyCode::Char('f') => self.perform_invalid_fault_demo()?,
+            KeyCode::Char('g') => {
+                self.simulation.toggle_inspector_mode();
+                self.refresh_selections(Some(self.selected().node_id()));
+                self.status = if self.simulation.is_realistic_mode() {
+                    "Inspector switched to realistic mode.".to_owned()
+                } else {
+                    "Inspector switched to ground truth mode.".to_owned()
+                };
+            }
+            KeyCode::Char('m') => {
+                self.simulation.enable_realistic_mode_with_memory_reset();
+                self.refresh_selections(Some(NodeId(0)));
+                self.status =
+                    "Cleared root memory for deeper nodes and enabled realistic mode.".to_owned();
+            }
             KeyCode::Char('s') => {
                 let processed = self.simulation.step()?;
                 self.status = if processed {
@@ -133,12 +152,7 @@ impl App {
     fn load_scenario(&mut self, index: usize) -> Result<(), AppError> {
         self.scenario_index = index;
         self.simulation = Simulation::new(self.scenarios[index].clone())?;
-        self.selections = ui::build_selections(&self.simulation);
-        self.selection_index = self
-            .selections
-            .iter()
-            .position(|selection| *selection == self.simulation.initial_selection())
-            .unwrap_or(0);
+        self.refresh_selections(Some(self.simulation.initial_selection().node_id()));
         self.status = format!("Loaded scenario: {}", self.scenarios[index].name);
         Ok(())
     }
@@ -152,6 +166,7 @@ impl App {
             Selection::Node(node_id) => {
                 let result = self.simulation.call_endpoint_introspection(node_id)?;
                 let steps = self.simulation.drain()?;
+                self.refresh_selections(Some(node_id));
                 self.status = format!("{} ({steps} steps)", result.label);
             }
             Selection::Leaf { node_id, leaf_name } => {
@@ -159,6 +174,7 @@ impl App {
                     .simulation
                     .call_leaf_introspection(node_id, &leaf_name)?;
                 let steps = self.simulation.drain()?;
+                self.refresh_selections(Some(node_id));
                 self.status = format!("{} ({steps} steps)", result.label);
             }
         }
@@ -171,6 +187,7 @@ impl App {
                 self.simulation
                     .call_echo_leaf(node_id, &leaf_name, "demo echo from root")?;
             let steps = self.simulation.drain()?;
+            self.refresh_selections(Some(node_id));
             self.status = format!("{} ({steps} steps)", result.label);
         } else {
             self.status = "Select a leaf first, then press e.".to_owned();
@@ -193,6 +210,7 @@ impl App {
                     b"ping".to_vec(),
                 )?;
                 let steps = self.simulation.drain()?;
+                self.refresh_selections(Some(node_id));
                 self.status = format!("{} ({steps} steps)", result.label);
             } else {
                 self.status = "Selected node has no endpoint procedures.".to_owned();
@@ -222,6 +240,7 @@ impl App {
                     b"chunk please".to_vec(),
                 )?;
                 let steps = self.simulation.drain()?;
+                self.refresh_selections(Some(node_id));
                 self.status = format!("{} ({steps} steps)", result.label);
             } else {
                 self.status = "Selected node has no chunked procedure.".to_owned();
@@ -248,6 +267,7 @@ impl App {
                     b"open chat".to_vec(),
                 )?;
                 let steps = self.simulation.drain()?;
+                self.refresh_selections(Some(node_id));
                 self.status = format!("{} ({steps} steps)", result.label);
             } else {
                 self.status = "Selected node has no chat procedure.".to_owned();
@@ -264,6 +284,7 @@ impl App {
                 self.simulation
                     .send_root_hook_data(hook_id, "hello from the root", false)?;
             let steps = self.simulation.drain()?;
+            self.refresh_selections(None);
             self.status = format!("{} ({steps} steps)", result.label);
         } else {
             self.status = "No known hook yet. Press h to open chat first.".to_owned();
@@ -275,6 +296,7 @@ impl App {
         if let Some(hook_id) = self.simulation.hook_ids().last().copied() {
             let result = self.simulation.send_root_hook_data(hook_id, "bye", true)?;
             let steps = self.simulation.drain()?;
+            self.refresh_selections(None);
             self.status = format!("{} ({steps} steps)", result.label);
         } else {
             self.status = "No known hook yet. Press h to open chat first.".to_owned();
@@ -284,9 +306,9 @@ impl App {
 
     fn perform_invalid_fault_demo(&mut self) -> Result<(), AppError> {
         if let Some(hook_id) = self.simulation.hook_ids().last().copied() {
-            let root_id = crate::model::NodeId(0);
+            let root_id = NodeId(0);
             if self.simulation.tree.nodes.len() > 1 {
-                let attacker = crate::model::NodeId(1);
+                let attacker = NodeId(1);
                 let result = self.simulation.inject_invalid_peer_data(
                     attacker,
                     root_id,
@@ -295,6 +317,7 @@ impl App {
                     "spoofed data",
                 )?;
                 let steps = self.simulation.drain()?;
+                self.refresh_selections(None);
                 self.status = format!("{} ({steps} steps)", result.label);
             } else {
                 self.status =
@@ -304,5 +327,15 @@ impl App {
             self.status = "Open a hook first before injecting invalid traffic.".to_owned();
         }
         Ok(())
+    }
+
+    fn refresh_selections(&mut self, preferred_node: Option<NodeId>) {
+        let current = preferred_node.unwrap_or_else(|| self.selected().node_id());
+        self.selections = ui::build_selections(&self.simulation);
+        self.selection_index = self
+            .selections
+            .iter()
+            .position(|selection| selection.node_id() == current)
+            .unwrap_or(0);
     }
 }

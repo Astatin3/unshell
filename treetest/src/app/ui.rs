@@ -9,8 +9,8 @@ use ratatui::{
 };
 
 use crate::{
-    model::{Selection, format_path},
-    sim::{RecordedEvent, Simulation},
+    model::{Selection, format_hook_ref, format_leaf_ref, format_path},
+    sim::{InspectorMode, RecordedEvent, Simulation},
 };
 
 use super::App;
@@ -32,11 +32,16 @@ impl App {
     }
 
     fn render_header(&self, frame: &mut Frame<'_>, area: Rect) {
+        let mode = match self.simulation.inspector_mode {
+            InspectorMode::GroundTruth => "ground truth",
+            InspectorMode::Realistic => "realistic",
+        };
         let title = format!(
-            "treetest | scenario {} / {}: {}",
+            "treetest | scenario {} / {}: {} | {}",
             self.scenario_index + 1,
             self.scenarios.len(),
-            self.scenarios[self.scenario_index].name
+            self.scenarios[self.scenario_index].name,
+            mode
         );
         frame.render_widget(
             Paragraph::new(title).block(Block::default().borders(Borders::ALL).title("Scenario")),
@@ -107,18 +112,15 @@ impl App {
                             node.display_path()
                         )
                     }
-                    Selection::Leaf { node_id, leaf_name } => {
-                        format!(
-                            "{} {} :: {}",
-                            if index == self.selection_index {
-                                ">"
-                            } else {
-                                " "
-                            },
-                            self.simulation.node(*node_id).display_path(),
-                            leaf_name
-                        )
-                    }
+                    Selection::Leaf { node_id, leaf_name } => format!(
+                        "{} {}",
+                        if index == self.selection_index {
+                            ">"
+                        } else {
+                            " "
+                        },
+                        format_leaf_ref(&self.simulation.node(*node_id).path, leaf_name)
+                    ),
                 };
                 ListItem::new(label)
             })
@@ -131,7 +133,21 @@ impl App {
 
     fn render_inspector(&self, frame: &mut Frame<'_>, area: Rect) {
         let selection = self.selected();
-        let body = match selection {
+        let body = match self.simulation.inspector_mode {
+            InspectorMode::GroundTruth => self.render_ground_truth_inspector(selection),
+            InspectorMode::Realistic => self.render_realistic_inspector(selection),
+        };
+
+        frame.render_widget(
+            Paragraph::new(body)
+                .block(Block::default().borders(Borders::ALL).title("Inspector"))
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+
+    fn render_ground_truth_inspector(&self, selection: &Selection) -> Text<'static> {
+        match selection {
             Selection::Node(node_id) => {
                 let node = self.simulation.node(*node_id);
                 let mut lines = vec![
@@ -147,16 +163,15 @@ impl App {
                     Line::default(),
                     Line::from("Endpoint procedures:"),
                 ];
-                lines.extend(
-                    node.endpoint_procedures
-                        .iter()
-                        .map(|procedure| Line::from(format!("- {}", procedure.procedure_id))),
-                );
-                lines.extend(
-                    node.leaves
-                        .iter()
-                        .map(|leaf| Line::from(format!("- leaf {}", leaf.name))),
-                );
+                lines.extend(node.endpoint_procedures.iter().map(|procedure| {
+                    Line::from(format!(
+                        "- {}: {}",
+                        procedure.procedure_id, procedure.description
+                    ))
+                }));
+                lines.extend(node.leaves.iter().map(|leaf| {
+                    Line::from(format!("- {}", format_leaf_ref(&node.path, &leaf.name)))
+                }));
                 Text::from(lines)
             }
             Selection::Leaf { node_id, leaf_name } => {
@@ -166,21 +181,118 @@ impl App {
                     .iter()
                     .find(|leaf| &leaf.name == leaf_name)
                     .expect("selection should stay valid");
-                Text::from(vec![
-                    Line::from(format!("Leaf {}", leaf.name)).bold(),
+                let mut lines = vec![
+                    Line::from(format_leaf_ref(&node.path, &leaf.name)).bold(),
                     Line::from(leaf.description.clone()),
                     Line::from(format!("Node: {}", node.display_path())),
-                    Line::from(format!("Procedures: {}", leaf.procedures.join(", "))),
-                ])
+                    Line::from("Procedures:"),
+                ];
+                lines.extend(
+                    leaf.procedures
+                        .iter()
+                        .map(|procedure| Line::from(format!("- {}", procedure))),
+                );
+                Text::from(lines)
             }
-        };
+        }
+    }
 
-        frame.render_widget(
-            Paragraph::new(body)
-                .block(Block::default().borders(Borders::ALL).title("Inspector"))
-                .wrap(Wrap { trim: true }),
-            area,
-        );
+    fn render_realistic_inspector(&self, selection: &Selection) -> Text<'static> {
+        match selection {
+            Selection::Node(node_id) => {
+                let node = self.simulation.node(*node_id);
+                if let Some(learned) = self.simulation.root_knowledge.node(&node.path) {
+                    let mut lines = vec![
+                        Line::from(learned.title.clone().unwrap_or_else(|| node.display_path()))
+                            .bold(),
+                        Line::from(
+                            learned
+                                .description
+                                .clone()
+                                .unwrap_or_else(|| "No learned description yet.".to_owned()),
+                        ),
+                        Line::from(format!("Path: {}", format_path(&learned.path))),
+                        Line::from(format!("Known direct child: {}", learned.direct_child)),
+                        Line::from(format!(
+                            "Endpoint introspected: {}",
+                            learned.endpoint_introspected
+                        )),
+                        Line::default(),
+                        Line::from("Known endpoint procedures:"),
+                    ];
+                    if learned.endpoint_procedures.is_empty() {
+                        lines.push(Line::from("- none learned"));
+                    } else {
+                        lines.extend(learned.endpoint_procedures.iter().map(|procedure| {
+                            Line::from(match &procedure.description {
+                                Some(description) => {
+                                    format!("- {}: {}", procedure.procedure_id, description)
+                                }
+                                None => format!("- {}", procedure.procedure_id),
+                            })
+                        }));
+                    }
+                    lines.push(Line::default());
+                    lines.push(Line::from("Known leaves:"));
+                    if learned.leaves.is_empty() {
+                        lines.push(Line::from("- none learned"));
+                    } else {
+                        lines.extend(learned.leaves.iter().map(|leaf| {
+                            Line::from(format!(
+                                "- {}",
+                                format_leaf_ref(&learned.path, &leaf.leaf_name)
+                            ))
+                        }));
+                    }
+                    Text::from(lines)
+                } else {
+                    Text::from(vec![
+                        Line::from(node.display_path()).bold(),
+                        Line::from(
+                            "The root host has not learned anything about this endpoint yet.",
+                        ),
+                    ])
+                }
+            }
+            Selection::Leaf { node_id, leaf_name } => {
+                let node = self.simulation.node(*node_id);
+                if let Some(learned) = self.simulation.root_knowledge.node(&node.path)
+                    && let Some(leaf) = learned
+                        .leaves
+                        .iter()
+                        .find(|leaf| &leaf.leaf_name == leaf_name)
+                {
+                    let mut lines = vec![
+                        Line::from(format_leaf_ref(&node.path, &leaf.leaf_name)).bold(),
+                        Line::from(
+                            leaf.description
+                                .clone()
+                                .unwrap_or_else(|| "No learned description yet.".to_owned()),
+                        ),
+                        Line::from(format!("Node: {}", node.display_path())),
+                        Line::from("Known procedures:"),
+                    ];
+                    if leaf.procedures.is_empty() {
+                        lines.push(Line::from("- none learned"));
+                    } else {
+                        lines.extend(leaf.procedures.iter().map(|procedure| {
+                            Line::from(match &procedure.description {
+                                Some(description) => {
+                                    format!("- {}: {}", procedure.procedure_id, description)
+                                }
+                                None => format!("- {}", procedure.procedure_id),
+                            })
+                        }));
+                    }
+                    Text::from(lines)
+                } else {
+                    Text::from(vec![
+                        Line::from(format_leaf_ref(&node.path, leaf_name)).bold(),
+                        Line::from("The root host has not learned this leaf yet."),
+                    ])
+                }
+            }
+        }
     }
 
     fn render_trace(&self, frame: &mut Frame<'_>, area: Rect) {
@@ -211,9 +323,8 @@ impl App {
             .map(|hook| {
                 let status = if hook.closed { "closed" } else { "open" };
                 ListItem::new(format!(
-                    "#{} {} -> {} [{}] {}",
-                    hook.hook_id,
-                    format_path(&hook.host_path),
+                    "{} -> {} [{}] {}",
+                    format_hook_ref(&hook.host_path, hook.hook_id),
                     format_path(&hook.peer_path),
                     status,
                     hook.last_message,
@@ -230,7 +341,7 @@ impl App {
         let help = vec![
             Line::from(self.status.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
             Line::from(
-                "Keys: arrows move selection/scenario | i introspect | e echo leaf | p ping | c chunked | h open chat | d chat data | b chat bye | f invalid peer | s step | a autoplay | q quit",
+                "Keys: arrows move selection/scenario | i introspect | e echo leaf | p ping | c chunked | h open chat | d chat data | b chat bye | f invalid peer | g toggle ground-truth/realistic | m clear deeper memory + realistic | s step | a autoplay | q quit",
             ),
             Line::from(format!(
                 "Current selection: {}",
@@ -276,13 +387,38 @@ impl App {
 
 pub(super) fn build_selections(simulation: &Simulation) -> Vec<Selection> {
     let mut selections = Vec::new();
-    for node in &simulation.tree.nodes {
+    let node_ids: Vec<_> = match simulation.inspector_mode {
+        InspectorMode::GroundTruth => simulation.tree.nodes.iter().map(|node| node.id).collect(),
+        InspectorMode::Realistic => simulation
+            .root_knowledge
+            .known_paths()
+            .into_iter()
+            .filter_map(|path| simulation.tree.find_by_path(&path))
+            .collect(),
+    };
+
+    for node_id in node_ids {
+        let node = simulation.node(node_id);
         selections.push(Selection::Node(node.id));
-        for leaf in &node.leaves {
-            selections.push(Selection::Leaf {
-                node_id: node.id,
-                leaf_name: leaf.name.clone(),
-            });
+        match simulation.inspector_mode {
+            InspectorMode::GroundTruth => {
+                for leaf in &node.leaves {
+                    selections.push(Selection::Leaf {
+                        node_id: node.id,
+                        leaf_name: leaf.name.clone(),
+                    });
+                }
+            }
+            InspectorMode::Realistic => {
+                if let Some(learned) = simulation.root_knowledge.node(&node.path) {
+                    for leaf in &learned.leaves {
+                        selections.push(Selection::Leaf {
+                            node_id: node.id,
+                            leaf_name: leaf.leaf_name.clone(),
+                        });
+                    }
+                }
+            }
         }
     }
     selections
