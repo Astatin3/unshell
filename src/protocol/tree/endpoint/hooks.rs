@@ -60,7 +60,16 @@ impl ProtocolEndpoint {
         header: PacketHeader,
         message: DataMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
-        let key = HookKey::new(self.path.clone(), header.hook_id.expect("validated"));
+        let hook_id = header.hook_id.expect("validated");
+        let key = self
+            .hooks
+            .active(&HookKey::new(self.path.clone(), hook_id))
+            .map(|_| HookKey::new(self.path.clone(), hook_id))
+            .or_else(|| {
+                self.hooks
+                    .find_active_key_by_peer(hook_id, &header.src_path)
+            })
+            .unwrap_or_else(|| HookKey::new(self.path.clone(), hook_id));
 
         if self.hooks.active(&key).is_none() {
             let matches = self.hooks.pending(&key).is_some_and(|pending| {

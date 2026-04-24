@@ -124,6 +124,25 @@ impl HookTable {
         self.active.get_mut(key)
     }
 
+    /// Finds an active hook key for a non-host peer receiving continued data.
+    ///
+    /// Rationale: `hook_id` is scoped to the hook host, so a subordinate peer
+    /// cannot derive the full key from the packet header alone. The peer uses
+    /// its already-validated active state to recover the host-scoped key.
+    pub fn find_active_key_by_peer(&self, hook_id: u64, peer_path: &[String]) -> Option<HookKey> {
+        let mut matches = self
+            .active
+            .iter()
+            .filter(|(_key, active)| active.hook_id == hook_id && active.peer_path == peer_path)
+            .map(|(key, _)| key.clone());
+
+        let first = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        Some(first)
+    }
+
     pub fn pending_len(&self) -> usize {
         self.pending.len()
     }

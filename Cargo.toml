@@ -2,6 +2,7 @@
 members = [
     "ush-obfuscate",
     "base62",
+    "treetest",
 ]
 resolver = "2"
 
