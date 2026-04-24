@@ -1,4 +1,4 @@
-//! Required introspection payloads.
+//! Required introspection payloads for discovery.
 
 use alloc::{string::String, vec::Vec};
 use rkyv::{Archive, Deserialize, Serialize};

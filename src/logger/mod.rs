@@ -1,14 +1,21 @@
 //! # Logger Module
 //!
-//! A lightweight, no_std-compatible logging system.
+//! A lightweight global logging system for core-only environments.
 //!
 //! ## Usage
 //!
 //! ```rust
 //! use unshell::{info, warn, error};
-//! use unshell::logger::Logger;
+//! use unshell::logger::{Logger, Record};
 //!
-//! // Uses the default (no-op) logger until one is installed.
+//! struct Sink;
+//! impl Logger for Sink {
+//!     fn log(&self, _record: &Record<'_>) {}
+//! }
+//!
+//! static LOGGER: Sink = Sink;
+//! unshell::logger::set_logger(&LOGGER);
+//!
 //! info!("Starting up");
 //! warn!("Something is off");
 //! error!("Critical failure");
@@ -18,19 +25,25 @@
 //!
 //! Call [`set_logger`] with any type that implements [`Logger`]:
 //!
-//! ```rust,no_run
+//! ```rust
 //! use unshell::logger::{Logger, LogLevel, Record, set_logger};
 //!
-//! struct StdoutLogger;
-//! impl Logger for StdoutLogger {
+//! struct MemoryLogger {
+//!     min_level: LogLevel,
+//! }
+//!
+//! impl Logger for MemoryLogger {
 //!     fn log(&self, record: &Record<'_>) {
-//!         // In a no_std environment you would use the `unix-print` crate
-//!         // or write to a pre-opened file descriptor.
-//!         let _ = record; // placeholder
+//!         if record.level < self.min_level {
+//!             return;
+//!         }
+//!         let _ = record;
 //!     }
 //! }
 //!
-//! static MY_LOGGER: StdoutLogger = StdoutLogger;
+//! static MY_LOGGER: MemoryLogger = MemoryLogger {
+//!     min_level: LogLevel::Info,
+//! };
 //! set_logger(&MY_LOGGER);
 //! ```
 //!
@@ -41,7 +54,7 @@
 //! because:
 //!
 //! 1. The payload is single-threaded.
-//! 2. The router and CLI set the logger before spawning node threads.
+//! 2. Integrators install the logger before concurrent execution begins.
 //!
 //! If you need to change the logger after threads start, synchronise access
 //! with a `Mutex` or an atomic pointer in your logger implementation.
@@ -107,8 +120,8 @@ pub struct Record<'a> {
 
 /// A sink for log records.
 ///
-/// Implement this to direct log output wherever you want (stdout, a file,
-/// a TCP connection, a memory buffer for tests).
+/// Implement this to direct log output wherever you want, such as a device
+/// sink, a ring buffer, or a test collector.
 pub trait Logger: Sync {
     /// Receive and process a log record.
     fn log(&self, record: &Record<'_>);
@@ -129,7 +142,7 @@ impl Logger for NullLogger {
 /// Written once at startup via [`set_logger`], then only read.
 /// # Safety
 /// This is `static mut` to avoid a dependency on synchronisation primitives
-/// in a no_std context. It is safe as long as `set_logger` is called before
+/// in a core-only context. It is safe as long as `set_logger` is called before
 /// any threads are spawned (see module-level docs).
 static mut GLOBAL_LOGGER: &dyn Logger = &NullLogger;
 
@@ -189,73 +202,33 @@ pub fn log(level: LogLevel, message: &str, file: Option<&'static str>, line: Opt
 }
 
 // ---------------------------------------------------------------------------
-// A minimal stdout logger for use in std binaries (router, CLI)
+// A minimal compatibility logger
 // ---------------------------------------------------------------------------
 
-/// A simple logger that prints to stderr.
+/// A simple filter-only logger.
 ///
-/// Suitable for the router and operator CLI binaries.
-/// Do not use in the payload binary (which may not have stderr available).
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use unshell::logger::{StderrLogger, set_logger};
-///
-/// static LOGGER: StderrLogger = StderrLogger::new(unshell::logger::LogLevel::Info);
-/// set_logger(&LOGGER);
-/// ```
-pub struct StderrLogger {
-    /// Minimum level to log. Records below this level are discarded.
+/// This provides a small compatibility surface for installations that want a
+/// concrete logger type without defining their own sink yet.
+pub struct CompatibilityLogger {
+    /// Minimum level to accept. Records below this level are discarded.
     min_level: LogLevel,
 }
 
-impl StderrLogger {
-    /// Create a new `StderrLogger` that logs records at `min_level` and above.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use unshell::logger::{StderrLogger, LogLevel};
-    /// let logger = StderrLogger::new(LogLevel::Info);
-    /// ```
+impl CompatibilityLogger {
+    /// Create a new `CompatibilityLogger` that accepts records at `min_level`
+    /// and above.
     #[must_use]
     pub const fn new(min_level: LogLevel) -> Self {
         Self { min_level }
     }
 }
 
-impl Logger for StderrLogger {
+impl Logger for CompatibilityLogger {
     fn log(&self, record: &Record<'_>) {
         if record.level < self.min_level {
             return;
         }
-        // eprintln! and String require std (available only with the `tcp` feature).
-        // In no_std builds this method is a no-op. The payload uses a different
-        // logger (or the null logger) in no_std contexts.
-        #[cfg(feature = "tcp")]
-        {
-            use alloc::string::String;
-            let location = match (record.file, record.line) {
-                (Some(f), Some(l)) => {
-                    let mut s = String::from(f);
-                    s.push(':');
-                    s.push_str(&format!("{l}"));
-                    s
-                }
-                _ => String::new(),
-            };
-            if location.is_empty() {
-                eprintln!("[{}] {}", record.level.as_str(), record.message);
-            } else {
-                eprintln!(
-                    "[{}] {} - {}",
-                    record.level.as_str(),
-                    record.message,
-                    location
-                );
-            }
-        }
+        let _ = record;
     }
 }
 

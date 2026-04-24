@@ -1,4 +1,7 @@
-//! Archived protocol message types.
+//! Canonical UnShell protocol message types.
+//!
+//! These types define the wire format and are designed for zero-copy
+//! access via `rkyv`.
 
 use alloc::{string::String, vec::Vec};
 use rkyv::{Archive, Deserialize, Serialize};

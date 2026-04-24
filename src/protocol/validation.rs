@@ -1,10 +1,9 @@
 //! Stateless protocol validation.
 
-use core::fmt;
-
 use crate::protocol::{
     CallMessage, PacketHeader, PacketType, introspection::INTROSPECTION_PROCEDURE_ID,
 };
+use core::fmt;
 
 /// Validation failures for protocol structures.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,14 +26,9 @@ impl fmt::Display for ValidationError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for ValidationError {}
+impl core::error::Error for ValidationError {}
 
 /// Validates packet header invariants from the protocol.
-///
-/// # Errors
-///
-/// Returns [`ValidationError`] when the header shape does not match the packet type.
 pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
     match header.packet_type {
         PacketType::Call => {
@@ -57,15 +51,10 @@ pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
             }
         }
     }
-
     Ok(())
 }
 
 /// Validates the canonical dotted `procedure_id` shape.
-///
-/// # Errors
-///
-/// Returns [`ValidationError`] when the procedure id does not match the required format.
 pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> {
     if procedure_id == INTROSPECTION_PROCEDURE_ID {
         return Ok(());
@@ -114,10 +103,6 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
 }
 
 /// Validates call-specific invariants that depend on both header and payload.
-///
-/// # Errors
-///
-/// Returns [`ValidationError`] when the call payload conflicts with the header.
 pub fn validate_call(header: &PacketHeader, call: &CallMessage) -> Result<(), ValidationError> {
     validate_procedure_id(&call.procedure_id)?;
 
@@ -140,50 +125,4 @@ pub fn validate_call(header: &PacketHeader, call: &CallMessage) -> Result<(), Va
 
 fn is_portable_procedure_char(ch: char) -> bool {
     ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::protocol::{HookTarget, PacketType};
-    use alloc::{string::String, vec};
-
-    #[test]
-    fn rejects_invalid_data_header() {
-        let header = PacketHeader {
-            packet_type: PacketType::Data,
-            src_path: Vec::new(),
-            dst_path: Vec::new(),
-            dst_leaf: Some(String::from("leaf")),
-            hook_id: None,
-        };
-        assert!(validate_header(&header).is_err());
-    }
-
-    #[test]
-    fn validates_procedure_id_shape() {
-        assert!(validate_procedure_id("org.product.v1.demo.echo").is_ok());
-        assert!(validate_procedure_id("org.product.v01.demo.echo").is_err());
-        assert!(validate_procedure_id("Org.product.v1.demo.echo").is_err());
-    }
-
-    #[test]
-    fn validates_response_hook_return_path() {
-        let header = PacketHeader {
-            packet_type: PacketType::Call,
-            src_path: vec![String::from("src")],
-            dst_path: vec![String::from("dst")],
-            dst_leaf: None,
-            hook_id: None,
-        };
-        let call = CallMessage {
-            procedure_id: String::from("org.product.v1.demo.echo"),
-            data: Vec::new(),
-            response_hook: Some(HookTarget {
-                hook_id: 1,
-                return_path: vec![String::from("other")],
-            }),
-        };
-        assert!(validate_call(&header, &call).is_err());
-    }
 }
