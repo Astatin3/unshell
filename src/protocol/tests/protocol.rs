@@ -2,7 +2,7 @@ use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use crate::protocol::{
     CallMessage, FaultMessage, FrameError, HookTarget, PacketHeader, PacketType, ProtocolFault,
-    ValidationError, decode_frame, encode_packet, validate_call, validate_header,
+    ValidationError, SECTION_ALIGN, decode_frame, encode_packet, validate_call, validate_header,
     validate_procedure_id,
 };
 
@@ -29,14 +29,12 @@ fn packet_framing_roundtrip_preserves_header_and_payload() {
     };
 
     let frame = encode_packet(&header, &call).expect("frame should encode");
+    assert_eq!(frame.as_ptr() as usize % SECTION_ALIGN, 0);
     let parsed = decode_frame(&frame).expect("frame should decode");
 
     assert_eq!(parsed.header(), &header);
     assert_eq!(parsed.packet_type(), PacketType::Call);
-    assert_eq!(
-        parsed.deserialize_call().expect("call should deserialize"),
-        call
-    );
+    assert_eq!(parsed.deserialize_call().expect("call should deserialize"), call);
 }
 
 #[test]
@@ -101,8 +99,5 @@ fn truncated_frames_are_rejected() {
     let frame = encode_packet(&header, &message).expect("frame should encode");
     let truncated = &frame[..frame.len() - 1];
 
-    assert!(matches!(
-        decode_frame(truncated),
-        Err(FrameError::Truncated)
-    ));
+    assert!(matches!(decode_frame(truncated), Err(FrameError::Truncated)));
 }

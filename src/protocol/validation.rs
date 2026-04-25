@@ -8,13 +8,9 @@ use core::fmt;
 /// Validation failures for protocol structures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
-    /// Header invariants were violated.
     HeaderInvariant(&'static str),
-    /// The canonical procedure identifier was invalid.
     ProcedureId(&'static str),
-    /// Call-specific invariants were violated.
     CallInvariant(&'static str),
-    /// The hook identifier is already in use.
     InvalidHookId,
 }
 
@@ -24,7 +20,7 @@ impl fmt::Display for ValidationError {
             Self::HeaderInvariant(message) => write!(f, "invalid header: {message}"),
             Self::ProcedureId(message) => write!(f, "invalid procedure id: {message}"),
             Self::CallInvariant(message) => write!(f, "invalid call: {message}"),
-            Self::InvalidHookId => write!(f, "invalid hook identifier"),
+            Self::InvalidHookId => f.write_str("invalid hook identifier"),
         }
     }
 }
@@ -32,9 +28,6 @@ impl fmt::Display for ValidationError {
 impl core::error::Error for ValidationError {}
 
 /// Validates packet header invariants from the protocol.
-///
-/// This checks only the header fields themselves. Payload-dependent rules belong
-/// in helpers such as [`validate_call`].
 pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
     match header.packet_type {
         PacketType::Call => {
@@ -65,13 +58,11 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
     if procedure_id == INTROSPECTION_PROCEDURE_ID {
         return Ok(());
     }
-
     if procedure_id.is_empty() {
         return Err(ValidationError::ProcedureId(
             "procedure identifier cannot be empty except for introspection",
         ));
     }
-
     Ok(())
 }
 

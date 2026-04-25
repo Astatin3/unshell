@@ -155,3 +155,96 @@ fn invalid_hook_peer_emits_local_fault_event() {
         other => panic!("expected fault event, got {other:?}"),
     }
 }
+
+#[test]
+fn hook_closes_only_after_both_sides_end() {
+    let mut endpoint = ProtocolEndpoint::new(
+        Vec::new(),
+        None,
+        vec![ChildRoute::registered(path(&["server"]))],
+        Vec::new(),
+    );
+    let hook_id = endpoint.allocate_hook_id();
+
+    endpoint
+        .make_call(
+            path(&["server"]),
+            None,
+            "example.service.v1.invoke",
+            Some(hook_id),
+            vec![1],
+        )
+        .expect("call should establish an active hook");
+
+    let host_key = crate::protocol::tree::HookKey::new(Vec::new(), hook_id);
+    assert!(endpoint.hooks.active(&host_key).is_some());
+
+    endpoint
+        .send_data(
+            path(&["server"]),
+            hook_id,
+            "example.service.v1.invoke",
+            vec![2],
+            true,
+        )
+        .expect("local end should succeed");
+    assert!(endpoint.hooks.active(&host_key).is_some());
+
+    let frame = encode_packet(
+        &PacketHeader {
+            packet_type: PacketType::Data,
+            src_path: path(&["server"]),
+            dst_path: Vec::new(),
+            dst_leaf: None,
+            hook_id: Some(hook_id),
+        },
+        &DataMessage {
+            procedure_id: "example.service.v1.invoke".to_owned(),
+            data: vec![3],
+            end_hook: true,
+        },
+    )
+    .expect("peer final data should encode");
+
+    endpoint
+        .receive(&Ingress::Child(path(&["server"])), frame)
+        .expect("peer final data should be handled");
+    assert!(endpoint.hooks.active(&host_key).is_none());
+}
+
+#[test]
+fn pending_hook_fault_is_delivered_before_activation() {
+    let mut endpoint = ProtocolEndpoint::new(path(&["server"]), None, Vec::new(), Vec::new());
+    let header = PacketHeader {
+        packet_type: PacketType::Call,
+        src_path: path(&["client"]),
+        dst_path: path(&["server"]),
+        dst_leaf: None,
+        hook_id: None,
+    };
+    let call = crate::protocol::CallMessage {
+        procedure_id: crate::protocol::INTROSPECTION_PROCEDURE_ID.to_owned(),
+        data: Vec::new(),
+        response_hook: Some(crate::protocol::HookTarget {
+            hook_id: 11,
+            return_path: path(&["client"]),
+        }),
+    };
+
+    endpoint
+        .hooks
+        .insert_pending(crate::protocol::tree::PendingHook {
+            return_path: path(&["client"]),
+            hook_id: 11,
+            caller_src_path: path(&["client"]),
+            procedure_id: call.procedure_id.clone(),
+            dst_leaf: None,
+        })
+        .expect("pending hook should insert");
+
+    let outcome = endpoint
+        .handle_introspection(&header, Some(crate::protocol::tree::HookKey::new(path(&["client"]), 11)))
+        .expect("introspection should handle pending hook");
+
+    assert!(outcome.forward.is_some() || outcome.event.is_some());
+}

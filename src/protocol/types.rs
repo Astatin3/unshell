@@ -1,7 +1,4 @@
 //! Canonical UnShell protocol message types.
-//!
-//! These types define the wire format and are designed for zero-copy
-//! access via `rkyv`.
 
 use alloc::{string::String, vec::Vec};
 use rkyv::{Archive, Deserialize, Serialize};
@@ -21,53 +18,39 @@ pub enum PacketType {
 /// Header fields used for routing and hook attribution.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct PacketHeader {
-    /// Packet semantics discriminator.
     pub packet_type: PacketType,
-    /// Sending endpoint path.
     pub src_path: Vec<String>,
-    /// Destination endpoint path.
     pub dst_path: Vec<String>,
-    /// Optional target leaf for calls.
     pub dst_leaf: Option<String>,
-    /// Optional hook identifier for `Data` and `Fault` packets.
     pub hook_id: Option<u64>,
 }
 
 /// Hook declaration embedded inside a call.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct HookTarget {
-    /// Hook identifier scoped to `return_path`.
     pub hook_id: u64,
-    /// Path of the endpoint that hosts the hook.
     pub return_path: Vec<String>,
 }
 
 /// Downwards call payload.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct CallMessage {
-    /// Canonical procedure contract identifier.
     pub procedure_id: String,
-    /// Opaque application bytes.
     pub data: Vec<u8>,
-    /// Optional response hook declaration.
     pub response_hook: Option<HookTarget>,
 }
 
 /// Hook data payload.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DataMessage {
-    /// Procedure contract anchored to the originating call.
     pub procedure_id: String,
-    /// Opaque application bytes.
     pub data: Vec<u8>,
-    /// Indicates that this sender is done with the hook.
     pub end_hook: bool,
 }
 
 /// Protocol fault payload.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct FaultMessage {
-    /// Fixed protocol fault value.
     pub fault: ProtocolFault,
 }
 

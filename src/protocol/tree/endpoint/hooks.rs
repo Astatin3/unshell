@@ -1,7 +1,4 @@
 //! Hook-state transitions and route helpers.
-//!
-//! These methods implement the hook lifecycle described in `PROTOCOL.md`:
-//! pending contexts, active contexts, peer validation, and fault emission.
 
 use alloc::string::String;
 
@@ -13,7 +10,6 @@ use super::super::{HookKey, RouteDecision};
 use super::core::{EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint};
 
 impl ProtocolEndpoint {
-    /// Emits a protocol fault only when the original call declared a response hook.
     pub(crate) fn emit_fault_if_possible(
         &mut self,
         key: Option<HookKey>,
@@ -34,18 +30,13 @@ impl ProtocolEndpoint {
             hook_id: Some(key.hook_id),
         };
         let message = FaultMessage { fault };
-        let route = self.decide_route(&key.return_path);
 
-        match route {
+        match self.decide_route(&key.return_path) {
             RouteDecision::Local => Ok(EndpointOutcome::event(LocalEvent::Fault { header, message })),
-            _ => {
-                let frame = encode_packet(&header, &message)?;
-                Ok(EndpointOutcome::forward(route, frame))
-            }
+            route => Ok(EndpointOutcome::forward(route, encode_packet(&header, &message)?)),
         }
     }
 
-    /// Handles locally delivered hook `Data` packets.
     pub(crate) fn handle_local_data(
         &mut self,
         header: PacketHeader,
@@ -90,44 +81,34 @@ impl ProtocolEndpoint {
         Ok(EndpointOutcome::event(LocalEvent::Data { header, message }))
     }
 
-    /// Handles locally delivered hook `Fault` packets.
     pub(crate) fn handle_local_fault(
         &mut self,
         header: PacketHeader,
         message: FaultMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
-        let Some(key) = self.hooks.resolve_active_key(
-            &self.path,
-            header.hook_id.expect("validated"),
-            &header.src_path,
-        ) else {
-            let key = HookKey::new(self.path.clone(), header.hook_id.expect("validated"));
-            let matches_pending = self
-                .hooks
-                .pending(&key)
-                .is_some_and(|pending| pending.caller_src_path == header.src_path);
-            if !matches_pending {
-                return Ok(EndpointOutcome::dropped());
-            }
-            self.hooks.remove_pending(&key);
+        let hook_id = header.hook_id.expect("validated");
+        if let Some(key) = self.hooks.resolve_active_key(&self.path, hook_id, &header.src_path) {
+            self.hooks.remove_active(&key);
             return Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }));
-        };
+        }
 
-        self.hooks.remove_active(&key);
+        let pending_key = HookKey::new(self.path.clone(), hook_id);
+        if self
+            .hooks
+            .pending(&pending_key)
+            .is_some_and(|pending| pending.caller_src_path == header.src_path)
+        {
+            self.hooks.remove_pending(&pending_key);
+            return Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }));
+        }
 
-        Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }))
+        Ok(EndpointOutcome::dropped())
     }
 
-    /// Chooses the next hop using the protocol's longest-prefix routing rule.
     pub(crate) fn decide_route(&self, dst_path: &[String]) -> RouteDecision {
         self.routing.route(dst_path)
     }
 
-    /// Validates whether a source path is attributable to the ingress side.
-    ///
-    /// Rationale: this looks backwards at first because parent ingress accepts
-    /// non-local source paths. That is required for multi-hop routing, where a
-    /// parent forwards traffic originating from ancestors or siblings.
     pub(crate) fn valid_source_for_ingress(&self, ingress: &Ingress, src_path: &[String]) -> bool {
         match ingress {
             Ingress::Parent => {

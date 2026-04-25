@@ -1,7 +1,4 @@
-//! Packet builders and basic endpoint configuration.
-//!
-//! These helpers map to `PROTOCOL.md` sections covering packet construction,
-//! call headers, and hook declaration fields.
+//! Packet builders and endpoint construction.
 
 use alloc::{collections::BTreeSet, string::String, vec::Vec};
 
@@ -49,30 +46,6 @@ impl ProtocolEndpoint {
         Ok((header, call))
     }
 
-    fn register_outbound_call_hook(
-        &mut self,
-        header: &PacketHeader,
-        call: &CallMessage,
-    ) -> Result<(), EndpointError> {
-        if let Some(hook) = &call.response_hook
-            && self
-                .hooks
-                .insert_active(ActiveHook {
-                    return_path: hook.return_path.clone(),
-                    hook_id: hook.hook_id,
-                    peer_path: header.dst_path.clone(),
-                    procedure_id: call.procedure_id.clone(),
-                    dst_leaf: header.dst_leaf.clone(),
-                    local_ended: false,
-                    peer_ended: false,
-                })
-                .is_err()
-        {
-            return Err(EndpointError::Validation(ValidationError::InvalidHookId));
-        }
-        Ok(())
-    }
-
     fn prepare_data(
         &self,
         dst_path: Vec<String>,
@@ -101,14 +74,30 @@ impl ProtocolEndpoint {
         Ok((header, message))
     }
 
-    /// Creates a runtime endpoint with static tree topology and leaf metadata.
-    ///
-    /// ```
-    /// use unshell::protocol::tree::{Endpoint, ProtocolEndpoint};
-    ///
-    /// let endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
-    /// assert!(endpoint.path().is_empty());
-    /// ```
+    fn register_outbound_call_hook(
+        &mut self,
+        header: &PacketHeader,
+        call: &CallMessage,
+    ) -> Result<(), EndpointError> {
+        if let Some(hook) = &call.response_hook
+            && self
+                .hooks
+                .insert_active(ActiveHook {
+                    return_path: hook.return_path.clone(),
+                    hook_id: hook.hook_id,
+                    peer_path: header.dst_path.clone(),
+                    procedure_id: call.procedure_id.clone(),
+                    dst_leaf: header.dst_leaf.clone(),
+                    local_ended: false,
+                    peer_ended: false,
+                })
+                .is_err()
+        {
+            return Err(EndpointError::Validation(ValidationError::InvalidHookId));
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn new(
         path: Vec<String>,
@@ -135,7 +124,6 @@ impl ProtocolEndpoint {
         }
     }
 
-    /// Registers an endpoint-local procedure identifier.
     pub fn add_endpoint_procedure(
         &mut self,
         procedure_id: impl Into<String>,
@@ -146,13 +134,11 @@ impl ProtocolEndpoint {
         Ok(())
     }
 
-    /// Allocates a locally unique hook id.
     #[must_use]
     pub fn allocate_hook_id(&mut self) -> u64 {
         self.hooks.allocate_hook_id(&self.path)
     }
 
-    /// Builds an outbound `Call` packet and pre-registers active hook state when requested.
     pub fn make_call(
         &mut self,
         dst_path: Vec<String>,
@@ -167,7 +153,6 @@ impl ProtocolEndpoint {
         Ok(encode_packet(&header, &call)?)
     }
 
-    /// Routes one locally originated `Call` without an encode/decode roundtrip.
     pub fn send_call(
         &mut self,
         dst_path: Vec<String>,
@@ -186,7 +171,6 @@ impl ProtocolEndpoint {
         }
     }
 
-    /// Builds an outbound `Data` packet for an existing hook.
     pub fn make_data(
         &self,
         dst_path: Vec<String>,
@@ -199,7 +183,6 @@ impl ProtocolEndpoint {
         Ok(encode_packet(&header, &message)?)
     }
 
-    /// Routes one locally originated `Data` packet without an encode/decode roundtrip.
     pub fn send_data(
         &mut self,
         dst_path: Vec<String>,
@@ -211,9 +194,12 @@ impl ProtocolEndpoint {
         let (header, message) = self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
 
         if end_hook {
-            let key = HookKey::new(self.path.clone(), hook_id);
-            if self.hooks.mark_local_end(&key) {
-                self.hooks.remove_active(&key);
+            let sender_key = self
+                .hooks
+                .resolve_active_key(&self.path, hook_id, &self.path)
+                .unwrap_or_else(|| HookKey::new(self.path.clone(), hook_id));
+            if self.hooks.mark_local_end(&sender_key) {
+                self.hooks.remove_active(&sender_key);
             }
         }
 

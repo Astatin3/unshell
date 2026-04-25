@@ -5,9 +5,7 @@ use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 /// Explicit test tree declaration used for configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeNode {
-    /// The tree root.
     Root { children: Vec<Self> },
-    /// A concrete endpoint in the tree.
     Endpoint {
         segment: String,
         leaves: Vec<LeafNode>,
@@ -18,14 +16,11 @@ pub enum TreeNode {
 /// Leaf declaration used inside the explicit tree enum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeafNode {
-    /// Local leaf name.
     pub name: String,
-    /// Supported procedures.
     pub procedures: Vec<String>,
 }
 
 impl TreeNode {
-    /// Flattens the tree into absolute endpoint paths.
     pub fn paths(&self) -> Vec<Vec<String>> {
         let mut output = Vec::new();
         self.collect_paths(&[], &mut output);
@@ -57,13 +52,9 @@ impl TreeNode {
 /// Longest-prefix route decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteDecision {
-    /// Forward to the child at the given index.
     Child(usize),
-    /// Deliver locally.
     Local,
-    /// Forward upward toward the parent.
     Parent,
-    /// Silently drop.
     Drop,
 }
 
@@ -82,7 +73,6 @@ struct RouteTrieNode {
 }
 
 impl CompiledRoutes {
-    /// Compiles the registered-child prefixes into a trie once.
     #[must_use]
     pub fn new(local_path: &[String], child_paths: &[Vec<String>], has_parent: bool) -> Self {
         let mut table = Self {
@@ -121,7 +111,6 @@ impl CompiledRoutes {
         self.nodes[node_index].best_child = Some(index);
     }
 
-    /// Resolves one destination path using one segment walk.
     #[must_use]
     pub fn route(&self, dst_path: &[String]) -> RouteDecision {
         if !is_prefix(&self.local_path, dst_path) {
@@ -192,27 +181,11 @@ impl RouteProvider for DefaultRouteProvider {
         I: IntoIterator,
         I::Item: AsRef<[String]>,
     {
-        let mut best_index = None;
-        let mut max_len = 0;
-
-        for (index, child_path) in child_paths.into_iter().enumerate() {
-            let path = child_path.as_ref();
-            if is_prefix(path, dst_path) && path.len() > max_len {
-                max_len = path.len();
-                best_index = Some(index);
-            }
-        }
-
-        if let Some(index) = best_index {
-            return RouteDecision::Child(index);
-        }
-        if local_path == dst_path {
-            return RouteDecision::Local;
-        }
-        if has_parent && !is_prefix(local_path, dst_path) {
-            return RouteDecision::Parent;
-        }
-        RouteDecision::Drop
+        let child_paths = child_paths
+            .into_iter()
+            .map(|child| child.as_ref().to_vec())
+            .collect::<Vec<_>>();
+        CompiledRoutes::new(local_path, &child_paths, has_parent).route(dst_path)
     }
 }
 

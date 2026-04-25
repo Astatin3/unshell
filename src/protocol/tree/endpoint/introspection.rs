@@ -1,7 +1,4 @@
 //! Introspection response generation.
-//!
-//! This code implements the reserved empty-procedure behavior from the
-//! introspection sections of `PROTOCOL.md`.
 
 use alloc::string::String;
 use rkyv::{rancor::Error as RkyvError, to_bytes};
@@ -15,7 +12,6 @@ use super::super::HookKey;
 use super::core::{EndpointError, EndpointOutcome, ProtocolEndpoint};
 
 impl ProtocolEndpoint {
-    /// Handles the reserved introspection procedure.
     pub(crate) fn handle_introspection(
         &mut self,
         header: &PacketHeader,
@@ -68,20 +64,19 @@ impl ProtocolEndpoint {
             data: payload,
             end_hook: true,
         };
-        self.hooks.remove_active(&key);
-        let route = self.decide_route(&key.return_path);
 
-        match route {
+        if self.hooks.mark_local_end(&key) {
+            self.hooks.remove_active(&key);
+        }
+
+        match self.decide_route(&key.return_path) {
             super::super::RouteDecision::Local => Ok(EndpointOutcome::event(
                 super::core::LocalEvent::Data {
                     header: response_header,
                     message: response,
                 },
             )),
-            _ => {
-                let frame = encode_packet(&response_header, &response)?;
-                Ok(EndpointOutcome::forward(route, frame))
-            }
+            route => Ok(EndpointOutcome::forward(route, encode_packet(&response_header, &response)?)),
         }
     }
 }

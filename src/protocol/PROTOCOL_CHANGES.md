@@ -16,9 +16,28 @@ The implementation now does the following:
 
 Those are implementation changes. They do not require a protocol update.
 
-## No Immediate Wire Change Required
+## Implemented Deviation
 
-The current runtime rewrite does **not** require a wire-format break.
+The current scratch rewrite **does** deviate from the frame format described in
+`PROTOCOL.md` Section 8.
+
+The old format used one `u32` length prefix immediately before each archived
+section. The new implementation uses one aligned two-section frame:
+
+- `u32 header_len`
+- `u32 payload_len`
+- aligned archived header bytes
+- aligned archived payload bytes
+
+The payload start is padded up to the canonical archive alignment boundary.
+
+This deviation was made explicitly because the prior layout baked in alignment
+repair complexity and extra decode copies even in an otherwise clean runtime.
+
+## No Immediate Semantic Change Required
+
+Aside from the framing change above, the current runtime rewrite does **not**
+require a semantic protocol break.
 
 The following parts of `PROTOCOL.md` remain worth keeping as-is:
 
@@ -71,10 +90,9 @@ Two viable options:
 This is a wire-format change. Every compliant implementation would need to adopt
 the new framing.
 
-### Recommendation
+### Status
 
-This is the strongest protocol-level change to consider first, because the current
-framing directly blocks further copy removal.
+Implemented in the current rewrite.
 
 ## Change 2: Compact Path Representation for a Future v2
 
