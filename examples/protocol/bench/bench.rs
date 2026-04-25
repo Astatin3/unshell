@@ -43,7 +43,7 @@ fn main() {
     }
 
     println!();
-    println!("Run `cargo run --example protocol_bench -- tools` to build and execute");
+    println!("Run `cargo run --example bench -- tools` to build and execute");
     println!("the standalone operation binaries under strace, perf, and heaptrack.");
 }
 
@@ -302,11 +302,11 @@ fn run_external_tools() {
     build_examples(root);
 
     let ops = [
-        ("encode_call", "protocol_op_encode_call"),
-        ("decode_call", "protocol_op_decode_call"),
-        ("forward_call_receive", "protocol_op_forward_call_receive"),
-        ("local_call_receive", "protocol_op_local_call_receive"),
-        ("hook_data_receive", "protocol_op_hook_data_receive"),
+        ("encode_call", "op_encode_call"),
+        ("decode_call", "op_decode_call"),
+        ("forward_call_receive", "op_forward_call_receive"),
+        ("local_call_receive", "op_local_call_receive"),
+        ("hook_data_receive", "op_hook_data_receive"),
     ];
 
     let heap_dir = root.join("heaptrack-cli");

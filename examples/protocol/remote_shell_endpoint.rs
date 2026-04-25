@@ -1,4 +1,4 @@
-#[path = "support/protocol_remote_shell_common.rs"]
+#[path = "support/remote_shell_common.rs"]
 mod common;
 
 use std::error::Error;

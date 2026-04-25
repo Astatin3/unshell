@@ -50,6 +50,42 @@ chrono            = { workspace = true, optional = true }
 static_init       = { workspace = true }
 unshell-macros    = { path = "./unshell-macros" }
 
+[[example]]
+name = "leaf_derive"
+path = "examples/protocol/leaf_derive.rs"
+
+[[example]]
+name = "remote_shell_endpoint"
+path = "examples/protocol/remote_shell_endpoint.rs"
+
+[[example]]
+name = "remote_shell_receive"
+path = "examples/protocol/remote_shell_receive.rs"
+
+[[example]]
+name = "bench"
+path = "examples/protocol/bench/bench.rs"
+
+[[example]]
+name = "op_encode_call"
+path = "examples/protocol/bench/op_encode_call.rs"
+
+[[example]]
+name = "op_decode_call"
+path = "examples/protocol/bench/op_decode_call.rs"
+
+[[example]]
+name = "op_forward_call_receive"
+path = "examples/protocol/bench/op_forward_call_receive.rs"
+
+[[example]]
+name = "op_local_call_receive"
+path = "examples/protocol/bench/op_local_call_receive.rs"
+
+[[example]]
+name = "op_hook_data_receive"
+path = "examples/protocol/bench/op_hook_data_receive.rs"
+
 [profile.minimize]
 inherits = "release"
 strip = true             # Strip symbols from the binary

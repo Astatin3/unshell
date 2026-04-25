@@ -1,4 +1,4 @@
-#[path = "support/protocol_bench_common.rs"]
+#[path = "support/bench_common.rs"]
 mod common;
 
 fn main() {
