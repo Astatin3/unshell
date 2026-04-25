@@ -1,7 +1,9 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use unshell::protocol::tree::{ChildRoute, Endpoint, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint};
+use unshell::protocol::tree::{
+    ChildRoute, Endpoint, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint,
+};
 use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
 
 const SAMPLES: usize = 500;
@@ -21,7 +23,10 @@ fn main() {
         bench_hook_data_receive(),
     ];
 
-    println!("{:32} {:>14} {:>14} {:>14}", "benchmark", "mean ns/op", "stddev", "samples");
+    println!(
+        "{:32} {:>14} {:>14} {:>14}",
+        "benchmark", "mean ns/op", "stddev", "samples"
+    );
     for bench in benches {
         println!(
             "{:32} {:>14.2} {:>14.2} {:>14}",
@@ -52,7 +57,8 @@ fn bench_encode_call() -> BenchResult {
     };
 
     run_bench("encode_call", || {
-        let frame = encode_packet(black_box(&header), black_box(&message)).expect("encode should work");
+        let frame =
+            encode_packet(black_box(&header), black_box(&message)).expect("encode should work");
         black_box(frame.len());
     })
 }
@@ -80,32 +86,48 @@ fn bench_decode_call() -> BenchResult {
 }
 
 fn bench_forward_call_receive() -> BenchResult {
-    run_prebuilt_bench("forward_call_receive", build_forward_call_cases, |(mut root, frame)| {
-        let outcome = root.receive(&Ingress::Local, frame).expect("forward receive should work");
-        black_box(outcome.forward.is_some());
-    })
+    run_prebuilt_bench(
+        "forward_call_receive",
+        build_forward_call_cases,
+        |(mut root, frame)| {
+            let outcome = root
+                .receive(&Ingress::Local, frame)
+                .expect("forward receive should work");
+            black_box(outcome.forward.is_some());
+        },
+    )
 }
 
 fn bench_local_call_receive() -> BenchResult {
-    run_prebuilt_bench("local_call_receive", build_local_call_cases, |(mut endpoint, frame)| {
-        let outcome = endpoint.receive(&Ingress::Parent, frame).expect("local call should work");
-        match black_box(outcome.event) {
-            Some(LocalEvent::Call { .. }) => {}
-            other => panic!("expected local call event, got {other:?}"),
-        }
-    })
+    run_prebuilt_bench(
+        "local_call_receive",
+        build_local_call_cases,
+        |(mut endpoint, frame)| {
+            let outcome = endpoint
+                .receive(&Ingress::Parent, frame)
+                .expect("local call should work");
+            match black_box(outcome.event) {
+                Some(LocalEvent::Call { .. }) => {}
+                other => panic!("expected local call event, got {other:?}"),
+            }
+        },
+    )
 }
 
 fn bench_hook_data_receive() -> BenchResult {
-    run_prebuilt_bench("hook_data_receive", build_hook_data_cases, |(mut host, frame)| {
-        let outcome = host
-            .receive(&Ingress::Child(path(&["worker"])), frame)
-            .expect("hook data should work");
-        match black_box(outcome.event) {
-            Some(LocalEvent::Data { .. }) => {}
-            other => panic!("expected local data event, got {other:?}"),
-        }
-    })
+    run_prebuilt_bench(
+        "hook_data_receive",
+        build_hook_data_cases,
+        |(mut host, frame)| {
+            let outcome = host
+                .receive(&Ingress::Child(path(&["worker"])), frame)
+                .expect("hook data should work");
+            match black_box(outcome.event) {
+                Some(LocalEvent::Data { .. }) => {}
+                other => panic!("expected local data event, got {other:?}"),
+            }
+        },
+    )
 }
 
 fn run_bench(name: &'static str, mut op: impl FnMut()) -> BenchResult {
