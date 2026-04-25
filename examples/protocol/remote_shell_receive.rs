@@ -1,5 +1,5 @@
-#[path = "support/remote_shell_common.rs"]
-mod common;
+#[path = "../../src/leaf/remote_shell/mod.rs"]
+mod remote_shell;
 
 use std::error::Error;
 use std::net::TcpListener;
@@ -7,55 +7,45 @@ use std::net::TcpListener;
 use unshell::protocol::tree::{Endpoint, Ingress, LocalEvent};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind(common::LISTEN_ADDR)?;
-    println!("listening on {}", common::LISTEN_ADDR);
+    let listener = TcpListener::bind(remote_shell::LISTEN_ADDR)?;
+    println!("listening on {}", remote_shell::LISTEN_ADDR);
 
     let (mut stream, peer_addr) = listener.accept()?;
     println!("accepted endpoint connection from {peer_addr}");
 
-    let frame_rx = common::spawn_frame_reader(stream.try_clone()?);
-    let mut endpoint = common::build_controller_endpoint();
+    let frame_rx = remote_shell::spawn_frame_reader(stream.try_clone()?);
+    let mut endpoint = remote_shell::build_controller_endpoint();
     let hook_id = endpoint.allocate_hook_id();
-    let shell_leaf_name = common::shell_leaf_name();
-    let open_procedure = common::shell_open_procedure();
+    let shell_leaf_name = remote_shell::shell_leaf_name();
+    let open_procedure = remote_shell::shell_open_procedure();
 
-    let outcome = endpoint.send_call(
-        common::agent_path(),
-        Some(shell_leaf_name),
-        open_procedure.clone(),
-        Some(hook_id),
-        common::shell_open_payload(),
-    )?;
-    common::write_frames(
+    remote_shell::send_forward(
         &mut stream,
-        &outcome
-            .forward
-            .into_iter()
-            .map(|(_, frame)| frame)
-            .collect::<Vec<_>>(),
+        endpoint.send_call(
+            remote_shell::agent_path(),
+            Some(shell_leaf_name),
+            open_procedure.clone(),
+            Some(hook_id),
+            remote_shell::shell_open_payload(),
+        )?,
     )?;
 
     for (index, command) in ["pwd\n", "whoami\n", "exit\n"].iter().enumerate() {
-        let outcome = endpoint.send_data(
-            common::agent_path(),
-            hook_id,
-            open_procedure.clone(),
-            command.as_bytes().to_vec(),
-            index == 2,
-        )?;
-        common::write_frames(
+        remote_shell::send_forward(
             &mut stream,
-            &outcome
-                .forward
-                .into_iter()
-                .map(|(_, frame)| frame)
-                .collect::<Vec<_>>(),
+            endpoint.send_data(
+                remote_shell::agent_path(),
+                hook_id,
+                open_procedure.clone(),
+                command.as_bytes().to_vec(),
+                index == 2,
+            )?,
         )?;
     }
 
     for result in frame_rx {
         let frame = result?;
-        let outcome = endpoint.receive(&Ingress::Child(common::agent_path()), frame)?;
+        let outcome = endpoint.receive(&Ingress::Child(remote_shell::agent_path()), frame)?;
         let Some(event) = outcome.event else {
             continue;
         };
