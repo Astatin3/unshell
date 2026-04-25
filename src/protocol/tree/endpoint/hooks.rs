@@ -35,6 +35,7 @@ impl ProtocolEndpoint {
             RouteDecision::Local => Ok(EndpointOutcome::event(LocalEvent::Fault {
                 header,
                 message,
+                hook_key: key,
             })),
             route => Ok(EndpointOutcome::forward(
                 route,
@@ -75,6 +76,7 @@ impl ProtocolEndpoint {
                 message: FaultMessage {
                     fault: ProtocolFault::INVALID_HOOK_PEER,
                 },
+                hook_key: key,
             }));
         }
 
@@ -87,7 +89,11 @@ impl ProtocolEndpoint {
             self.hooks.remove_active(&key);
         }
 
-        Ok(EndpointOutcome::event(LocalEvent::Data { header, message }))
+        Ok(EndpointOutcome::event(LocalEvent::Data {
+            header,
+            message,
+            hook_key: key,
+        }))
     }
 
     pub(crate) fn handle_local_fault(
@@ -104,6 +110,7 @@ impl ProtocolEndpoint {
             return Ok(EndpointOutcome::event(LocalEvent::Fault {
                 header,
                 message,
+                hook_key: key,
             }));
         }
 
@@ -117,6 +124,7 @@ impl ProtocolEndpoint {
             return Ok(EndpointOutcome::event(LocalEvent::Fault {
                 header,
                 message,
+                hook_key: pending_key,
             }));
         }
 

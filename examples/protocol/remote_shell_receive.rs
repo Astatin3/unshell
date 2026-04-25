@@ -17,45 +17,52 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut endpoint = common::build_controller_endpoint();
     let hook_id = endpoint.allocate_hook_id();
     let shell_leaf_name = common::shell_leaf_name();
-    let start_procedure = common::shell_start_procedure();
+    let open_procedure = common::shell_open_procedure();
 
     let outcome = endpoint.send_call(
         common::agent_path(),
         Some(shell_leaf_name),
-        start_procedure.clone(),
+        open_procedure.clone(),
         Some(hook_id),
-        Vec::new(),
+        common::shell_open_payload(),
     )?;
-    let _ = common::pump_outcome(&mut stream, outcome)?;
+    common::write_frames(
+        &mut stream,
+        &outcome
+            .forward
+            .into_iter()
+            .map(|(_, frame)| frame)
+            .collect::<Vec<_>>(),
+    )?;
 
-    let mut commands_sent = false;
+    for (index, command) in ["pwd\n", "whoami\n", "exit\n"].iter().enumerate() {
+        let outcome = endpoint.send_data(
+            common::agent_path(),
+            hook_id,
+            open_procedure.clone(),
+            command.as_bytes().to_vec(),
+            index == 2,
+        )?;
+        common::write_frames(
+            &mut stream,
+            &outcome
+                .forward
+                .into_iter()
+                .map(|(_, frame)| frame)
+                .collect::<Vec<_>>(),
+        )?;
+    }
 
     for result in frame_rx {
         let frame = result?;
         let outcome = endpoint.receive(&Ingress::Child(common::agent_path()), frame)?;
-        let event = common::pump_outcome(&mut stream, outcome)?;
-
-        let Some(event) = event else {
+        let Some(event) = outcome.event else {
             continue;
         };
 
         match event {
             LocalEvent::Data { message, .. } => {
                 print!("{}", String::from_utf8_lossy(&message.data));
-
-                if !commands_sent {
-                    commands_sent = true;
-                    for (index, command) in ["pwd\n", "whoami\n", "exit\n"].iter().enumerate() {
-                        let outcome = endpoint.send_data(
-                            common::agent_path(),
-                            hook_id,
-                            start_procedure.clone(),
-                            command.as_bytes().to_vec(),
-                            index == 2,
-                        )?;
-                        let _ = common::pump_outcome(&mut stream, outcome)?;
-                    }
-                }
 
                 if message.end_hook {
                     break;

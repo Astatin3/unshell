@@ -11,7 +11,7 @@ use crate::protocol::{
     CallMessage, DataMessage, FaultMessage, FrameBytes, FrameError, PacketHeader, ValidationError,
 };
 
-use super::super::{CompiledRoutes, HookTable, RouteDecision};
+use super::super::{CompiledRoutes, HookKey, HookTable, RouteDecision};
 
 /// Registration state for a direct child endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,10 +66,12 @@ pub enum LocalEvent {
     Data {
         header: PacketHeader,
         message: DataMessage,
+        hook_key: HookKey,
     },
     Fault {
         header: PacketHeader,
         message: FaultMessage,
+        hook_key: HookKey,
     },
 }
 

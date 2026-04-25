@@ -205,6 +205,7 @@ impl ProtocolEndpoint {
         data: Vec<u8>,
         end_hook: bool,
     ) -> Result<EndpointOutcome, EndpointError> {
+        let local_end_dst_path = dst_path.clone();
         let (header, message) =
             self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
 
@@ -213,7 +214,7 @@ impl ProtocolEndpoint {
             // so fall back to the endpoint's own hook key shape when closing them.
             let local_hook_key = self
                 .hooks
-                .resolve_active_key(&self.path, hook_id, &self.path)
+                .resolve_active_key(&local_end_dst_path, hook_id, &self.path)
                 .unwrap_or_else(|| HookKey::new(self.path.clone(), hook_id));
             if self.hooks.mark_local_end(&local_hook_key) {
                 self.hooks.remove_active(&local_hook_key);

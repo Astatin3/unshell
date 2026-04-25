@@ -195,7 +195,9 @@ pub fn run_hook_data_receive(iterations: usize) -> usize {
             .receive(&Ingress::Child(path(&["worker"])), frame)
             .expect("hook data should work");
         match outcome.event {
-            Some(LocalEvent::Data { header, message }) => {
+            Some(LocalEvent::Data {
+                header, message, ..
+            }) => {
                 checksum = checksum
                     .wrapping_add(header.hook_id.unwrap_or_default() as usize)
                     .wrapping_add(message.data.len())

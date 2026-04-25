@@ -81,6 +81,7 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
     let LocalEvent::Data {
         header,
         message: response,
+        ..
     } = outcome.event.as_ref().expect("expected local data event")
     else {
         panic!("expected local data event");
@@ -142,7 +143,9 @@ fn invalid_hook_peer_emits_local_fault_event() {
     assert!(!outcome.dropped);
 
     match outcome.event.as_ref().expect("expected event") {
-        LocalEvent::Fault { header, message } => {
+        LocalEvent::Fault {
+            header, message, ..
+        } => {
             assert_eq!(header.packet_type, PacketType::Fault);
             assert_eq!(header.hook_id, Some(hook_id));
             assert_eq!(
@@ -250,4 +253,69 @@ fn pending_hook_fault_is_delivered_before_activation() {
         .expect("introspection should handle pending hook");
 
     assert!(outcome.forward.is_some() || outcome.event.is_some());
+}
+
+#[test]
+fn callee_side_end_hook_marks_local_end_before_peer_close() {
+    let mut endpoint = ProtocolEndpoint::new(path(&["server"]), None, Vec::new(), Vec::new());
+    endpoint
+        .add_endpoint_procedure("example.service.v1.invoke")
+        .expect("procedure registration should succeed");
+    let frame = encode_packet(
+        &PacketHeader {
+            packet_type: PacketType::Call,
+            src_path: Vec::new(),
+            dst_path: path(&["server"]),
+            dst_leaf: None,
+            hook_id: None,
+        },
+        &crate::protocol::CallMessage {
+            procedure_id: "example.service.v1.invoke".to_owned(),
+            data: vec![1],
+            response_hook: Some(crate::protocol::HookTarget {
+                hook_id: 21,
+                return_path: Vec::new(),
+            }),
+        },
+    )
+    .expect("call should encode");
+
+    endpoint
+        .receive(&Ingress::Parent, frame)
+        .expect("callee should accept call");
+
+    let key = crate::protocol::tree::HookKey::new(Vec::new(), 21);
+    assert!(endpoint.hooks.active(&key).is_some());
+
+    endpoint
+        .send_data(
+            Vec::new(),
+            21,
+            "example.service.v1.invoke",
+            Vec::new(),
+            true,
+        )
+        .expect("callee local end should succeed");
+    assert!(endpoint.hooks.active(&key).is_some());
+
+    let peer_final = encode_packet(
+        &PacketHeader {
+            packet_type: PacketType::Data,
+            src_path: Vec::new(),
+            dst_path: path(&["server"]),
+            dst_leaf: None,
+            hook_id: Some(21),
+        },
+        &DataMessage {
+            procedure_id: "example.service.v1.invoke".to_owned(),
+            data: Vec::new(),
+            end_hook: true,
+        },
+    )
+    .expect("peer final data should encode");
+
+    endpoint
+        .receive(&Ingress::Parent, peer_final)
+        .expect("callee should accept peer close");
+    assert!(endpoint.hooks.active(&key).is_none());
 }

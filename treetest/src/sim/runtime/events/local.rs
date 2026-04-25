@@ -18,7 +18,9 @@ impl Simulation {
     ) -> Result<(), SimError> {
         let node_path = self.node(node_id).display_path();
         match event {
-            LocalEvent::Data { header, message } => {
+            LocalEvent::Data {
+                header, message, ..
+            } => {
                 let text = String::from_utf8_lossy(&message.data).to_string();
                 let hook_ref = format_hook_ref(
                     self.node(node_id).path.as_slice(),
@@ -64,7 +66,9 @@ impl Simulation {
                     message,
                 });
             }
-            LocalEvent::Fault { header, message } => {
+            LocalEvent::Fault {
+                header, message, ..
+            } => {
                 let hook_ref = format_hook_ref(
                     self.node(node_id).path.as_slice(),
                     header.hook_id.unwrap_or(0),

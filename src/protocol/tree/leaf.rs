@@ -1,9 +1,8 @@
 //! Application-facing leaf metadata helpers.
 //!
 //! The protocol runtime itself only knows about `LeafSpec` metadata and validated
-//! `LocalEvent::Call` delivery. This trait sits one layer above that runtime so
-//! application code can declare canonical leaf names and procedure ids once and
-//! then reuse the generated metadata when building endpoints and dispatching calls.
+//! `LocalEvent` delivery. `ProtocolLeaf` owns the canonical dotted leaf id, while
+//! `CallProcedures` owns generated procedure ids and initial call dispatch.
 
 use alloc::{string::String, vec::Vec};
 
@@ -13,6 +12,11 @@ use super::LeafSpec;
 pub trait ProtocolLeaf {
     /// Returns the canonical dotted leaf name hosted by this type.
     fn leaf_name() -> String;
+}
+
+/// Generated call metadata and initial `Call` dispatch for one leaf.
+pub trait CallProcedures: ProtocolLeaf {
+    type Error;
 
     /// Returns the local procedure suffixes supported by this leaf.
     fn procedure_suffixes() -> &'static [&'static str];
@@ -44,6 +48,12 @@ pub trait ProtocolLeaf {
             procedures: Self::procedure_ids(),
         }
     }
+
+    /// Dispatches one initial `Call` that targeted this leaf.
+    fn dispatch_call(
+        &mut self,
+        call: crate::protocol::tree::IncomingCall,
+    ) -> Result<crate::protocol::tree::CallReply, crate::protocol::tree::DispatchError<Self::Error>>;
 }
 
 /// Builds one canonical dotted leaf id from crate-local metadata plus optional

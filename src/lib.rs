@@ -20,6 +20,6 @@ extern crate self as unshell;
 pub mod logger;
 pub mod protocol;
 
-pub use unshell_macros::Leaf;
+pub use unshell_macros::{Leaf, procedures};
 
 // pub use ush_obfuscate as obfuscate;

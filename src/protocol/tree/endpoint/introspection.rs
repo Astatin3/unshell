@@ -75,6 +75,7 @@ impl ProtocolEndpoint {
                 Ok(EndpointOutcome::event(super::core::LocalEvent::Data {
                     header: response_header,
                     message: response,
+                    hook_key: key,
                 }))
             }
             route => Ok(EndpointOutcome::forward(
