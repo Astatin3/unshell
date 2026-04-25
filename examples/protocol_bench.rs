@@ -334,10 +334,7 @@ fn build_examples(root: &Path) {
 }
 
 fn run_binary(binary: &Path, iterations: usize, label: &str) {
-    run_command(
-        label,
-        Command::new(binary).arg(iterations.to_string()),
-    );
+    run_command(label, Command::new(binary).arg(iterations.to_string()));
 }
 
 fn run_strace(binary: &Path, iterations: usize) {
@@ -394,12 +391,18 @@ fn run_heaptrack(root: &Path, heap_dir: &Path, name: &str, binary: &Path, iterat
 
 fn run_command(label: &str, command: &mut Command) {
     println!("--- {label} ---");
-    let output = command.output().unwrap_or_else(|error| panic!("{label} failed to launch: {error}"));
+    let output = command
+        .output()
+        .unwrap_or_else(|error| panic!("{label} failed to launch: {error}"));
     if !output.stdout.is_empty() {
         print!("{}", String::from_utf8_lossy(&output.stdout));
     }
     if !output.stderr.is_empty() {
         print!("{}", String::from_utf8_lossy(&output.stderr));
     }
-    assert!(output.status.success(), "{label} failed with status {}", output.status);
+    assert!(
+        output.status.success(),
+        "{label} failed with status {}",
+        output.status
+    );
 }

@@ -99,7 +99,9 @@ pub fn run_forward_call_receive(iterations: usize) -> usize {
             .as_ref()
             .map(|(route, frame)| route_value(*route).wrapping_add(frame.len()))
             .unwrap_or_default();
-        checksum = checksum.wrapping_add(forwarded).wrapping_add(outcome.dropped as usize);
+        checksum = checksum
+            .wrapping_add(forwarded)
+            .wrapping_add(outcome.dropped as usize);
     }
     black_box(checksum)
 }
