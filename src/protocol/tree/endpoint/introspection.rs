@@ -3,7 +3,7 @@
 //! This code implements the reserved empty-procedure behavior from the
 //! introspection sections of `PROTOCOL.md`.
 
-use alloc::{string::String, vec};
+use alloc::string::String;
 use rkyv::{rancor::Error as RkyvError, to_bytes};
 
 use crate::protocol::{
@@ -22,13 +22,8 @@ impl ProtocolEndpoint {
         key: Option<HookKey>,
     ) -> Result<EndpointOutcome, EndpointError> {
         let Some(key) = key else {
-            return Ok(EndpointOutcome {
-                dropped: true,
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::dropped());
         };
-
-        self.hooks.activate_pending(&key, header.src_path.clone());
 
         let payload = if let Some(leaf_name) = &header.dst_leaf {
             let Some(leaf) = self.leaves.get(leaf_name) else {
@@ -77,19 +72,15 @@ impl ProtocolEndpoint {
         let route = self.decide_route(&key.return_path);
 
         match route {
-            super::super::RouteDecision::Local => Ok(EndpointOutcome {
-                events: vec![super::core::LocalEvent::Data {
+            super::super::RouteDecision::Local => Ok(EndpointOutcome::event(
+                super::core::LocalEvent::Data {
                     header: response_header,
                     message: response,
-                }],
-                ..EndpointOutcome::default()
-            }),
+                },
+            )),
             _ => {
                 let frame = encode_packet(&response_header, &response)?;
-                Ok(EndpointOutcome {
-                    forwards: vec![(route, frame)],
-                    ..EndpointOutcome::default()
-                })
+                Ok(EndpointOutcome::forward(route, frame))
             }
         }
     }

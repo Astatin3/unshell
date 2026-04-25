@@ -3,7 +3,7 @@
 //! These methods implement the hook lifecycle described in `PROTOCOL.md`:
 //! pending contexts, active contexts, peer validation, and fault emission.
 
-use alloc::{string::String, vec};
+use alloc::string::String;
 
 use crate::protocol::{
     DataMessage, FaultMessage, PacketHeader, PacketType, ProtocolFault, encode_packet,
@@ -20,10 +20,7 @@ impl ProtocolEndpoint {
         fault: ProtocolFault,
     ) -> Result<EndpointOutcome, EndpointError> {
         let Some(key) = key else {
-            return Ok(EndpointOutcome {
-                dropped: true,
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::dropped());
         };
 
         self.hooks.remove_pending(&key);
@@ -40,16 +37,10 @@ impl ProtocolEndpoint {
         let route = self.decide_route(&key.return_path);
 
         match route {
-            RouteDecision::Local => Ok(EndpointOutcome {
-                events: vec![LocalEvent::Fault { header, message }],
-                ..EndpointOutcome::default()
-            }),
+            RouteDecision::Local => Ok(EndpointOutcome::event(LocalEvent::Fault { header, message })),
             _ => {
                 let frame = encode_packet(&header, &message)?;
-                Ok(EndpointOutcome {
-                    forwards: vec![(route, frame)],
-                    ..EndpointOutcome::default()
-                })
+                Ok(EndpointOutcome::forward(route, frame))
             }
         }
     }
@@ -85,47 +76,35 @@ impl ProtocolEndpoint {
         }
 
         let Some(active) = self.hooks.active(&key) else {
-            return Ok(EndpointOutcome {
-                dropped: true,
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::dropped());
         };
 
         if active.peer_path != header.src_path {
             self.hooks.remove_active(&key);
             self.hooks.remove_pending(&key);
-            return Ok(EndpointOutcome {
-                events: vec![LocalEvent::Fault {
-                    header: PacketHeader {
-                        packet_type: PacketType::Fault,
-                        src_path: header.src_path,
-                        dst_path: self.path.clone(),
-                        dst_leaf: None,
-                        hook_id: Some(key.hook_id),
-                    },
-                    message: FaultMessage {
-                        fault: ProtocolFault::INVALID_HOOK_PEER,
-                    },
-                }],
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::event(LocalEvent::Fault {
+                header: PacketHeader {
+                    packet_type: PacketType::Fault,
+                    src_path: header.src_path,
+                    dst_path: self.path.clone(),
+                    dst_leaf: None,
+                    hook_id: Some(key.hook_id),
+                },
+                message: FaultMessage {
+                    fault: ProtocolFault::INVALID_HOOK_PEER,
+                },
+            }));
         }
 
         if active.procedure_id != message.procedure_id {
-            return Ok(EndpointOutcome {
-                dropped: true,
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::dropped());
         }
 
         if message.end_hook {
             self.hooks.remove_active(&key);
         }
 
-        Ok(EndpointOutcome {
-            events: vec![LocalEvent::Data { header, message }],
-            ..EndpointOutcome::default()
-        })
+        Ok(EndpointOutcome::event(LocalEvent::Data { header, message }))
     }
 
     /// Handles locally delivered hook `Fault` packets.
@@ -145,19 +124,13 @@ impl ProtocolEndpoint {
                 .is_some_and(|pending| pending.caller_src_path == header.src_path);
 
         if !matches {
-            return Ok(EndpointOutcome {
-                dropped: true,
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::dropped());
         }
 
         self.hooks.remove_active(&key);
         self.hooks.remove_pending(&key);
 
-        Ok(EndpointOutcome {
-            events: vec![LocalEvent::Fault { header, message }],
-            ..EndpointOutcome::default()
-        })
+        Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }))
     }
 
     /// Chooses the next hop using the protocol's longest-prefix routing rule.

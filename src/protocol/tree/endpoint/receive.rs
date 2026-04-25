@@ -3,14 +3,12 @@
 //! This file implements the transport-facing packet entry point and maps it to
 //! the `Call`, `Data`, and `Fault` sections of `PROTOCOL.md`.
 
-use alloc::vec;
-
 use crate::protocol::{
     CallMessage, PacketType, ProtocolFault, decode_frame, introspection::INTROSPECTION_PROCEDURE_ID,
     validate_call, validate_header,
 };
 
-use super::super::{HookKey, PendingHook, RouteDecision};
+use super::super::{ActiveHook, HookKey, RouteDecision};
 use super::core::{
     Endpoint, EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint,
 };
@@ -26,22 +24,6 @@ impl ProtocolEndpoint {
             .response_hook
             .as_ref()
             .map(|hook| HookKey::new(hook.return_path.clone(), hook.hook_id));
-
-        if let Some(hook) = &message.response_hook
-            && hook.return_path != self.path
-            && self
-                .hooks
-                .insert_pending(PendingHook {
-                    caller_src_path: header.src_path.clone(),
-                    return_path: hook.return_path.clone(),
-                    hook_id: hook.hook_id,
-                    procedure_id: message.procedure_id.clone(),
-                    dst_leaf: header.dst_leaf.clone(),
-                })
-                .is_err()
-        {
-            return self.emit_fault_if_possible(key, ProtocolFault::INTERNAL_ERROR);
-        }
 
         if message.procedure_id == INTROSPECTION_PROCEDURE_ID {
             return self.handle_introspection(&header, key);
@@ -73,14 +55,24 @@ impl ProtocolEndpoint {
             return self.emit_fault_if_possible(key, fault);
         }
 
-        if let Some(key) = &key {
-            self.hooks.activate_pending(key, header.src_path.clone());
+        if let Some(hook) = &message.response_hook
+            && hook.return_path != self.path
+            && self
+                .hooks
+                .insert_active(ActiveHook {
+                    return_path: hook.return_path.clone(),
+                    hook_id: hook.hook_id,
+                    peer_path: header.src_path.clone(),
+                    procedure_id: message.procedure_id.clone(),
+                    dst_leaf: header.dst_leaf.clone(),
+                    peer_finished: false,
+                })
+                .is_err()
+        {
+            return self.emit_fault_if_possible(key, ProtocolFault::INTERNAL_ERROR);
         }
 
-        Ok(EndpointOutcome {
-            events: vec![LocalEvent::Call { header, message }],
-            ..EndpointOutcome::default()
-        })
+        Ok(EndpointOutcome::event(LocalEvent::Call { header, message }))
     }
 }
 
@@ -99,73 +91,56 @@ impl Endpoint for ProtocolEndpoint {
         validate_header(header)?;
 
         if !self.valid_source_for_ingress(ingress, &header.src_path) {
-            return Ok(EndpointOutcome {
-                dropped: true,
-                ..EndpointOutcome::default()
-            });
+            return Ok(EndpointOutcome::dropped());
         }
 
         match header.packet_type {
             PacketType::Call => {
                 let message = parsed.deserialize_call()?;
                 if !matches!(ingress, Ingress::Parent | Ingress::Local) {
-                    return Ok(EndpointOutcome {
-                        dropped: true,
-                        ..EndpointOutcome::default()
-                    });
+                    return Ok(EndpointOutcome::dropped());
                 }
 
                 validate_call(header, &message)?;
                 match self.decide_route(&header.dst_path) {
-                    RouteDecision::Child(index) => Ok(EndpointOutcome {
-                        forwards: vec![(RouteDecision::Child(index), frame)],
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Parent => Ok(EndpointOutcome {
-                        forwards: vec![(RouteDecision::Parent, frame)],
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Drop => Ok(EndpointOutcome {
-                        dropped: true,
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Local => self.handle_local_call(header.clone(), message),
+                    RouteDecision::Child(index) => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
+                    }
+                    RouteDecision::Parent => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Parent, frame))
+                    }
+                    RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
+                    RouteDecision::Local => self.handle_local_call(parsed.deserialize_header(), message),
                 }
             }
             PacketType::Data => {
-                let message = parsed.deserialize_data()?;
                 match self.decide_route(&header.dst_path) {
-                    RouteDecision::Local => self.handle_local_data(header.clone(), message),
-                    RouteDecision::Child(index) => Ok(EndpointOutcome {
-                        forwards: vec![(RouteDecision::Child(index), frame)],
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Parent => Ok(EndpointOutcome {
-                        forwards: vec![(RouteDecision::Parent, frame)],
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Drop => Ok(EndpointOutcome {
-                        dropped: true,
-                        ..EndpointOutcome::default()
-                    }),
+                    RouteDecision::Local => {
+                        let message = parsed.deserialize_data()?;
+                        self.handle_local_data(parsed.deserialize_header(), message)
+                    }
+                    RouteDecision::Child(index) => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
+                    }
+                    RouteDecision::Parent => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Parent, frame))
+                    }
+                    RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
                 }
             }
             PacketType::Fault => {
-                let message = parsed.deserialize_fault()?;
                 match self.decide_route(&header.dst_path) {
-                    RouteDecision::Local => self.handle_local_fault(header.clone(), message),
-                    RouteDecision::Child(index) => Ok(EndpointOutcome {
-                        forwards: vec![(RouteDecision::Child(index), frame)],
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Parent => Ok(EndpointOutcome {
-                        forwards: vec![(RouteDecision::Parent, frame)],
-                        ..EndpointOutcome::default()
-                    }),
-                    RouteDecision::Drop => Ok(EndpointOutcome {
-                        dropped: true,
-                        ..EndpointOutcome::default()
-                    }),
+                    RouteDecision::Local => {
+                        let message = parsed.deserialize_fault()?;
+                        self.handle_local_fault(parsed.deserialize_header(), message)
+                    }
+                    RouteDecision::Child(index) => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
+                    }
+                    RouteDecision::Parent => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Parent, frame))
+                    }
+                    RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
                 }
             }
         }

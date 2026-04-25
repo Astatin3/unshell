@@ -93,12 +93,44 @@ pub enum LocalEvent {
 /// Result of processing one framed packet.
 #[derive(Debug, Default)]
 pub struct EndpointOutcome {
-    /// Forwarding actions to perform after local processing.
-    pub forwards: Vec<(RouteDecision, FrameBytes)>,
-    /// Events delivered to local runtime consumers.
-    pub events: Vec<LocalEvent>,
+    /// Forwarding action to perform after local processing.
+    pub forward: Option<(RouteDecision, FrameBytes)>,
+    /// Event delivered to the local runtime consumer.
+    pub event: Option<LocalEvent>,
     /// Whether the packet was intentionally dropped with no other side effects.
     pub dropped: bool,
+}
+
+impl EndpointOutcome {
+    /// Returns an outcome that only forwards one frame.
+    #[must_use]
+    pub fn forward(route: RouteDecision, frame: FrameBytes) -> Self {
+        Self {
+            forward: Some((route, frame)),
+            event: None,
+            dropped: false,
+        }
+    }
+
+    /// Returns an outcome that only delivers one local event.
+    #[must_use]
+    pub fn event(event: LocalEvent) -> Self {
+        Self {
+            forward: None,
+            event: Some(event),
+            dropped: false,
+        }
+    }
+
+    /// Returns an outcome that silently drops the packet.
+    #[must_use]
+    pub fn dropped() -> Self {
+        Self {
+            forward: None,
+            event: None,
+            dropped: true,
+        }
+    }
 }
 
 /// Errors returned while decoding or validating a packet.

@@ -40,9 +40,9 @@ impl Simulation {
                     let reply = chat_reply_for_text(&text);
 
                     if let Some((reply, end_hook)) = reply {
-                        let frame = self.nodes[session.node_id.0]
+                        let outcome = self.nodes[session.node_id.0]
                             .endpoint
-                            .make_data(
+                            .send_data(
                                 session.host_path.clone(),
                                 session.hook_id,
                                 session.procedure_id.clone(),
@@ -51,7 +51,7 @@ impl Simulation {
                             )
                             .map_err(|error| SimError::Protocol(error.to_string()))?;
                         self.record_trace(session.node_id, format!("chat handler sent: {reply}"));
-                        self.process_local_frame(session.node_id, frame)?;
+                        self.process_outcome(session.node_id, outcome)?;
                         if end_hook {
                             self.chat_sessions.remove(&session.hook_id);
                         }

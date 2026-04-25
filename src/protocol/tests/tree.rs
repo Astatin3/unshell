@@ -76,13 +76,12 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
         .receive(&Ingress::Local, frame)
         .expect("endpoint should handle introspection");
 
-    assert!(outcome.forwards.is_empty());
-    assert_eq!(outcome.events.len(), 1);
+    assert!(outcome.forward.is_none());
 
     let LocalEvent::Data {
         header,
         message: response,
-    } = &outcome.events[0]
+    } = outcome.event.as_ref().expect("expected local data event")
     else {
         panic!("expected local data event");
     };
@@ -139,11 +138,10 @@ fn invalid_hook_peer_emits_local_fault_event() {
         .receive(&Ingress::Local, frame)
         .expect("invalid peer should be handled");
 
-    assert!(outcome.forwards.is_empty());
-    assert_eq!(outcome.events.len(), 1);
+    assert!(outcome.forward.is_none());
     assert!(!outcome.dropped);
 
-    match &outcome.events[0] {
+    match outcome.event.as_ref().expect("expected event") {
         LocalEvent::Fault { header, message } => {
             assert_eq!(header.packet_type, PacketType::Fault);
             assert_eq!(header.hook_id, Some(hook_id));

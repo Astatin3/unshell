@@ -28,7 +28,7 @@ impl Simulation {
             let leaf = self.require_leaf(node_id, leaf_name)?.clone();
             match leaf.kind {
                 LeafKind::Echo => {
-                    let frame = self.make_endpoint_data_frame(
+                    let outcome = self.send_endpoint_data(
                         node_id,
                         hook.return_path.clone(),
                         hook.hook_id,
@@ -37,7 +37,7 @@ impl Simulation {
                         true,
                     )?;
                     self.record_trace(node_id, format!("leaf {leaf_name} echoed {} bytes", message.data.len()));
-                    self.process_local_frame(node_id, frame)?;
+                    self.process_outcome(node_id, outcome)?;
                 }
             }
             return Ok(());
@@ -51,7 +51,7 @@ impl Simulation {
         match procedure.kind {
             EndpointProcedureKind::Ping => {
                 let reply = format!("pong from {}", self.node(node_id).display_path());
-                let frame = self.make_endpoint_data_frame(
+                let outcome = self.send_endpoint_data(
                     node_id,
                     hook.return_path.clone(),
                     hook.hook_id,
@@ -60,7 +60,7 @@ impl Simulation {
                     true,
                 )?;
                 self.record_trace(node_id, format!("endpoint sent ping reply: {reply}"));
-                self.process_local_frame(node_id, frame)?;
+                self.process_outcome(node_id, outcome)?;
             }
             EndpointProcedureKind::ChunkedGreeting => {
                 for (index, text) in [
@@ -71,7 +71,7 @@ impl Simulation {
                 .iter()
                 .enumerate()
                 {
-                    let frame = self.make_endpoint_data_frame(
+                    let outcome = self.send_endpoint_data(
                         node_id,
                         hook.return_path.clone(),
                         hook.hook_id,
@@ -80,7 +80,7 @@ impl Simulation {
                         index == 2,
                     )?;
                     self.record_trace(node_id, format!("endpoint sent chunk {}", index + 1));
-                    self.process_local_frame(node_id, frame)?;
+                    self.process_outcome(node_id, outcome)?;
                 }
             }
             EndpointProcedureKind::Chat => {
@@ -95,7 +95,7 @@ impl Simulation {
                         procedure_id: procedure.procedure_id.clone(),
                     },
                 );
-                let frame = self.make_endpoint_data_frame(
+                let outcome = self.send_endpoint_data(
                     node_id,
                     hook.return_path.clone(),
                     hook.hook_id,
@@ -104,15 +104,15 @@ impl Simulation {
                     false,
                 )?;
                 self.record_trace(node_id, "chat handler opened session".to_owned());
-                self.process_local_frame(node_id, frame)?;
+                self.process_outcome(node_id, outcome)?;
             }
         }
         Ok(())
     }
 
-    /// Builds one endpoint-originated data frame after application logic decides
+    /// Routes one endpoint-originated data packet after application logic decides
     /// what to send back on an already-validated hook.
-    fn make_endpoint_data_frame(
+    fn send_endpoint_data(
         &mut self,
         node_id: NodeId,
         return_path: Vec<String>,
@@ -120,10 +120,10 @@ impl Simulation {
         procedure_id: String,
         data: Vec<u8>,
         end_hook: bool,
-    ) -> Result<unshell::protocol::FrameBytes, SimError> {
+    ) -> Result<unshell::protocol::tree::EndpointOutcome, SimError> {
         self.nodes[node_id.0]
             .endpoint
-            .make_data(return_path, hook_id, procedure_id, data, end_hook)
+            .send_data(return_path, hook_id, procedure_id, data, end_hook)
             .map_err(|error| SimError::Protocol(error.to_string()))
     }
 

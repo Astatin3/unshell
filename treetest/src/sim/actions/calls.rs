@@ -190,9 +190,9 @@ impl Simulation {
             .cloned()
             .ok_or(SimError::UnknownHook(hook_id))?;
 
-        let frame = self.nodes[self.root_id.0]
+        let outcome = self.nodes[self.root_id.0]
             .endpoint
-            .make_data(
+            .send_data(
                 snapshot.peer_path.clone(),
                 hook_id,
                 snapshot.procedure_id.clone(),
@@ -208,7 +208,7 @@ impl Simulation {
                 format_hook_ref(self.node(self.root_id).path.as_slice(), hook_id)
             ),
         );
-        self.process_local_frame(self.root_id, frame)?;
+        self.process_outcome(self.root_id, outcome)?;
         Ok(ActionResult {
             label: format!("Send hook data {hook_id}"),
             hook_id: Some(hook_id),

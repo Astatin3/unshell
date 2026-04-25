@@ -23,9 +23,9 @@ impl Simulation {
         // Hook allocation happens on the root host because the root is the hook
         // owner for every user-driven action in the demo.
         let hook_id = self.nodes[self.root_id.0].endpoint.allocate_hook_id();
-        let frame = self.nodes[self.root_id.0]
+        let outcome = self.nodes[self.root_id.0]
             .endpoint
-            .make_call(
+            .send_call(
                 dst_path.clone(),
                 dst_leaf.clone(),
                 procedure_id.to_owned(),
@@ -65,7 +65,7 @@ impl Simulation {
                     .unwrap_or_default()
             ),
         );
-        self.process_local_frame(self.root_id, frame)
+        self.process_outcome(self.root_id, outcome)
     }
 
     /// Delivers a frame into one endpoint as locally-originated traffic.
@@ -91,7 +91,7 @@ impl Simulation {
             self.record_trace(node_id, "packet dropped".to_owned());
         }
 
-        for (route, frame) in outcome.forwards {
+        if let Some((route, frame)) = outcome.forward {
             match route {
                 RouteDecision::Child(index) => {
                     let child_id = self.nodes[node_id.0]
@@ -150,7 +150,7 @@ impl Simulation {
             }
         }
 
-        for event in outcome.events {
+        if let Some(event) = outcome.event {
             self.handle_local_event(node_id, event)?;
         }
 
