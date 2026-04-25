@@ -1,4 +1,6 @@
 use std::hint::black_box;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Instant;
 
 use unshell::protocol::tree::{
@@ -8,8 +10,14 @@ use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, enc
 
 const SAMPLES: usize = 500;
 const ITERS: usize = 1_000;
+const TOOL_ITERS: usize = 10_000;
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("tools") {
+        run_external_tools();
+        return;
+    }
+
     println!("protocol benchmark");
     println!("samples: {SAMPLES}");
     println!("iterations/sample: {ITERS}");
@@ -33,6 +41,10 @@ fn main() {
             bench.name, bench.mean_ns, bench.stddev_ns, bench.samples
         );
     }
+
+    println!();
+    println!("Run `cargo run --example protocol_bench -- tools` to build and execute");
+    println!("the standalone operation binaries under strace, perf, and heaptrack.");
 }
 
 struct BenchResult {
@@ -283,4 +295,111 @@ fn summarize(name: &'static str, samples: &[f64]) -> BenchResult {
 
 fn path(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| String::from(*part)).collect()
+}
+
+fn run_external_tools() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    build_examples(root);
+
+    let ops = [
+        ("encode_call", "protocol_op_encode_call"),
+        ("decode_call", "protocol_op_decode_call"),
+        ("forward_call_receive", "protocol_op_forward_call_receive"),
+        ("local_call_receive", "protocol_op_local_call_receive"),
+        ("hook_data_receive", "protocol_op_hook_data_receive"),
+    ];
+
+    let heap_dir = root.join("heaptrack-cli");
+    std::fs::create_dir_all(&heap_dir).expect("heaptrack-cli directory should be creatable");
+
+    for (name, binary) in ops {
+        let binary_path = root.join("target/debug/examples").join(binary);
+        println!();
+        println!("=== {name} ===");
+        run_binary(&binary_path, TOOL_ITERS, "direct run");
+        run_strace(&binary_path, TOOL_ITERS);
+        run_perf(&binary_path, TOOL_ITERS);
+        run_heaptrack(root, &heap_dir, name, &binary_path, TOOL_ITERS);
+    }
+}
+
+fn build_examples(root: &Path) {
+    run_command(
+        "cargo build --examples",
+        Command::new("cargo")
+            .arg("build")
+            .arg("--examples")
+            .current_dir(root),
+    );
+}
+
+fn run_binary(binary: &Path, iterations: usize, label: &str) {
+    run_command(
+        label,
+        Command::new(binary).arg(iterations.to_string()),
+    );
+}
+
+fn run_strace(binary: &Path, iterations: usize) {
+    run_command(
+        "strace -c memory syscalls",
+        Command::new("strace")
+            .arg("-qq")
+            .arg("-c")
+            .arg("-e")
+            .arg("trace=brk,mmap,mremap,munmap,mprotect,madvise")
+            .arg(binary)
+            .arg(iterations.to_string()),
+    );
+}
+
+fn run_perf(binary: &Path, iterations: usize) {
+    run_command(
+        "perf stat",
+        Command::new("perf")
+            .arg("stat")
+            .arg("-e")
+            .arg("task-clock,cycles,instructions,branches,branch-misses,cache-references,cache-misses")
+            .arg(binary)
+            .arg(iterations.to_string()),
+    );
+}
+
+fn run_heaptrack(root: &Path, heap_dir: &Path, name: &str, binary: &Path, iterations: usize) {
+    let prefix = heap_dir.join(format!("{name}.zst"));
+    run_command(
+        "heaptrack --record-only",
+        Command::new("heaptrack")
+            .arg("--record-only")
+            .arg("-o")
+            .arg(&prefix)
+            .arg(binary)
+            .arg(iterations.to_string())
+            .current_dir(root),
+    );
+
+    let recorded = PathBuf::from(format!("{}.zst", prefix.display()));
+    run_command(
+        "heaptrack_print summary",
+        Command::new("heaptrack_print")
+            .arg("-f")
+            .arg(recorded)
+            .arg("-n")
+            .arg("4")
+            .arg("-s")
+            .arg("2")
+            .current_dir(root),
+    );
+}
+
+fn run_command(label: &str, command: &mut Command) {
+    println!("--- {label} ---");
+    let output = command.output().unwrap_or_else(|error| panic!("{label} failed to launch: {error}"));
+    if !output.stdout.is_empty() {
+        print!("{}", String::from_utf8_lossy(&output.stdout));
+    }
+    if !output.stderr.is_empty() {
+        print!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+    assert!(output.status.success(), "{label} failed with status {}", output.status);
 }

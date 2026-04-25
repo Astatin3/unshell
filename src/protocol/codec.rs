@@ -89,13 +89,14 @@ where
     let header_len = u32::try_from(header_bytes.len()).map_err(|_| FrameError::LengthOverflow)?;
     let payload_len = u32::try_from(payload_bytes.len()).map_err(|_| FrameError::LengthOverflow)?;
 
-    let header_start = 8usize;
+    let header_start = align_up(8usize, SECTION_ALIGN);
     let payload_start = align_up(header_start + header_bytes.len(), SECTION_ALIGN);
     let total_len = payload_start + payload_bytes.len();
 
     let mut frame = FrameBytes::with_capacity(total_len);
     frame.extend_from_slice(&header_len.to_be_bytes());
     frame.extend_from_slice(&payload_len.to_be_bytes());
+    append_padding(&mut frame, header_start - 8usize);
     frame.extend_from_slice(&header_bytes);
     append_padding(
         &mut frame,
@@ -113,7 +114,7 @@ pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
 
     let header_len = read_u32(bytes, 0)? as usize;
     let payload_len = read_u32(bytes, 4)? as usize;
-    let header_start = 8usize;
+    let header_start = align_up(8usize, SECTION_ALIGN);
     let header_end = header_start + header_len;
     if header_end > bytes.len() {
         return Err(FrameError::Truncated);
