@@ -12,6 +12,21 @@ use super::core::{
 };
 
 impl ProtocolEndpoint {
+    fn supports_local_procedure(&self, dst_leaf: Option<&str>, procedure_id: &str) -> bool {
+        match dst_leaf {
+            Some(leaf_name) => self
+                .leaves
+                .get(leaf_name)
+                .map(|leaf| {
+                    leaf.procedures
+                        .iter()
+                        .any(|procedure| procedure == procedure_id)
+                })
+                .unwrap_or(false),
+            None => self.endpoint_procedures.contains(procedure_id),
+        }
+    }
+
     pub(crate) fn handle_local_call(
         &mut self,
         header: crate::protocol::PacketHeader,
@@ -26,20 +41,10 @@ impl ProtocolEndpoint {
             return self.handle_introspection(&header, key);
         }
 
-        let supported = match &header.dst_leaf {
-            Some(leaf_name) => self
-                .leaves
-                .get(leaf_name)
-                .map(|leaf| {
-                    leaf.procedures
-                        .iter()
-                        .any(|procedure| procedure == &message.procedure_id)
-                })
-                .unwrap_or(false),
-            None => self.endpoint_procedures.contains(&message.procedure_id),
-        };
+        let procedure_is_supported =
+            self.supports_local_procedure(header.dst_leaf.as_deref(), &message.procedure_id);
 
-        if !supported {
+        if !procedure_is_supported {
             let fault = if header
                 .dst_leaf
                 .as_ref()
@@ -94,6 +99,9 @@ impl Endpoint for ProtocolEndpoint {
 
         match header.packet_type {
             PacketType::Call => {
+                // Calls only enter from the parent side of the tree or from the endpoint
+                // itself. Children can return data/faults, but they do not initiate new
+                // calls through this node.
                 if !matches!(ingress, Ingress::Parent | Ingress::Local) {
                     return Ok(EndpointOutcome::dropped());
                 }

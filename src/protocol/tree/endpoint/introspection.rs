@@ -21,7 +21,7 @@ impl ProtocolEndpoint {
             return Ok(EndpointOutcome::dropped());
         };
 
-        let payload = if let Some(leaf_name) = &header.dst_leaf {
+        let response_payload = if let Some(leaf_name) = &header.dst_leaf {
             let Some(leaf) = self.leaves.get(leaf_name) else {
                 return self.emit_fault_if_possible(Some(key), ProtocolFault::UNKNOWN_LEAF);
             };
@@ -61,10 +61,11 @@ impl ProtocolEndpoint {
         };
         let response = DataMessage {
             procedure_id: String::new(),
-            data: payload,
+            data: response_payload,
             end_hook: true,
         };
 
+        // Introspection always completes in a single response frame.
         if self.hooks.mark_local_end(&key) {
             self.hooks.remove_active(&key);
         }

@@ -79,6 +79,9 @@ impl ProtocolEndpoint {
         header: &PacketHeader,
         call: &CallMessage,
     ) -> Result<(), EndpointError> {
+        // Outbound calls reserve their response hook before the frame is emitted so
+        // the endpoint can accept a synchronous local response path as well as a
+        // remote one.
         if let Some(hook) = &call.response_hook
             && self
                 .hooks
@@ -99,20 +102,21 @@ impl ProtocolEndpoint {
     }
 
     #[must_use]
+    /// Creates an endpoint with compiled routing tables for its current topology.
     pub fn new(
         path: Vec<String>,
         parent_path: Option<Vec<String>>,
         children: Vec<ChildRoute>,
         leaves: Vec<LeafSpec>,
     ) -> Self {
-        let registered_children = children
+        let registered_child_paths = children
             .iter()
             .filter(|child| child.state == super::core::ConnectionState::Registered)
             .map(|child| child.path.clone())
             .collect::<Vec<_>>();
 
         Self {
-            routing: CompiledRoutes::new(&path, &registered_children, parent_path.is_some()),
+            routing: CompiledRoutes::new(&path, &registered_child_paths, parent_path.is_some()),
             path,
             children,
             leaves: leaves
@@ -124,6 +128,7 @@ impl ProtocolEndpoint {
         }
     }
 
+    /// Registers a procedure that is handled directly by the endpoint.
     pub fn add_endpoint_procedure(
         &mut self,
         procedure_id: impl Into<String>,
@@ -135,10 +140,12 @@ impl ProtocolEndpoint {
     }
 
     #[must_use]
+    /// Allocates a hook id scoped to this endpoint path.
     pub fn allocate_hook_id(&mut self) -> u64 {
         self.hooks.allocate_hook_id(&self.path)
     }
 
+    /// Encodes a call frame without routing it through the local endpoint.
     pub fn make_call(
         &mut self,
         dst_path: Vec<String>,
@@ -153,6 +160,7 @@ impl ProtocolEndpoint {
         Ok(encode_packet(&header, &call)?)
     }
 
+    /// Builds and immediately routes a call, producing either a forward or a local event.
     pub fn send_call(
         &mut self,
         dst_path: Vec<String>,
@@ -174,6 +182,7 @@ impl ProtocolEndpoint {
         }
     }
 
+    /// Encodes a data frame without routing it through the local endpoint.
     pub fn make_data(
         &self,
         dst_path: Vec<String>,
@@ -187,6 +196,7 @@ impl ProtocolEndpoint {
         Ok(encode_packet(&header, &message)?)
     }
 
+    /// Builds and immediately routes a data packet, updating local hook state for end-of-stream.
     pub fn send_data(
         &mut self,
         dst_path: Vec<String>,
@@ -199,12 +209,14 @@ impl ProtocolEndpoint {
             self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
 
         if end_hook {
-            let sender_key = self
+            // Locally-originated streams may not have been resolved against a peer yet,
+            // so fall back to the endpoint's own hook key shape when closing them.
+            let local_hook_key = self
                 .hooks
                 .resolve_active_key(&self.path, hook_id, &self.path)
                 .unwrap_or_else(|| HookKey::new(self.path.clone(), hook_id));
-            if self.hooks.mark_local_end(&sender_key) {
-                self.hooks.remove_active(&sender_key);
+            if self.hooks.mark_local_end(&local_hook_key) {
+                self.hooks.remove_active(&local_hook_key);
             }
         }
 

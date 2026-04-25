@@ -1,13 +1,16 @@
 //! Path routing helpers and explicit enum tree declarations.
+//!
+//! Routing follows a longest-prefix rule over endpoint paths. Each endpoint boundary can compile
+//! its children into a small trie so repeated route decisions do not need to scan every child.
 
 use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 
 /// Explicit test tree declaration used for configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeNode {
-    Root {
-        children: Vec<Self>,
-    },
+    /// The protocol root. Its path is always empty.
+    Root { children: Vec<Self> },
+    /// An addressable endpoint segment in the tree.
     Endpoint {
         segment: String,
         leaves: Vec<LeafNode>,
@@ -18,23 +21,27 @@ pub enum TreeNode {
 /// Leaf declaration used inside the explicit tree enum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeafNode {
+    /// Leaf name local to an endpoint path.
     pub name: String,
+    /// Procedures served by this leaf.
     pub procedures: Vec<String>,
 }
 
 impl TreeNode {
+    /// Flattens the explicit tree into the set of endpoint paths it declares.
     pub fn paths(&self) -> Vec<Vec<String>> {
-        let mut output = Vec::new();
-        self.collect_paths(&[], &mut output);
-        output
+        let mut paths = Vec::new();
+        self.collect_paths(&[], &mut paths);
+        paths
     }
 
-    fn collect_paths(&self, prefix: &[String], output: &mut Vec<Vec<String>>) {
+    fn collect_paths(&self, prefix: &[String], paths: &mut Vec<Vec<String>>) {
         match self {
             Self::Root { children } => {
-                output.push(Vec::new());
+                paths.push(Vec::new());
                 for child in children {
-                    child.collect_paths(&[], output);
+                    // Root always restarts collection from the empty path.
+                    child.collect_paths(&[], paths);
                 }
             }
             Self::Endpoint {
@@ -42,9 +49,9 @@ impl TreeNode {
             } => {
                 let mut next = prefix.to_vec();
                 next.push(segment.clone());
-                output.push(next.clone());
+                paths.push(next.clone());
                 for child in children {
-                    child.collect_paths(&next, output);
+                    child.collect_paths(&next, paths);
                 }
             }
         }
@@ -54,9 +61,13 @@ impl TreeNode {
 /// Longest-prefix route decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteDecision {
+    /// Forward to the child at the given local child index.
     Child(usize),
+    /// Deliver locally at this endpoint.
     Local,
+    /// Forward upward because the destination is outside the local subtree.
     Parent,
+    /// Drop because no local, child, or parent route applies.
     Drop,
 }
 
@@ -70,24 +81,26 @@ pub struct CompiledRoutes {
 
 #[derive(Debug, Clone, Default)]
 struct RouteTrieNode {
+    /// Child selected when traversal stops exactly at this trie node.
     best_child: Option<usize>,
     edges: BTreeMap<String, usize>,
 }
 
 impl CompiledRoutes {
+    /// Compiles child endpoint paths into a trie rooted at `local_path`.
     #[must_use]
     pub fn new(local_path: &[String], child_paths: &[Vec<String>], has_parent: bool) -> Self {
-        let mut table = Self {
+        let mut routes = Self {
             local_path: local_path.to_vec(),
             has_parent,
             nodes: vec![RouteTrieNode::default()],
         };
 
         for (index, child_path) in child_paths.iter().enumerate() {
-            table.insert_child(index, child_path);
+            routes.insert_child(index, child_path);
         }
 
-        table
+        routes
     }
 
     fn insert_child(&mut self, index: usize, child_path: &[String]) {
@@ -113,6 +126,7 @@ impl CompiledRoutes {
         self.nodes[node_index].best_child = Some(index);
     }
 
+    /// Resolves `dst_path` using the compiled longest-prefix trie.
     #[must_use]
     pub fn route(&self, dst_path: &[String]) -> RouteDecision {
         if !is_prefix(&self.local_path, dst_path) {
@@ -131,6 +145,8 @@ impl CompiledRoutes {
             };
             node_index = *next_index;
             if let Some(index) = self.nodes[node_index].best_child {
+                // Keep the deepest matching child seen so far; if traversal breaks later, the
+                // protocol still routes to the longest matching descendant boundary.
                 best_child = Some(index);
             }
         }
@@ -156,6 +172,7 @@ pub fn is_prefix(prefix: &[String], path: &[String]) -> bool {
 
 /// Trait for resolving a destination path to a routing decision.
 pub trait RouteProvider {
+    /// Returns the route decision for `dst_path` from the perspective of `local_path`.
     fn route_destination<I>(
         &self,
         local_path: &[String],
@@ -191,6 +208,7 @@ impl RouteProvider for DefaultRouteProvider {
     }
 }
 
+/// Resolves `dst_path` with the default longest-prefix route provider.
 pub fn route_destination<I>(
     local_path: &[String],
     child_paths: I,

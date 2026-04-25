@@ -1,4 +1,9 @@
 //! Explicit tree declaration, routing, and a small endpoint runtime.
+//!
+//! This module keeps the protocol tree machinery split by concern:
+//! - `routing` contains static path declarations and longest-prefix routing helpers.
+//! - `hook` contains the pending/active hook lifecycle tables used by endpoint runtime code.
+//! - `endpoint` ties those pieces together into the runtime-facing protocol endpoint API.
 
 mod endpoint;
 mod hook;

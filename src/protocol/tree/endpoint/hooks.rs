@@ -61,6 +61,8 @@ impl ProtocolEndpoint {
         };
 
         if active.peer_path != header.src_path {
+            // A reused hook id from the wrong peer is treated as terminal for this hook,
+            // because the endpoint can no longer trust future traffic on it.
             self.hooks.remove_active(&key);
             return Ok(EndpointOutcome::event(LocalEvent::Fault {
                 header: PacketHeader {
@@ -77,6 +79,7 @@ impl ProtocolEndpoint {
         }
 
         if active.procedure_id != message.procedure_id {
+            // Data frames stay bound to the procedure chosen by the original call.
             return Ok(EndpointOutcome::dropped());
         }
 
@@ -127,6 +130,8 @@ impl ProtocolEndpoint {
     pub(crate) fn valid_source_for_ingress(&self, ingress: &Ingress, src_path: &[String]) -> bool {
         match ingress {
             Ingress::Parent => {
+                // Parent ingress may carry packets from ancestors, siblings, or the endpoint
+                // itself, but not from descendants pretending to be upstream.
                 if src_path.len() < self.path.len() {
                     return true;
                 }
