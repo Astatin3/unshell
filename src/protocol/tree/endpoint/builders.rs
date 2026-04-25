@@ -167,7 +167,10 @@ impl ProtocolEndpoint {
 
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_call(header, call),
-            route => Ok(EndpointOutcome::forward(route, encode_packet(&header, &call)?)),
+            route => Ok(EndpointOutcome::forward(
+                route,
+                encode_packet(&header, &call)?,
+            )),
         }
     }
 
@@ -179,7 +182,8 @@ impl ProtocolEndpoint {
         data: Vec<u8>,
         end_hook: bool,
     ) -> Result<FrameBytes, EndpointError> {
-        let (header, message) = self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
+        let (header, message) =
+            self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
         Ok(encode_packet(&header, &message)?)
     }
 
@@ -191,7 +195,8 @@ impl ProtocolEndpoint {
         data: Vec<u8>,
         end_hook: bool,
     ) -> Result<EndpointOutcome, EndpointError> {
-        let (header, message) = self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
+        let (header, message) =
+            self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
 
         if end_hook {
             let sender_key = self
@@ -205,7 +210,10 @@ impl ProtocolEndpoint {
 
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_data(header, message),
-            route => Ok(EndpointOutcome::forward(route, encode_packet(&header, &message)?)),
+            route => Ok(EndpointOutcome::forward(
+                route,
+                encode_packet(&header, &message)?,
+            )),
         }
     }
 }

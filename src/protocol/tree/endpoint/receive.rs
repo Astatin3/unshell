@@ -49,7 +49,11 @@ impl ProtocolEndpoint {
             Some(leaf_name) => self
                 .leaves
                 .get(leaf_name)
-                .map(|leaf| leaf.procedures.iter().any(|procedure| procedure == &message.procedure_id))
+                .map(|leaf| {
+                    leaf.procedures
+                        .iter()
+                        .any(|procedure| procedure == &message.procedure_id)
+                })
                 .unwrap_or(false),
             None => self.endpoint_procedures.contains(&message.procedure_id),
         };
@@ -105,12 +109,15 @@ impl Endpoint for ProtocolEndpoint {
                     RouteDecision::Child(index) => {
                         Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
                     }
-                    RouteDecision::Parent => Ok(EndpointOutcome::forward(RouteDecision::Parent, frame)),
+                    RouteDecision::Parent => {
+                        Ok(EndpointOutcome::forward(RouteDecision::Parent, frame))
+                    }
                     RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
                     RouteDecision::Local => {
                         let (header, payload) = parsed.into_parts();
-                        let message =
-                            deserialize_archived_bytes::<ArchivedCallMessage, CallMessage>(payload)?;
+                        let message = deserialize_archived_bytes::<ArchivedCallMessage, CallMessage>(
+                            payload,
+                        )?;
                         validate_call(&header, &message)?;
                         self.handle_local_call(header, message)
                     }

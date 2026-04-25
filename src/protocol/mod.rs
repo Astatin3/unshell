@@ -14,8 +14,7 @@ pub use codec::{
     encode_packet,
 };
 pub use introspection::{
-    EndpointIntrospection, INTROSPECTION_PROCEDURE_ID, LeafIntrospection,
-    LeafIntrospectionSummary,
+    EndpointIntrospection, INTROSPECTION_PROCEDURE_ID, LeafIntrospection, LeafIntrospectionSummary,
 };
 pub use types::{
     CallMessage, DataMessage, FaultMessage, HookTarget, PacketHeader, PacketType, ProtocolFault,

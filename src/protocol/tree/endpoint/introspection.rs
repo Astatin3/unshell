@@ -70,13 +70,16 @@ impl ProtocolEndpoint {
         }
 
         match self.decide_route(&key.return_path) {
-            super::super::RouteDecision::Local => Ok(EndpointOutcome::event(
-                super::core::LocalEvent::Data {
+            super::super::RouteDecision::Local => {
+                Ok(EndpointOutcome::event(super::core::LocalEvent::Data {
                     header: response_header,
                     message: response,
-                },
+                }))
+            }
+            route => Ok(EndpointOutcome::forward(
+                route,
+                encode_packet(&response_header, &response)?,
             )),
-            route => Ok(EndpointOutcome::forward(route, encode_packet(&response_header, &response)?)),
         }
     }
 }

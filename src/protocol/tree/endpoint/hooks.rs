@@ -32,8 +32,14 @@ impl ProtocolEndpoint {
         let message = FaultMessage { fault };
 
         match self.decide_route(&key.return_path) {
-            RouteDecision::Local => Ok(EndpointOutcome::event(LocalEvent::Fault { header, message })),
-            route => Ok(EndpointOutcome::forward(route, encode_packet(&header, &message)?)),
+            RouteDecision::Local => Ok(EndpointOutcome::event(LocalEvent::Fault {
+                header,
+                message,
+            })),
+            route => Ok(EndpointOutcome::forward(
+                route,
+                encode_packet(&header, &message)?,
+            )),
         }
     }
 
@@ -87,9 +93,15 @@ impl ProtocolEndpoint {
         message: FaultMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
         let hook_id = header.hook_id.expect("validated");
-        if let Some(key) = self.hooks.resolve_active_key(&self.path, hook_id, &header.src_path) {
+        if let Some(key) = self
+            .hooks
+            .resolve_active_key(&self.path, hook_id, &header.src_path)
+        {
             self.hooks.remove_active(&key);
-            return Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }));
+            return Ok(EndpointOutcome::event(LocalEvent::Fault {
+                header,
+                message,
+            }));
         }
 
         let pending_key = HookKey::new(self.path.clone(), hook_id);
@@ -99,7 +111,10 @@ impl ProtocolEndpoint {
             .is_some_and(|pending| pending.caller_src_path == header.src_path)
         {
             self.hooks.remove_pending(&pending_key);
-            return Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }));
+            return Ok(EndpointOutcome::event(LocalEvent::Fault {
+                header,
+                message,
+            }));
         }
 
         Ok(EndpointOutcome::dropped())

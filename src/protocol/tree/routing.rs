@@ -5,7 +5,9 @@ use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 /// Explicit test tree declaration used for configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeNode {
-    Root { children: Vec<Self> },
+    Root {
+        children: Vec<Self>,
+    },
     Endpoint {
         segment: String,
         leaves: Vec<LeafNode>,

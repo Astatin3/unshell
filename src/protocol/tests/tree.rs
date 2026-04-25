@@ -243,7 +243,10 @@ fn pending_hook_fault_is_delivered_before_activation() {
         .expect("pending hook should insert");
 
     let outcome = endpoint
-        .handle_introspection(&header, Some(crate::protocol::tree::HookKey::new(path(&["client"]), 11)))
+        .handle_introspection(
+            &header,
+            Some(crate::protocol::tree::HookKey::new(path(&["client"]), 11)),
+        )
         .expect("introspection should handle pending hook");
 
     assert!(outcome.forward.is_some() || outcome.event.is_some());
