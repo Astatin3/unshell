@@ -2,17 +2,24 @@
 
 use std::hint::black_box;
 
-use unshell::protocol::tree::{ChildRoute, Endpoint, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint};
+use unshell::protocol::tree::{
+    ChildRoute, Endpoint, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint,
+};
 use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
 
 pub fn iterations_from_args(default: usize) -> usize {
     std::env::args()
         .nth(1)
-        .map(|value| value.parse::<usize>().expect("iterations must be a positive integer"))
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("iterations must be a positive integer")
+        })
         .unwrap_or(default)
 }
 
-pub fn run_encode_call(iterations: usize) {
+#[inline(never)]
+pub fn run_encode_call(iterations: usize) -> usize {
     let header = PacketHeader {
         packet_type: PacketType::Call,
         src_path: path(&["root"]),
@@ -26,13 +33,17 @@ pub fn run_encode_call(iterations: usize) {
         response_hook: None,
     };
 
+    let mut checksum = 0usize;
     for _ in 0..iterations {
-        let frame = encode_packet(black_box(&header), black_box(&message)).expect("encode should work");
-        black_box(frame.len());
+        let frame =
+            encode_packet(black_box(&header), black_box(&message)).expect("encode should work");
+        checksum = checksum.wrapping_add(frame.len());
     }
+    black_box(checksum)
 }
 
-pub fn run_decode_call(iterations: usize) {
+#[inline(never)]
+pub fn run_decode_call(iterations: usize) -> usize {
     let header = PacketHeader {
         packet_type: PacketType::Call,
         src_path: path(&["root"]),
@@ -47,14 +58,21 @@ pub fn run_decode_call(iterations: usize) {
     };
     let frame = encode_packet(&header, &message).expect("seed frame should encode");
 
+    let mut checksum = 0usize;
     for _ in 0..iterations {
         let parsed = decode_frame(black_box(frame.as_slice())).expect("decode should work");
         let call = parsed.deserialize_call().expect("call should deserialize");
-        black_box(call.data.len());
+        checksum = checksum
+            .wrapping_add(call.data.len())
+            .wrapping_add(call.procedure_id.len())
+            .wrapping_add(call.response_hook.is_some() as usize);
     }
+    black_box(checksum)
 }
 
-pub fn run_forward_call_receive(iterations: usize) {
+#[inline(never)]
+pub fn run_forward_call_receive(iterations: usize) -> usize {
+    let mut checksum = 0usize;
     for _ in 0..iterations {
         let mut root = ProtocolEndpoint::new(
             Vec::new(),
@@ -76,11 +94,19 @@ pub fn run_forward_call_receive(iterations: usize) {
         let outcome = root
             .receive(&Ingress::Local, frame)
             .expect("forward receive should work");
-        black_box(outcome.forward.is_some());
+        let forwarded = outcome
+            .forward
+            .as_ref()
+            .map(|(route, frame)| route_value(*route).wrapping_add(frame.len()))
+            .unwrap_or_default();
+        checksum = checksum.wrapping_add(forwarded).wrapping_add(outcome.dropped as usize);
     }
+    black_box(checksum)
 }
 
-pub fn run_local_call_receive(iterations: usize) {
+#[inline(never)]
+pub fn run_local_call_receive(iterations: usize) -> usize {
+    let mut checksum = 0usize;
     for _ in 0..iterations {
         let mut endpoint = ProtocolEndpoint::new(
             path(&["worker"]),
@@ -113,14 +139,24 @@ pub fn run_local_call_receive(iterations: usize) {
         let outcome = endpoint
             .receive(&Ingress::Parent, frame)
             .expect("local call should work");
-        match black_box(outcome.event) {
-            Some(LocalEvent::Call { .. }) => {}
+        match outcome.event {
+            Some(LocalEvent::Call { header, message }) => {
+                checksum = checksum
+                    .wrapping_add(header.dst_path.len())
+                    .wrapping_add(header.src_path.len())
+                    .wrapping_add(header.dst_leaf.as_ref().map_or(0, String::len))
+                    .wrapping_add(message.data.len())
+                    .wrapping_add(message.procedure_id.len());
+            }
             other => panic!("expected local call event, got {other:?}"),
         }
     }
+    black_box(checksum)
 }
 
-pub fn run_hook_data_receive(iterations: usize) {
+#[inline(never)]
+pub fn run_hook_data_receive(iterations: usize) -> usize {
+    let mut checksum = 0usize;
     for _ in 0..iterations {
         let mut host = ProtocolEndpoint::new(
             Vec::new(),
@@ -156,13 +192,29 @@ pub fn run_hook_data_receive(iterations: usize) {
         let outcome = host
             .receive(&Ingress::Child(path(&["worker"])), frame)
             .expect("hook data should work");
-        match black_box(outcome.event) {
-            Some(LocalEvent::Data { .. }) => {}
+        match outcome.event {
+            Some(LocalEvent::Data { header, message }) => {
+                checksum = checksum
+                    .wrapping_add(header.hook_id.unwrap_or_default() as usize)
+                    .wrapping_add(message.data.len())
+                    .wrapping_add(message.procedure_id.len())
+                    .wrapping_add(message.end_hook as usize);
+            }
             other => panic!("expected local data event, got {other:?}"),
         }
     }
+    black_box(checksum)
 }
 
 pub fn path(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| String::from(*part)).collect()
+}
+
+fn route_value(route: unshell::protocol::tree::RouteDecision) -> usize {
+    match route {
+        unshell::protocol::tree::RouteDecision::Child(index) => index,
+        unshell::protocol::tree::RouteDecision::Local => usize::MAX - 2,
+        unshell::protocol::tree::RouteDecision::Parent => usize::MAX - 1,
+        unshell::protocol::tree::RouteDecision::Drop => usize::MAX,
+    }
 }

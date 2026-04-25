@@ -3,6 +3,6 @@ mod common;
 
 fn main() {
     let iterations = common::iterations_from_args(1_000);
-    common::run_encode_call(iterations);
-    println!("encode_call iterations={iterations}");
+    let checksum = common::run_encode_call(iterations);
+    println!("encode_call iterations={iterations} checksum={checksum}");
 }
