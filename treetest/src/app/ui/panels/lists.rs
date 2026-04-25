@@ -60,7 +60,7 @@ impl App {
 /// while ground-truth mode intentionally exposes the entire scenario tree.
 pub(crate) fn build_selections(simulation: &Simulation) -> Vec<Selection> {
     let mut selections = Vec::new();
-    let node_ids: Vec<_> = match simulation.inspector_mode {
+    let visible_node_ids: Vec<_> = match simulation.inspector_mode {
         InspectorMode::GroundTruth => simulation.tree.nodes.iter().map(|node| node.id).collect(),
         InspectorMode::Realistic => simulation
             .root_knowledge
@@ -70,7 +70,7 @@ pub(crate) fn build_selections(simulation: &Simulation) -> Vec<Selection> {
             .collect(),
     };
 
-    for node_id in node_ids {
+    for node_id in visible_node_ids {
         let node = simulation.node(node_id);
         selections.push(Selection::Node(node.id));
         match simulation.inspector_mode {

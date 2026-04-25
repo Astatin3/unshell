@@ -32,6 +32,9 @@ impl fmt::Display for ValidationError {
 impl core::error::Error for ValidationError {}
 
 /// Validates packet header invariants from the protocol.
+///
+/// This checks only the header fields themselves. Payload-dependent rules belong
+/// in helpers such as [`validate_call`].
 pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
     match header.packet_type {
         PacketType::Call => {

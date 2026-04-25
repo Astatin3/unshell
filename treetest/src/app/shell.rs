@@ -68,11 +68,19 @@ impl App {
             terminal.draw(|frame| self.render(frame))?;
 
             // Poll with a timeout so redraws stay responsive without busy-spinning.
-            if event::poll(Duration::from_millis(100))?
-                && let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press
-                && !self.handle_key(key.code)?
-            {
+            if !event::poll(Duration::from_millis(100))? {
+                continue;
+            }
+
+            let Event::Key(key) = event::read()? else {
+                continue;
+            };
+
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+
+            if !self.handle_key(key.code)? {
                 break;
             }
         }
@@ -176,14 +184,14 @@ impl App {
     /// so selection repair needs to happen in one dedicated place.
     pub(super) fn refresh_selections(&mut self, preferred_node: Option<NodeId>) {
         // Prefer an explicit node if the caller knows what should stay selected.
-        let current = preferred_node.unwrap_or_else(|| self.selected().node_id());
+        let selected_node_id = preferred_node.unwrap_or_else(|| self.selected().node_id());
         self.selections = ui::build_selections(&self.simulation);
 
         // Fall back to the first row when the previous node disappeared.
         self.selection_index = self
             .selections
             .iter()
-            .position(|selection| selection.node_id() == current)
+            .position(|selection| selection.node_id() == selected_node_id)
             .unwrap_or(0);
     }
 }

@@ -51,30 +51,44 @@ pub struct ParsedFrame<'a> {
 }
 
 impl<'a> ParsedFrame<'a> {
+    /// Returns the deserialized packet header.
+    ///
+    /// The header is owned by `ParsedFrame` because decoding must validate it
+    /// before any routing decision is made.
+    #[must_use]
     pub fn header(&self) -> &PacketHeader {
         &self.header
     }
 
+    /// Returns the header packet type for quick dispatch.
+    #[must_use]
     pub fn packet_type(&self) -> PacketType {
         self.header.packet_type
     }
 
+    /// Returns the raw archived payload section.
+    #[must_use]
     pub fn payload_bytes(&self) -> &'a [u8] {
         self.payload_bytes
     }
 
+    /// Clones the decoded header out of the parsed frame.
+    #[must_use]
     pub fn deserialize_header(&self) -> PacketHeader {
         self.header.clone()
     }
 
+    /// Deserializes the payload as a [`CallMessage`].
     pub fn deserialize_call(&self) -> Result<CallMessage, FrameError> {
         deserialize_archived_bytes::<ArchivedCallMessage, CallMessage>(self.payload_bytes)
     }
 
+    /// Deserializes the payload as a [`DataMessage`].
     pub fn deserialize_data(&self) -> Result<DataMessage, FrameError> {
         deserialize_archived_bytes::<ArchivedDataMessage, DataMessage>(self.payload_bytes)
     }
 
+    /// Deserializes the payload as a [`FaultMessage`].
     pub fn deserialize_fault(&self) -> Result<FaultMessage, FrameError> {
         deserialize_archived_bytes::<ArchivedFaultMessage, FaultMessage>(self.payload_bytes)
     }
@@ -211,10 +225,9 @@ where
 }
 
 fn align_section(bytes: &[u8]) -> AlignedVec {
-    if bytes.as_ptr().align_offset(16) == 0 {
-        // Still need to return AlignedVec for the API, but maybe we can avoid
-        // some overhead. Actually, AlignedVec is just a wrapper around Vec.
-    }
+    // The framed wire format prefixes each archived section with a 4-byte length,
+    // so callers cannot rely on the borrowed slice meeting rkyv's alignment.
+    // Copying into `AlignedVec` keeps the alignment fix local and predictable.
     let mut aligned = AlignedVec::with_capacity(bytes.len());
     aligned.extend_from_slice(bytes);
     aligned

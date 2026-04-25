@@ -32,16 +32,14 @@ impl Simulation {
         match procedure.kind {
             EndpointProcedureKind::Ping => {
                 let reply = format!("pong from {}", self.node(node_id).display_path());
-                let frame = self.nodes[node_id.0]
-                    .endpoint
-                    .make_data(
-                        hook.return_path.clone(),
-                        hook.hook_id,
-                        procedure.procedure_id.clone(),
-                        reply.clone().into_bytes(),
-                        true,
-                    )
-                    .map_err(|error| SimError::Protocol(error.to_string()))?;
+                let frame = self.make_endpoint_data_frame(
+                    node_id,
+                    hook.return_path.clone(),
+                    hook.hook_id,
+                    procedure.procedure_id.clone(),
+                    reply.clone().into_bytes(),
+                    true,
+                )?;
                 self.record_trace(node_id, format!("endpoint sent ping reply: {reply}"));
                 self.process_local_frame(node_id, frame)?;
             }
@@ -54,16 +52,14 @@ impl Simulation {
                 .iter()
                 .enumerate()
                 {
-                    let frame = self.nodes[node_id.0]
-                        .endpoint
-                        .make_data(
-                            hook.return_path.clone(),
-                            hook.hook_id,
-                            procedure.procedure_id.clone(),
-                            text.as_bytes().to_vec(),
-                            index == 2,
-                        )
-                        .map_err(|error| SimError::Protocol(error.to_string()))?;
+                    let frame = self.make_endpoint_data_frame(
+                        node_id,
+                        hook.return_path.clone(),
+                        hook.hook_id,
+                        procedure.procedure_id.clone(),
+                        text.as_bytes().to_vec(),
+                        index == 2,
+                    )?;
                     self.record_trace(node_id, format!("endpoint sent chunk {}", index + 1));
                     self.process_local_frame(node_id, frame)?;
                 }
@@ -80,21 +76,36 @@ impl Simulation {
                         procedure_id: procedure.procedure_id.clone(),
                     },
                 );
-                let frame = self.nodes[node_id.0]
-                    .endpoint
-                    .make_data(
-                        hook.return_path.clone(),
-                        hook.hook_id,
-                        procedure.procedure_id.clone(),
-                        b"chat ready".to_vec(),
-                        false,
-                    )
-                    .map_err(|error| SimError::Protocol(error.to_string()))?;
+                let frame = self.make_endpoint_data_frame(
+                    node_id,
+                    hook.return_path.clone(),
+                    hook.hook_id,
+                    procedure.procedure_id.clone(),
+                    b"chat ready".to_vec(),
+                    false,
+                )?;
                 self.record_trace(node_id, "chat handler opened session".to_owned());
                 self.process_local_frame(node_id, frame)?;
             }
         }
         Ok(())
+    }
+
+    /// Builds one endpoint-originated data frame after application logic decides
+    /// what to send back on an already-validated hook.
+    fn make_endpoint_data_frame(
+        &mut self,
+        node_id: NodeId,
+        return_path: Vec<String>,
+        hook_id: u64,
+        procedure_id: String,
+        data: Vec<u8>,
+        end_hook: bool,
+    ) -> Result<unshell::protocol::FrameBytes, SimError> {
+        self.nodes[node_id.0]
+            .endpoint
+            .make_data(return_path, hook_id, procedure_id, data, end_hook)
+            .map_err(|error| SimError::Protocol(error.to_string()))
     }
 
     /// Resolves one endpoint procedure from the ground-truth node metadata.

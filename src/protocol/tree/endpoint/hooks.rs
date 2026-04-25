@@ -61,6 +61,9 @@ impl ProtocolEndpoint {
         message: DataMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
         let hook_id = header.hook_id.expect("validated");
+        // The hook host can address its hook directly with `self.path + hook_id`.
+        // A non-host peer only knows the hook id it was given earlier, so it must
+        // recover the host-scoped key from active state using its validated path.
         let key = self
             .hooks
             .active(&HookKey::new(self.path.clone(), hook_id))

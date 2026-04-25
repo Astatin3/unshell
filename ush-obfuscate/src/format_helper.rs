@@ -3,6 +3,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Expr, Lit, Token, parse_macro_input};
 
+/// Expands `sym_format!` into a string builder that obfuscates static segments only.
 pub fn sym_format(input: TokenStream) -> TokenStream {
     let PrintlnArgs { format_str, args } = parse_macro_input!(input as PrintlnArgs);
 
@@ -42,9 +43,6 @@ pub fn sym_format(input: TokenStream) -> TokenStream {
                     quote! { #full_spec }
                 };
 
-                // quote! {
-                //     println!(#fmt_spec, #arg);
-                // }
                 parts.push(quote! {
                     format!(#fmt_spec, #arg)
                 });
@@ -105,9 +103,13 @@ impl Parse for PrintlnArgs {
 #[derive(Debug)]
 enum FormatSegment {
     Static(String),
-    Dynamic(String, usize), // format spec, arg index
+    Dynamic(String, usize),
 }
 
+/// Splits a Rust formatting string into literal and replacement segments.
+///
+/// This only handles the subset needed by `sym_format!`: positional replacements in order,
+/// plus escaped braces.
 fn parse_format_string(fmt: &str) -> Vec<FormatSegment> {
     let mut segments = Vec::new();
     let mut current_static = String::new();
@@ -122,13 +124,11 @@ fn parse_format_string(fmt: &str) -> Vec<FormatSegment> {
                 continue;
             }
 
-            // Save current static segment
             if !current_static.is_empty() {
                 segments.push(FormatSegment::Static(current_static.clone()));
                 current_static.clear();
             }
 
-            // Parse format spec
             let mut spec = String::new();
             while let Some(&next_ch) = chars.peek() {
                 if next_ch == '}' {

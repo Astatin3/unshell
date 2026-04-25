@@ -1,4 +1,8 @@
 //! Root-side knowledge learning from returned data.
+//!
+//! The simulator learns only from data that arrives back at the root on a known
+//! hook. This keeps the realistic inspector aligned with what the UI-triggered
+//! action actually observed.
 
 use unshell::protocol::{
     DataMessage, EndpointIntrospection, LeafIntrospection, deserialize_archived_bytes,
@@ -17,23 +21,7 @@ impl Simulation {
         let demo_node = self.node(node_id).clone();
 
         if snapshot.procedure_id.is_empty() {
-            if snapshot.target_leaf.is_some() {
-                if let Ok(introspection) = deserialize_archived_bytes::<
-                    unshell::protocol::introspection::ArchivedLeafIntrospection,
-                    LeafIntrospection,
-                >(&message.data)
-                {
-                    self.root_knowledge
-                        .remember_leaf_introspection(&demo_node, &introspection);
-                }
-            } else if let Ok(introspection) = deserialize_archived_bytes::<
-                unshell::protocol::introspection::ArchivedEndpointIntrospection,
-                EndpointIntrospection,
-            >(&message.data)
-            {
-                self.root_knowledge
-                    .remember_endpoint_introspection(&demo_node, &introspection);
-            }
+            self.learn_from_root_introspection(&snapshot, &demo_node, message);
             return;
         }
 
@@ -51,6 +39,36 @@ impl Simulation {
         {
             self.root_knowledge
                 .remember_leaf_from_spec(&demo_node, leaf_spec);
+        }
+    }
+}
+
+impl Simulation {
+    fn learn_from_root_introspection(
+        &mut self,
+        snapshot: &super::super::types::HookSnapshot,
+        demo_node: &crate::model::DemoNode,
+        message: &DataMessage,
+    ) {
+        if snapshot.target_leaf.is_some() {
+            if let Ok(introspection) = deserialize_archived_bytes::<
+                unshell::protocol::introspection::ArchivedLeafIntrospection,
+                LeafIntrospection,
+            >(&message.data)
+            {
+                self.root_knowledge
+                    .remember_leaf_introspection(demo_node, &introspection);
+            }
+            return;
+        }
+
+        if let Ok(introspection) = deserialize_archived_bytes::<
+            unshell::protocol::introspection::ArchivedEndpointIntrospection,
+            EndpointIntrospection,
+        >(&message.data)
+        {
+            self.root_knowledge
+                .remember_endpoint_introspection(demo_node, &introspection);
         }
     }
 }

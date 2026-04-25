@@ -1,10 +1,12 @@
+//! Base62 encoding helpers plus the AES wrapper used by `ush-obfuscate`.
+
 mod aes;
 mod base62;
 
-// Exports
 pub use aes::{decrypt_aes, decrypt_aes_lines, encrypt_aes, encrypt_aes_lines};
 pub use base62::Base62;
 
+/// Static IV shared by the proc-macro crate and the runtime decoder.
 pub const STATIC_IV: [u8; 16] = [
     0x6d, 0x79, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x5f, 0x69, 0x76, 0x5f, 0x30, 0x31, 0x32,
 ];
@@ -27,12 +29,14 @@ pub const STATIC_BYTE_MAP: [u8; 256] = [
 
 use sha2::{Digest, Sha256};
 
+/// Returns the SHA-256 digest of `input`.
 pub fn hash(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(input);
     hasher.finalize().into()
 }
 
+/// Encodes a `usize` as a big-endian byte slice without leading zero bytes.
 pub fn encode_usize(value: usize) -> Vec<u8> {
     if value == 0 {
         return vec![0];
@@ -42,6 +46,9 @@ pub fn encode_usize(value: usize) -> Vec<u8> {
     bytes[leading_zeros..].to_vec()
 }
 
+/// Decodes a big-endian `usize` previously produced by [`encode_usize`].
+///
+/// The caller must ensure `bytes.len() <= size_of::<usize>()`.
 pub fn decode_usize(bytes: &[u8]) -> usize {
     let mut buf = [0u8; size_of::<usize>()];
     let offset = buf.len() - bytes.len();

@@ -13,40 +13,56 @@ use crate::model::EndpointProcedureSpec;
 /// Root inspector mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectorMode {
+    /// Render the full scenario definition, including information the root has
+    /// not yet learned through traffic or introspection.
     GroundTruth,
+    /// Render only the subset of state the root host could plausibly know.
     Realistic,
 }
 
 /// Learned procedure metadata stored by the root host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LearnedProcedure {
+    /// Stable protocol identifier for the learned procedure.
     pub procedure_id: String,
+    /// Optional human-readable description learned from config or introspection.
     pub description: Option<String>,
 }
 
 /// Learned leaf metadata stored by the root host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LearnedLeaf {
+    /// Leaf name relative to the endpoint path.
     pub leaf_name: String,
+    /// Optional human-readable description for the leaf.
     pub description: Option<String>,
+    /// Procedures currently known on the leaf.
     pub procedures: Vec<LearnedProcedure>,
 }
 
 /// Learned endpoint metadata stored by the root host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LearnedNode {
+    /// Absolute node path from the root.
     pub path: Vec<String>,
+    /// Optional display title shown in the inspector.
     pub title: Option<String>,
+    /// Optional endpoint description shown in the inspector.
     pub description: Option<String>,
+    /// Whether the node is a direct child of the root.
     pub direct_child: bool,
+    /// Endpoint-level procedures known on the node itself.
     pub endpoint_procedures: Vec<LearnedProcedure>,
+    /// Leaf metadata currently known for the node.
     pub leaves: Vec<LearnedLeaf>,
+    /// Whether endpoint introspection definitely ran against this node.
     pub endpoint_introspected: bool,
 }
 
 /// Root-host knowledge accumulated from local configuration and observed traffic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootKnowledge {
+    /// Learned nodes keyed by their absolute path.
     pub nodes: BTreeMap<Vec<String>, LearnedNode>,
 }
 
@@ -58,49 +74,9 @@ impl RootKnowledge {
         };
         for node in &tree.nodes {
             if node.path.is_empty() || node.path.len() == 1 {
-                // Realistic mode intentionally starts with root plus direct children,
-                // not the full transitive tree.
-                let direct_child = node.path.len() == 1;
-                let mut learned = LearnedNode {
-                    path: node.path.clone(),
-                    title: Some(node.title.clone()),
-                    description: Some(node.description.clone()),
-                    direct_child,
-                    endpoint_procedures: Vec::new(),
-                    leaves: Vec::new(),
-                    endpoint_introspected: node.path.is_empty(),
-                };
-
-                if node.path.is_empty() {
-                    // The root always knows its own procedures and leaves because
-                    // those are locally configured, not discovered remotely.
-                    learned.endpoint_procedures = node
-                        .endpoint_procedures
-                        .iter()
-                        .map(|procedure| LearnedProcedure {
-                            procedure_id: procedure.procedure_id.clone(),
-                            description: Some(procedure.description.clone()),
-                        })
-                        .collect();
-                    learned.leaves = node
-                        .leaves
-                        .iter()
-                        .map(|leaf| LearnedLeaf {
-                            leaf_name: leaf.name.clone(),
-                            description: Some(leaf.description.clone()),
-                            procedures: leaf
-                                .procedures
-                                .iter()
-                                .map(|procedure_id| LearnedProcedure {
-                                    procedure_id: procedure_id.clone(),
-                                    description: Some(leaf.description.clone()),
-                                })
-                                .collect(),
-                        })
-                        .collect();
-                }
-
-                knowledge.nodes.insert(node.path.clone(), learned);
+                knowledge
+                    .nodes
+                    .insert(node.path.clone(), initial_learned_node(node));
             }
         }
         knowledge
@@ -223,12 +199,56 @@ impl RootKnowledge {
     }
 }
 
+/// Builds the root's initial record for one statically known node.
+fn initial_learned_node(node: &crate::model::DemoNode) -> LearnedNode {
+    let mut learned = LearnedNode {
+        path: node.path.clone(),
+        title: Some(node.title.clone()),
+        description: Some(node.description.clone()),
+        direct_child: node.path.len() == 1,
+        endpoint_procedures: Vec::new(),
+        leaves: Vec::new(),
+        endpoint_introspected: node.path.is_empty(),
+    };
+
+    if node.path.is_empty() {
+        // The root always knows its own procedures and leaves because those are
+        // locally configured, not discovered remotely.
+        learned.endpoint_procedures = node
+            .endpoint_procedures
+            .iter()
+            .map(|procedure| LearnedProcedure {
+                procedure_id: procedure.procedure_id.clone(),
+                description: Some(procedure.description.clone()),
+            })
+            .collect();
+        learned.leaves = node
+            .leaves
+            .iter()
+            .map(|leaf| LearnedLeaf {
+                leaf_name: leaf.name.clone(),
+                description: Some(leaf.description.clone()),
+                procedures: leaf
+                    .procedures
+                    .iter()
+                    .map(|procedure_id| LearnedProcedure {
+                        procedure_id: procedure_id.clone(),
+                        description: Some(leaf.description.clone()),
+                    })
+                    .collect(),
+            })
+            .collect();
+    }
+
+    learned
+}
+
 /// Returns one learned leaf entry, creating it if necessary.
-fn ensure_leaf<'a>(
-    leaves: &'a mut Vec<LearnedLeaf>,
+fn ensure_leaf(
+    leaves: &mut Vec<LearnedLeaf>,
     leaf_name: String,
     description: Option<String>,
-) -> &'a mut LearnedLeaf {
+) -> &mut LearnedLeaf {
     if let Some(index) = leaves.iter().position(|leaf| leaf.leaf_name == leaf_name) {
         if leaves[index].description.is_none() {
             leaves[index].description = description;

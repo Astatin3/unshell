@@ -21,19 +21,24 @@ use super::super::{HookTable, RouteDecision};
 /// Local connection state used for child route eligibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionState {
+    /// The child exists in the static topology but is not currently routable.
     Unregistered,
+    /// The child may receive routed traffic.
     Registered,
 }
 
 /// Child path plus current registration state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildRoute {
+    /// Absolute child endpoint path.
     pub path: Vec<String>,
+    /// Whether the child currently participates in routing.
     pub state: ConnectionState,
 }
 
 impl ChildRoute {
     /// Convenience constructor for the common registered-child case.
+    #[must_use]
     pub fn registered(path: Vec<String>) -> Self {
         Self {
             path,
@@ -45,14 +50,18 @@ impl ChildRoute {
 /// Test leaf behavior implemented by the endpoint runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeafBehavior {
+    /// Mirrors the incoming payload back over the declared response hook.
     Echo,
 }
 
 /// Static leaf metadata used for procedure dispatch and introspection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeafSpec {
+    /// Stable local leaf name.
     pub name: String,
+    /// Procedures supported by the leaf.
     pub procedures: Vec<String>,
+    /// Built-in behavior used by the lightweight test runtime.
     pub behavior: LeafBehavior,
 }
 
@@ -62,22 +71,28 @@ pub struct LeafSpec {
 /// `PROTOCOL.md` routing and call sections.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ingress {
+    /// Received from the parent link.
     Parent,
+    /// Received from the child at the given absolute path.
     Child(Vec<String>),
+    /// Injected locally by code running on this endpoint.
     Local,
 }
 
 /// Locally delivered protocol events.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocalEvent {
+    /// A call reached this endpoint runtime.
     Call {
         header: PacketHeader,
         message: CallMessage,
     },
+    /// Hook data reached this endpoint runtime.
     Data {
         header: PacketHeader,
         message: DataMessage,
     },
+    /// A protocol fault reached this endpoint runtime.
     Fault {
         header: PacketHeader,
         message: FaultMessage,
@@ -87,15 +102,20 @@ pub enum LocalEvent {
 /// Result of processing one framed packet.
 #[derive(Debug, Default)]
 pub struct EndpointOutcome {
+    /// Forwarding actions to perform after local processing.
     pub forwards: Vec<(RouteDecision, FrameBytes)>,
+    /// Events delivered to local runtime consumers.
     pub events: Vec<LocalEvent>,
+    /// Whether the packet was intentionally dropped with no other side effects.
     pub dropped: bool,
 }
 
 /// Errors returned while decoding or validating a packet.
 #[derive(Debug)]
 pub enum EndpointError {
+    /// The frame could not be decoded.
     Frame(FrameError),
+    /// The decoded packet violated protocol invariants.
     Validation(ValidationError),
 }
 
@@ -124,7 +144,10 @@ impl From<ValidationError> for EndpointError {
 
 /// Public packet-processing trait exposed by the tree runtime.
 pub trait Endpoint {
+    /// Returns the absolute endpoint path.
     fn path(&self) -> &[String];
+
+    /// Processes one incoming frame from the given ingress side.
     fn receive(
         &mut self,
         ingress: &Ingress,

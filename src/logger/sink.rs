@@ -25,6 +25,12 @@ impl CompatibilityLogger {
         Self { min_level }
     }
 
+    /// Returns the minimum severity that passes the filter.
+    #[must_use]
+    pub const fn min_level(&self) -> LogLevel {
+        self.min_level
+    }
+
     /// Returns whether a record at `level` would be accepted.
     ///
     /// # Examples

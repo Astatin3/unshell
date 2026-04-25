@@ -58,6 +58,8 @@ pub fn set_logger(logger: &'static dyn Logger) {
 }
 
 /// Returns the currently installed global logger.
+///
+/// Until [`set_logger`] runs, this returns the internal null sink.
 #[must_use]
 pub fn global_logger() -> &'static dyn Logger {
     GLOBAL_LOGGER.get()
@@ -66,6 +68,8 @@ pub fn global_logger() -> &'static dyn Logger {
 /// Sends a single record through the installed global logger.
 ///
 /// Most code should prefer the exported logging macros.
+/// This helper exists for integrations that already have a preformatted message
+/// and explicit source context.
 pub fn log(level: LogLevel, message: &str, file: Option<&'static str>, line: Option<u32>) {
     global_logger().log(&Record::new(level, message, file, line));
 }

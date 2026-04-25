@@ -1,6 +1,6 @@
 use crate::{STATIC_BYTE_MAP, hash};
 
-// Randomly mapped Base62 characters
+/// Base-62 encoder/decoder with a deterministic per-key character permutation.
 pub struct Base62 {
     charset: [char; 62],
 }
@@ -12,34 +12,32 @@ pub const BASE62_CHARS: [char; 62] = [
     'v', 'w', 'x', 'y', 'z',
 ];
 
-// Const for ratio
+/// `8.0 / log2(62.0)`, used to estimate encoded length from a byte length.
 const ENCODING_RATIO: f64 = 8.0 / 5.954196310386875; // 8.0 / log2(62.0)
 
 impl Base62 {
+    /// Builds the charset permutation for `key` and `nonce`.
     pub fn new(key: &[u8], nonce: usize) -> Self {
-        // Hash key again, for the chance that this random function can be used to derive the key
-        // My solution to not being good at cryptography lol
+        // Re-hash the caller-provided key so charset generation always runs on a fixed-width input.
         let key = hash(key);
 
         let mut charset: [char; 62] = [0 as char; 62];
 
-        // Create a vector of indices from 0 to 61
-        let mut current_indices = (0..62).map(|i| i as usize).collect::<Vec<usize>>();
+        let mut available_positions = (0..62).collect::<Vec<usize>>();
 
-        // Loop through each byte in the key until all chars are filled
-        for i in 0..62 as usize {
-            let rand = STATIC_BYTE_MAP[(key[i as usize % key.len()] as usize + nonce) % 255];
+        for (char_index, ch) in BASE62_CHARS.iter().copied().enumerate() {
+            let random_byte = STATIC_BYTE_MAP[(key[char_index % key.len()] as usize + nonce) % 255];
 
-            let index_index = rand as usize % current_indices.len();
-            let put_index = current_indices.remove(index_index);
+            let choice_index = random_byte as usize % available_positions.len();
+            let charset_index = available_positions.remove(choice_index);
 
-            charset[put_index] = BASE62_CHARS[i];
+            charset[charset_index] = ch;
         }
 
-        return Self { charset };
+        Self { charset }
     }
 
-    // Convert character to base-62 value using custom charset
+    /// Converts a character to its base-62 value in this instance's charset.
     fn char_to_value(&self, ch: char) -> Result<u8, String> {
         self.charset
             .iter()
@@ -49,7 +47,7 @@ impl Base62 {
     }
 
     /// Encodes a byte slice into a base-62 string using a custom character set
-    /// Supports arbitrary length input by using big integer arithmetic
+    /// while preserving leading zero bytes.
     pub fn encode(&self, data: &[u8]) -> String {
         if data.is_empty() {
             return String::new();
@@ -68,7 +66,7 @@ impl Base62 {
         let mut result = Vec::new();
         let mut num = data.to_vec();
 
-        // Convert to base-62 using division
+        // Repeated division keeps the implementation independent from bigint crates.
         while !is_zero(&num) {
             let remainder = div_mod_62(&mut num);
             result.push(self.charset[remainder]);
@@ -85,7 +83,7 @@ impl Base62 {
     }
 
     /// Decodes a base-62 string back into bytes using a custom character set
-    /// Supports arbitrary length output
+    /// while preserving leading zero bytes.
     pub fn decode(&self, encoded: &str) -> Result<Vec<u8>, String> {
         if encoded.is_empty() {
             return Ok(Vec::new());
@@ -102,7 +100,7 @@ impl Base62 {
             return Ok(vec![0; leading_zeros]);
         }
 
-        // Convert base-62 string to bytes using multiplication
+        // Rebuild the big-endian integer via repeated multiply-add.
         let mut num = vec![0u8];
 
         for ch in encoded.chars() {
@@ -117,42 +115,41 @@ impl Base62 {
         Ok(result)
     }
 
+    /// Encodes `data` using the nonce convention shared with [`decode_full`].
     pub fn encode_full(data: &[u8], key: &[u8]) -> String {
-        // Predict the length of the encoded data
-        let length = predict_base62_len(data);
+        let predicted_len = predict_base62_len(data);
 
-        let base = Base62::new(&key, length % 255);
+        let base = Base62::new(key, predicted_len % 255);
         let encoded = base.encode(data);
 
-        // For the case that the encoded length is not equal to the predicted length
-        // The nonce must be derived from this length, so this needs to be ensured
-        //
-        // Re-encode with the correct length
-        if encoded.len() != length {
-            let len = encoded.len();
-            let base = Base62::new(&key, len % 255);
+        // The charset nonce is derived from the final encoded length, so a misprediction must
+        // trigger one more pass with the actual length-derived nonce.
+        if encoded.len() != predicted_len {
+            let actual_len = encoded.len();
+            let base = Base62::new(key, actual_len % 255);
             let encoded = base.encode(data);
 
-            assert_eq!(encoded.len(), len);
+            assert_eq!(encoded.len(), actual_len);
 
             encoded
         } else {
             encoded
         }
     }
+
+    /// Decodes a string previously produced by [`encode_full`].
     pub fn decode_full(data: &str, key: &[u8]) -> Result<Vec<u8>, String> {
-        let base = Base62::new(&key, data.len() % 255);
+        let base = Base62::new(key, data.len() % 255);
         base.decode(data)
     }
 }
 
-// Helper: Check if big integer (as bytes) is zero
+/// Returns whether the big-endian integer represented by `num` is zero.
 fn is_zero(num: &[u8]) -> bool {
     num.iter().all(|&b| b == 0)
 }
 
-// Helper: Divide big integer by 62 and return remainder
-// Modifies num in place to be the quotient
+/// Divides an in-place big-endian integer by `62`, returning the remainder.
 fn div_mod_62(num: &mut Vec<u8>) -> usize {
     let mut remainder = 0u16;
     let mut all_zero = true;
@@ -166,7 +163,7 @@ fn div_mod_62(num: &mut Vec<u8>) -> usize {
         }
     }
 
-    // Remove leading zeros from quotient
+    // Keep a canonical representation so the next loop iteration can stop at `[0]`.
     if all_zero {
         num.clear();
         num.push(0);
@@ -180,8 +177,7 @@ fn div_mod_62(num: &mut Vec<u8>) -> usize {
     remainder as usize
 }
 
-// Helper: Multiply big integer by 62 and add a value
-// Modifies num in place
+/// Multiplies an in-place big-endian integer by `multiplier` and adds `add`.
 fn mul_add(num: &mut Vec<u8>, multiplier: u16, add: u8) {
     let mut carry = add as u16;
 
@@ -191,7 +187,6 @@ fn mul_add(num: &mut Vec<u8>, multiplier: u16, add: u8) {
         carry = product >> 8;
     }
 
-    // Add remaining carry bytes
     while carry > 0 {
         num.insert(0, (carry & 0xFF) as u8);
         carry >>= 8;
@@ -205,22 +200,13 @@ pub fn predict_base62_len(input_bytes: &[u8]) -> usize {
         return 0;
     }
 
-    // 1. Count leading zero bytes.
     let num_leading_zeros = input_bytes.iter().take_while(|&&b| b == 0).count();
-
-    // 2. Calculate length of the rest of the bytes.
     let num_rest_bytes = input_bytes.len() - num_leading_zeros;
 
     if num_rest_bytes == 0 {
-        // If all bytes were zeros, the length is just the number of zeros.
         num_leading_zeros
     } else {
-        // 3. Calculate the mathematical upper bound for the non-zero part.
-        // This is ceil(num_rest_bytes * 8_bits / log2(62))
-        // which is ceil(num_rest_bytes * log_62(256))
         let rest_len = (num_rest_bytes as f64 * ENCODING_RATIO).ceil();
-
-        // 4. Total length is zeros + rest_len
         num_leading_zeros + rest_len as usize
     }
 }

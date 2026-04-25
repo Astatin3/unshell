@@ -25,14 +25,31 @@ impl<T> RouteResolution for T where T: RouteProvider + ?Sized {}
 
 /// Hook storage contract for pending and active protocol flows.
 pub trait HookStore {
+    /// Allocates a hook identifier scoped to `return_path`.
     fn allocate_hook_id(&mut self, return_path: &[String]) -> u64;
+
+    /// Inserts a hook created by an incoming call before the peer is confirmed.
     fn insert_pending(&mut self, pending: PendingHook) -> Result<(), HookConflict>;
+
+    /// Inserts an already-established hook flow.
     fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict>;
+
+    /// Promotes a pending hook once the responding peer is known.
     fn activate_pending(&mut self, key: &HookKey, peer_path: Vec<String>) -> Option<()>;
+
+    /// Removes a pending hook.
     fn remove_pending(&mut self, key: &HookKey) -> Option<PendingHook>;
+
+    /// Removes an active hook.
     fn remove_active(&mut self, key: &HookKey) -> Option<ActiveHook>;
+
+    /// Returns immutable access to a pending hook.
     fn pending(&self, key: &HookKey) -> Option<&PendingHook>;
+
+    /// Returns immutable access to an active hook.
     fn active(&self, key: &HookKey) -> Option<&ActiveHook>;
+
+    /// Returns mutable access to an active hook.
     fn active_mut(&mut self, key: &HookKey) -> Option<&mut ActiveHook>;
 }
 
@@ -76,9 +93,13 @@ impl HookStore for HookTable {
 
 /// Leaf metadata contract used for protocol discovery payloads.
 pub trait LeafMetadata {
+    /// Returns the leaf name exposed in routing and introspection.
     fn leaf_name(&self) -> &str;
+
+    /// Returns the supported canonical procedure identifiers.
     fn procedures(&self) -> &[String];
 
+    /// Builds the compact endpoint-wide discovery record for this leaf.
     fn summary(&self) -> LeafIntrospectionSummary {
         LeafIntrospectionSummary {
             leaf_name: self.leaf_name().into(),
@@ -86,6 +107,7 @@ pub trait LeafMetadata {
         }
     }
 
+    /// Builds the full leaf-specific discovery payload.
     fn introspection(&self) -> LeafIntrospection {
         LeafIntrospection {
             leaf_name: self.leaf_name().into(),
@@ -116,7 +138,10 @@ impl LeafMetadata for LeafNode {
 
 /// Packet processor and local runtime contract for framed protocol traffic.
 pub trait PacketProcessor {
+    /// Returns the endpoint path that owns this processor.
     fn path(&self) -> &[String];
+
+    /// Receives one framed packet from the given ingress side.
     fn receive(
         &mut self,
         ingress: &Ingress,

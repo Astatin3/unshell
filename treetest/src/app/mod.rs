@@ -11,7 +11,7 @@ mod ui;
 use ratatui::DefaultTerminal;
 
 use crate::{
-    model::{NodeId, Selection},
+    model::{NodeId, ScenarioDefinition, Selection},
     scenarios::built_in_scenarios,
     sim::Simulation,
 };
@@ -19,8 +19,10 @@ use crate::{
 /// Errors returned by the TUI application.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
+    /// Terminal setup, teardown, or input/output failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// The simulator rejected an operation or could not advance.
     #[error(transparent)]
     Sim(#[from] crate::sim::SimError),
 }
@@ -32,7 +34,7 @@ pub fn run() -> Result<(), AppError> {
 
 #[derive(Debug)]
 struct App {
-    scenarios: Vec<crate::model::ScenarioDefinition>,
+    scenarios: Vec<ScenarioDefinition>,
     scenario_index: usize,
     simulation: Simulation,
     selection_index: usize,

@@ -1,5 +1,5 @@
 /// Call some other function
-macro_rules! passtrough {
+macro_rules! passthrough {
     ($name:tt, $ref:expr) => {
         pub fn $name(input: TokenStream) -> TokenStream {
             $ref(input)
@@ -42,25 +42,27 @@ pub mod proc_impl {
     unwrap_string!(sym_fn);
 }
 
-#[cfg(feature = "obfuscate_aes")]
+#[cfg(all(feature = "obfuscate_aes", not(feature = "obfuscate_ref")))]
 pub mod proc_impl {
     use proc_macro::TokenStream;
 
-    passtrough!(xor, crate::obfuscate::xor);
-    passtrough!(junk_asm, crate::obfuscate::junk_asm);
+    passthrough!(xor, crate::obfuscate::xor);
+    passthrough!(junk_asm, crate::obfuscate::junk_asm);
 
-    passtrough!(sym, crate::symbolic_aes::aes_str);
-    passtrough!(sym_fn, crate::symbolic_aes::aes_fn_name);
+    passthrough!(sym, crate::symbolic_aes::aes_str);
+    passthrough!(sym_fn, crate::symbolic_aes::aes_fn_name);
 }
 
 #[cfg(feature = "obfuscate_ref")]
 pub mod proc_impl {
     use proc_macro::TokenStream;
-    use syn::{LitStr, parse_macro_input};
 
-    passtrough!(xor, crate::obfuscate::xor);
-    passtrough!(junk_asm, crate::obfuscate::junk_asm);
+    passthrough!(xor, crate::obfuscate::xor);
+    passthrough!(junk_asm, crate::obfuscate::junk_asm);
 
-    passtrough!(sym, crate::symbolic_ref::sym_ref);
-    passtrough!(sym_fn, crate::symbolic_ref::sym_ref_fn);
+    // `sym` and `sym_fn` need one concrete strategy. When both feature flags are enabled,
+    // prefer symbolic references so `cargo clippy --all-features` still selects a single,
+    // deterministic implementation.
+    passthrough!(sym, crate::symbolic_ref::sym_ref);
+    passthrough!(sym_fn, crate::symbolic_ref::sym_ref_fn);
 }

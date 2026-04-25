@@ -20,7 +20,7 @@ impl App {
     pub(crate) fn render(&self, frame: &mut Frame<'_>) {
         // Split the screen into a small header, a large working area, and a
         // persistent status/footer region.
-        let chunks = Layout::default()
+        let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),
@@ -29,9 +29,9 @@ impl App {
             ])
             .split(frame.area());
 
-        self.render_header(frame, chunks[0]);
-        self.render_body(frame, chunks[1]);
-        self.render_footer(frame, chunks[2]);
+        self.render_header(frame, rows[0]);
+        self.render_body(frame, rows[1]);
+        self.render_footer(frame, rows[2]);
     }
 
     /// Renders the scenario header bar.

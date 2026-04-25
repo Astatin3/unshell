@@ -22,6 +22,10 @@ pub use types::{
 };
 pub use validation::{ValidationError, validate_call, validate_header, validate_procedure_id};
 
+/// Encodes a header and payload with the crate's default frame codec.
+///
+/// This is a convenience wrapper around [`RkyvCodec`] for callers that do not
+/// need to choose a codec explicitly.
 pub fn encode_packet<P>(header: &PacketHeader, payload: &P) -> Result<FrameBytes, FrameError>
 where
     P: for<'a> rkyv::Serialize<
@@ -35,6 +39,7 @@ where
     codec::encode_packet(header, payload)
 }
 
+/// Decodes a framed packet with the crate's default frame codec.
 pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
     codec::decode_frame(bytes)
 }

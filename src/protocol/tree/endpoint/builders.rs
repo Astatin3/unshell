@@ -23,6 +23,7 @@ impl ProtocolEndpoint {
     /// let endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
     /// assert!(endpoint.path().is_empty());
     /// ```
+    #[must_use]
     pub fn new(
         path: Vec<String>,
         parent_path: Option<Vec<String>>,
@@ -54,6 +55,7 @@ impl ProtocolEndpoint {
     }
 
     /// Allocates a locally unique hook id.
+    #[must_use]
     pub fn allocate_hook_id(&mut self) -> u64 {
         self.hooks.allocate_hook_id(&self.path)
     }
