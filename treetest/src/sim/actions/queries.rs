@@ -1,4 +1,7 @@
 //! Read-only simulator queries used by tests and UI widgets.
+//!
+//! Keeping these accessors separate makes it clear which simulator APIs mutate
+//! protocol state and which ones merely summarize it for assertions or display.
 
 use crate::model::Selection;
 
@@ -9,6 +12,8 @@ use super::super::types::{RecordedEvent, Simulation};
 impl Simulation {
     /// Returns the latest fault observed at the root, if any.
     pub fn latest_root_fault(&self) -> Option<&FaultMessage> {
+        // Walk newest-to-oldest because the footer and tests only care about the
+        // most recent root-visible result.
         self.recorded_events
             .iter()
             .rev()
@@ -22,6 +27,7 @@ impl Simulation {
 
     /// Returns the latest root data message as utf-8 for tests and status text.
     pub fn latest_root_data_text(&self) -> Option<String> {
+        // Lossy decoding keeps the query usable even for non-text payloads.
         self.recorded_events
             .iter()
             .rev()

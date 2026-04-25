@@ -73,6 +73,23 @@ pub struct DemoNode {
 
 impl DemoNode {
     /// Returns a display path that keeps the root easy to recognize in the UI.
+    ///
+    /// # Example
+    /// ```rust
+    /// use treetest::model::{DemoNode, NodeId};
+    ///
+    /// let node = DemoNode {
+    ///     id: NodeId(0),
+    ///     parent: None,
+    ///     children: Vec::new(),
+    ///     path: vec!["alpha".to_owned()],
+    ///     title: "Alpha".to_owned(),
+    ///     description: String::new(),
+    ///     leaves: Vec::new(),
+    ///     endpoint_procedures: Vec::new(),
+    /// };
+    /// assert_eq!(node.display_path(), "/alpha");
+    /// ```
     pub fn display_path(&self) -> String {
         format_path(&self.path)
     }
@@ -89,6 +106,7 @@ pub struct DemoTree {
 impl DemoTree {
     /// Builds a flattened tree from a recursive specification.
     pub fn from_root(spec: &NodeSpec) -> Self {
+        // Flatten once so later UI and simulation code can use stable ids.
         let mut nodes = Vec::new();
         let mut path_index = BTreeMap::new();
         let root = Self::push_node(spec, None, &[], &mut nodes, &mut path_index);
@@ -106,6 +124,8 @@ impl DemoTree {
         nodes: &mut Vec<DemoNode>,
         path_index: &mut BTreeMap<Vec<String>, NodeId>,
     ) -> NodeId {
+        // Node ids are assigned in insertion order so parent/child relationships
+        // can be expressed without any separate allocation table.
         let id = NodeId(nodes.len());
         let path = if spec.segment.is_empty() {
             base_path.to_vec()
@@ -130,6 +150,7 @@ impl DemoTree {
         let child_ids = spec
             .children
             .iter()
+            // Recurse after inserting the parent so children can record `parent: Some(id)`.
             .map(|child| Self::push_node(child, Some(id), &path, nodes, path_index))
             .collect::<Vec<_>>();
         nodes[id.0].children = child_ids;
@@ -137,6 +158,9 @@ impl DemoTree {
     }
 
     /// Returns the node with the given id.
+    ///
+    /// Rationale: indexing by `NodeId` keeps later code short and avoids passing
+    /// mutable references deep through the UI and simulator layers.
     pub fn node(&self, id: NodeId) -> &DemoNode {
         &self.nodes[id.0]
     }
@@ -175,6 +199,11 @@ pub struct ScenarioDefinition {
 }
 
 /// Formats a path the same way throughout the UI and tests.
+///
+/// # Example
+/// ```rust
+/// assert_eq!(treetest::model::format_path(&[]), "/");
+/// ```
 pub fn format_path(path: &[String]) -> String {
     if path.is_empty() {
         "/".to_owned()
@@ -184,11 +213,21 @@ pub fn format_path(path: &[String]) -> String {
 }
 
 /// Formats a leaf reference using the protocol document's descriptive syntax.
+///
+/// # Example
+/// ```rust
+/// assert_eq!(treetest::model::format_leaf_ref(&["a".into()], "echo"), "/a { leaf: echo }");
+/// ```
 pub fn format_leaf_ref(path: &[String], leaf_name: &str) -> String {
     format!("{} {{ leaf: {} }}", format_path(path), leaf_name)
 }
 
 /// Formats a hook reference using the protocol document's descriptive syntax.
+///
+/// # Example
+/// ```rust
+/// assert_eq!(treetest::model::format_hook_ref(&[], 7), "/ { hook: 7 }");
+/// ```
 pub fn format_hook_ref(path: &[String], hook_id: u64) -> String {
     format!("{} {{ hook: {} }}", format_path(path), hook_id)
 }

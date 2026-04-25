@@ -18,6 +18,10 @@ use crate::{
 use super::super::App;
 
 impl App {
+    /// Renders the inspector pane for the current selection.
+    ///
+    /// Rationale: the inspector is the only pane whose data source changes with
+    /// inspector mode, so it owns the `ground truth` vs `realistic` branch.
     pub(super) fn render_inspector(&self, frame: &mut Frame<'_>, area: ratatui::layout::Rect) {
         let selection = self.selected();
         let body = match self.simulation.inspector_mode {
@@ -33,6 +37,7 @@ impl App {
         );
     }
 
+    /// Renders the inspector using full scenario truth.
     fn render_ground_truth_inspector(&self, selection: &Selection) -> Text<'static> {
         match selection {
             Selection::Node(node_id) => {
@@ -84,6 +89,7 @@ impl App {
         }
     }
 
+    /// Renders the inspector using only what the root host has learned.
     fn render_realistic_inspector(&self, selection: &Selection) -> Text<'static> {
         match selection {
             Selection::Node(node_id) => {
@@ -133,6 +139,9 @@ impl App {
                     }
                     Text::from(lines)
                 } else {
+                    // Showing an explicit unknown state is better than silently
+                    // falling back to ground truth, because the whole point of
+                    // realistic mode is to expose what the root does not know.
                     Text::from(vec![
                         Line::from(node.display_path()).bold(),
                         Line::from(

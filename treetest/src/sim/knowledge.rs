@@ -51,12 +51,15 @@ pub struct RootKnowledge {
 }
 
 impl RootKnowledge {
+    /// Builds the initial root knowledge from static scenario truth.
     pub(super) fn new(tree: &crate::model::DemoTree) -> Self {
         let mut knowledge = Self {
             nodes: BTreeMap::new(),
         };
         for node in &tree.nodes {
             if node.path.is_empty() || node.path.len() == 1 {
+                // Realistic mode intentionally starts with root plus direct children,
+                // not the full transitive tree.
                 let direct_child = node.path.len() == 1;
                 let mut learned = LearnedNode {
                     path: node.path.clone(),
@@ -69,6 +72,8 @@ impl RootKnowledge {
                 };
 
                 if node.path.is_empty() {
+                    // The root always knows its own procedures and leaves because
+                    // those are locally configured, not discovered remotely.
                     learned.endpoint_procedures = node
                         .endpoint_procedures
                         .iter()
@@ -101,6 +106,7 @@ impl RootKnowledge {
         knowledge
     }
 
+    /// Returns an existing learned node or creates a new placeholder record.
     pub(super) fn ensure_node(&mut self, demo_node: &crate::model::DemoNode) -> &mut LearnedNode {
         let direct_child = demo_node.path.len() == 1;
         self.nodes
@@ -121,6 +127,8 @@ impl RootKnowledge {
         demo_node: &crate::model::DemoNode,
         procedure: &EndpointProcedureSpec,
     ) {
+        // Procedures are keyed by full `procedure_id`, so repeated observation
+        // simply enriches one existing record instead of duplicating it.
         let learned_node = self.ensure_node(demo_node);
         push_procedure(
             &mut learned_node.endpoint_procedures,
@@ -134,6 +142,8 @@ impl RootKnowledge {
         demo_node: &crate::model::DemoNode,
         leaf_spec: &crate::model::LeafSpec,
     ) {
+        // Direct user targeting is enough for the root to remember a leaf exists,
+        // even before remote introspection returns richer confirmation.
         let learned_node = self.ensure_node(demo_node);
         let leaf = ensure_leaf(
             &mut learned_node.leaves,
@@ -154,6 +164,8 @@ impl RootKnowledge {
         demo_node: &crate::model::DemoNode,
         introspection: &EndpointIntrospection,
     ) {
+        // Endpoint introspection is the moment a node becomes explicitly known to
+        // have been queried rather than merely inferred by path.
         let learned_node = self.ensure_node(demo_node);
         learned_node.endpoint_introspected = true;
         for summary in &introspection.leaves {
@@ -195,18 +207,23 @@ impl RootKnowledge {
     }
 
     pub(super) fn clear_deeper_than_one_hop(&mut self) {
+        // This powers the realistic-mode reset, which forgets transitive state
+        // and keeps only root-local plus direct-child knowledge.
         self.nodes.retain(|path, _| path.len() <= 1);
     }
 
+    /// Returns one learned node by absolute path.
     pub fn node(&self, path: &[String]) -> Option<&LearnedNode> {
         self.nodes.get(path)
     }
 
+    /// Returns every path currently known to the root host.
     pub fn known_paths(&self) -> Vec<Vec<String>> {
         self.nodes.keys().cloned().collect()
     }
 }
 
+/// Returns one learned leaf entry, creating it if necessary.
 fn ensure_leaf<'a>(
     leaves: &'a mut Vec<LearnedLeaf>,
     leaf_name: String,
@@ -227,6 +244,7 @@ fn ensure_leaf<'a>(
     leaves.last_mut().expect("just pushed")
 }
 
+/// Inserts or enriches one learned procedure entry.
 fn push_procedure(
     procedures: &mut Vec<LearnedProcedure>,
     procedure_id: String,
@@ -236,6 +254,8 @@ fn push_procedure(
         .iter_mut()
         .find(|procedure| procedure.procedure_id == procedure_id)
     {
+        // Preserve the first available description, then upgrade missing details
+        // later if richer information is learned from introspection or config.
         if existing.description.is_none() {
             existing.description = description;
         }

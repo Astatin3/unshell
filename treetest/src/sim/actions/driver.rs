@@ -1,4 +1,8 @@
 //! Simulator stepping helpers.
+//!
+//! These helpers are intentionally tiny. They advance the mailboxes one frame at
+//! a time or until idle, which keeps the step-by-step demo behavior deterministic
+//! and easy to explain in the UI.
 
 use crossbeam_channel::TryRecvError;
 use unshell::protocol::decode_frame;
@@ -28,6 +32,8 @@ impl Simulation {
                     return Ok(true);
                 }
                 Err(TryRecvError::Disconnected) => {
+                    // A disconnected mailbox means the simulated topology is no
+                    // longer internally consistent, so surface it as a hard error.
                     return Err(SimError::Protocol("mailbox disconnected".to_owned()));
                 }
                 Err(TryRecvError::Empty) => {}
