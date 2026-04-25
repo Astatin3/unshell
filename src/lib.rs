@@ -11,9 +11,15 @@
 
 #![no_std]
 
-extern crate alloc;
+pub extern crate alloc;
+// Re-export derive macros against a stable `::unshell` path, including when the
+// macros are used inside this crate's own examples and tests.
+#[allow(unused_extern_crates)]
+extern crate self as unshell;
 
 pub mod logger;
 pub mod protocol;
+
+pub use unshell_macros::Leaf;
 
 // pub use ush_obfuscate as obfuscate;

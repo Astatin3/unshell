@@ -4,6 +4,7 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 members = [
     "ush-obfuscate",
     "base62",
+    "unshell-macros",
     "treetest",
 ]
 resolver = "2"
@@ -21,6 +22,9 @@ rkyv             = "0.8.16"
 thiserror        = "2.0.18"
 chrono           = "0.4.44"
 static_init      = "1.0.4"
+syn               = "2.0.117"
+quote             = "1.0.45"
+proc-macro2       = "1.0.106"
 unshell          = { path = "." }
 # ush-obfuscate = { path = "./ush-obfuscate" }
 # base62        = { path = "./base62" }
@@ -44,6 +48,7 @@ thiserror         = { workspace = true, optional = true }
 chrono            = { workspace = true, optional = true }
 # ush-obfuscate     = { workspace = true }
 static_init       = { workspace = true }
+unshell-macros    = { path = "./unshell-macros" }
 
 [profile.minimize]
 inherits = "release"

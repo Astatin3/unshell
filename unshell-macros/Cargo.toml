@@ -1,0 +1,13 @@
+[package]
+name = "unshell-macros"
+version.workspace = true
+edition.workspace = true
+description = "Proc macros for unshell leaf declarations"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { workspace = true, features = ["full"] }
+quote = { workspace = true }
+proc-macro2 = { workspace = true }

@@ -7,6 +7,7 @@
 
 mod endpoint;
 mod hook;
+mod leaf;
 mod routing;
 
 pub use endpoint::{
@@ -14,6 +15,7 @@ pub use endpoint::{
     LocalEvent, ProtocolEndpoint,
 };
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
+pub use leaf::{ProtocolLeaf, derive_leaf_name};
 pub use routing::{
     CompiledRoutes, DefaultRouteProvider, LeafNode, RouteDecision, RouteProvider, TreeNode,
     is_prefix, route_destination,

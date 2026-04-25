@@ -1,0 +1,224 @@
+//! Application-facing leaf metadata helpers.
+//!
+//! The protocol runtime itself only knows about `LeafSpec` metadata and validated
+//! `LocalEvent::Call` delivery. This trait sits one layer above that runtime so
+//! application code can declare canonical leaf names and procedure ids once and
+//! then reuse the generated metadata when building endpoints and dispatching calls.
+
+use alloc::{string::String, vec::Vec};
+
+use super::LeafSpec;
+
+/// Static metadata for one application-defined protocol leaf.
+pub trait ProtocolLeaf {
+    /// Returns the canonical dotted leaf name hosted by this type.
+    fn leaf_name() -> String;
+
+    /// Returns the local procedure suffixes supported by this leaf.
+    fn procedure_suffixes() -> &'static [&'static str];
+
+    /// Resolves one local procedure suffix to its full canonical `procedure_id`.
+    fn procedure_id(suffix: &str) -> Option<String> {
+        if !Self::procedure_suffixes().contains(&suffix) {
+            return None;
+        }
+
+        let mut procedure_id = Self::leaf_name();
+        procedure_id.push('.');
+        procedure_id.push_str(suffix);
+        Some(procedure_id)
+    }
+
+    /// Returns the full canonical `procedure_id` values supported by this leaf.
+    fn procedure_ids() -> Vec<String> {
+        Self::procedure_suffixes()
+            .iter()
+            .filter_map(|suffix| Self::procedure_id(suffix))
+            .collect()
+    }
+
+    /// Materializes the runtime leaf metadata consumed by `ProtocolEndpoint`.
+    fn leaf_spec() -> LeafSpec {
+        LeafSpec {
+            name: Self::leaf_name(),
+            procedures: Self::procedure_ids(),
+        }
+    }
+}
+
+/// Builds one canonical dotted leaf id from crate-local metadata plus optional
+/// user overrides.
+///
+/// Rationale: derive macros cannot reliably inspect Cargo workspace metadata, but
+/// they can always access the current package name, module path, crate version,
+/// and Rust type name at the expansion site. This helper normalizes those inputs
+/// into one stable dotted identifier without leaking Rust separators or casing
+/// into protocol-visible names.
+pub fn derive_leaf_name(
+    package_name: &str,
+    version_major: &str,
+    version_minor: &str,
+    version_patch: &str,
+    module_path: &str,
+    type_name: &str,
+    org: Option<&str>,
+    product: Option<&str>,
+    version: Option<&str>,
+    leaf_name: Option<&str>,
+    id: Option<&str>,
+) -> String {
+    if let Some(id) = id.filter(|value| !value.is_empty()) {
+        return normalize_leaf_path(id);
+    }
+
+    let package_segment = normalize_leaf_segment(package_name);
+    let mut segments = Vec::new();
+    segments.push(normalize_leaf_segment(org.unwrap_or(package_name)));
+    segments.push(normalize_leaf_segment(product.unwrap_or(package_name)));
+    segments.push(normalize_version_segment(version.unwrap_or(
+        &alloc::format!("v{}_{}_{}", version_major, version_minor, version_patch),
+    )));
+
+    if let Some(leaf_name) = leaf_name.filter(|value| !value.is_empty()) {
+        segments.extend(split_leaf_path(leaf_name));
+    } else {
+        let mut module_segments = module_path
+            .split("::")
+            .map(normalize_leaf_segment)
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>();
+        if module_segments
+            .first()
+            .is_some_and(|segment| segment == &package_segment)
+        {
+            module_segments.remove(0);
+        }
+        segments.extend(module_segments);
+        segments.push(normalize_leaf_segment(type_name));
+    }
+
+    segments.join(".")
+}
+
+fn normalize_leaf_path(value: &str) -> String {
+    split_leaf_path(value).join(".")
+}
+
+fn split_leaf_path(value: &str) -> Vec<String> {
+    value
+        .split('.')
+        .map(normalize_leaf_segment)
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+fn normalize_version_segment(value: &str) -> String {
+    let normalized = normalize_leaf_segment(value);
+    if normalized.starts_with('v') && normalized.len() > 1 {
+        normalized
+    } else {
+        alloc::format!("v{}", normalized)
+    }
+}
+
+fn normalize_leaf_segment(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    let mut previous_was_separator = false;
+
+    for character in value.chars() {
+        if character.is_ascii_uppercase() {
+            if !normalized.is_empty() && !previous_was_separator {
+                normalized.push('_');
+            }
+            normalized.push(character.to_ascii_lowercase());
+            previous_was_separator = false;
+            continue;
+        }
+
+        if character.is_ascii_lowercase() || character.is_ascii_digit() {
+            normalized.push(character);
+            previous_was_separator = false;
+            continue;
+        }
+
+        if !normalized.is_empty() && !previous_was_separator {
+            normalized.push('_');
+            previous_was_separator = true;
+        }
+    }
+
+    while normalized.ends_with('_') {
+        normalized.pop();
+    }
+
+    if normalized.is_empty() {
+        String::from("leaf")
+    } else {
+        normalized
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::derive_leaf_name;
+
+    #[test]
+    fn derive_leaf_name_normalizes_inputs_into_dotted_segments() {
+        assert_eq!(
+            derive_leaf_name(
+                "unshell-core",
+                "0",
+                "1",
+                "0",
+                "unshell_core::examples::demo_shell",
+                "ShellLeaf",
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+            "unshell_core.unshell_core.v0_1_0.examples.demo_shell.shell_leaf"
+        );
+    }
+
+    #[test]
+    fn derive_leaf_name_applies_partial_overrides() {
+        assert_eq!(
+            derive_leaf_name(
+                "unshell-core",
+                "0",
+                "1",
+                "0",
+                "unshell_core::examples::demo_shell",
+                "ShellLeaf",
+                Some("org"),
+                Some("product"),
+                Some("v1.2.3.4"),
+                Some("echo.shell"),
+                None,
+            ),
+            "org.product.v1_2_3_4.echo.shell"
+        );
+    }
+
+    #[test]
+    fn derive_leaf_name_id_override_wins() {
+        assert_eq!(
+            derive_leaf_name(
+                "unshell-core",
+                "0",
+                "1",
+                "0",
+                "unshell_core::examples::demo_shell",
+                "ShellLeaf",
+                Some("org"),
+                Some("product"),
+                Some("v1"),
+                Some("echo"),
+                Some("org.example.v1.echo.abc"),
+            ),
+            "org.example.v1.echo.abc"
+        );
+    }
+}
