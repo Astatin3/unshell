@@ -10,7 +10,6 @@ use unshell::protocol::tree::{ChildRoute, EndpointOutcome, LocalEvent, ProtocolE
 pub const LISTEN_ADDR: &str = "127.0.0.1:4444";
 
 #[derive(Leaf)]
-#[leaf(org = "org", product = "example", version = "v1", leaf_name = "shell")]
 #[leaf(procedures(start))]
 pub struct RemoteShellLeaf;
 

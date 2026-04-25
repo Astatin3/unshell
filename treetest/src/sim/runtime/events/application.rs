@@ -36,7 +36,10 @@ impl Simulation {
                         message.data.clone(),
                         true,
                     )?;
-                    self.record_trace(node_id, format!("leaf {leaf_name} echoed {} bytes", message.data.len()));
+                    self.record_trace(
+                        node_id,
+                        format!("leaf {leaf_name} echoed {} bytes", message.data.len()),
+                    );
                     self.process_outcome(node_id, outcome)?;
                 }
             }
