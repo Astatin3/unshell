@@ -9,7 +9,7 @@ use crate::protocol::{
     DataMessage, FaultMessage, PacketHeader, PacketType, ProtocolFault, encode_packet,
 };
 
-use super::super::{HookKey, RouteDecision, route_destination};
+use super::super::{HookKey, RouteDecision};
 use super::core::{EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint};
 
 impl ProtocolEndpoint {
@@ -23,6 +23,7 @@ impl ProtocolEndpoint {
             return Ok(EndpointOutcome::dropped());
         };
 
+        self.hooks.remove_pending(&key);
         self.hooks.remove_active(&key);
 
         let header = PacketHeader {
@@ -82,7 +83,7 @@ impl ProtocolEndpoint {
             return Ok(EndpointOutcome::dropped());
         }
 
-        if message.end_hook {
+        if message.end_hook && self.hooks.mark_peer_end(&key) {
             self.hooks.remove_active(&key);
         }
 
@@ -100,7 +101,16 @@ impl ProtocolEndpoint {
             header.hook_id.expect("validated"),
             &header.src_path,
         ) else {
-            return Ok(EndpointOutcome::dropped());
+            let key = HookKey::new(self.path.clone(), header.hook_id.expect("validated"));
+            let matches_pending = self
+                .hooks
+                .pending(&key)
+                .is_some_and(|pending| pending.caller_src_path == header.src_path);
+            if !matches_pending {
+                return Ok(EndpointOutcome::dropped());
+            }
+            self.hooks.remove_pending(&key);
+            return Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }));
         };
 
         self.hooks.remove_active(&key);
@@ -110,18 +120,7 @@ impl ProtocolEndpoint {
 
     /// Chooses the next hop using the protocol's longest-prefix routing rule.
     pub(crate) fn decide_route(&self, dst_path: &[String]) -> RouteDecision {
-        let child_paths = self
-            .children
-            .iter()
-            .filter(|child| child.state == super::core::ConnectionState::Registered)
-            .map(|child| &child.path);
-
-        route_destination(
-            &self.path,
-            child_paths,
-            self.parent_path.is_some(),
-            dst_path,
-        )
+        self.routing.route(dst_path)
     }
 
     /// Validates whether a source path is attributable to the ingress side.

@@ -1,6 +1,6 @@
 //! Path routing helpers and explicit enum tree declarations.
 
-use alloc::{string::String, vec::Vec};
+use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 
 /// Explicit test tree declaration used for configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +65,93 @@ pub enum RouteDecision {
     Parent,
     /// Silently drop.
     Drop,
+}
+
+/// One compiled routing table for one endpoint boundary.
+#[derive(Debug, Clone, Default)]
+pub struct CompiledRoutes {
+    local_path: Vec<String>,
+    has_parent: bool,
+    nodes: Vec<RouteTrieNode>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RouteTrieNode {
+    best_child: Option<usize>,
+    edges: BTreeMap<String, usize>,
+}
+
+impl CompiledRoutes {
+    /// Compiles the registered-child prefixes into a trie once.
+    #[must_use]
+    pub fn new(local_path: &[String], child_paths: &[Vec<String>], has_parent: bool) -> Self {
+        let mut table = Self {
+            local_path: local_path.to_vec(),
+            has_parent,
+            nodes: vec![RouteTrieNode::default()],
+        };
+
+        for (index, child_path) in child_paths.iter().enumerate() {
+            table.insert_child(index, child_path);
+        }
+
+        table
+    }
+
+    fn insert_child(&mut self, index: usize, child_path: &[String]) {
+        if !is_prefix(&self.local_path, child_path) || child_path.len() <= self.local_path.len() {
+            return;
+        }
+
+        let mut node_index = 0usize;
+        for segment in &child_path[self.local_path.len()..] {
+            let next_index = if let Some(next_index) = self.nodes[node_index].edges.get(segment) {
+                *next_index
+            } else {
+                let next_index = self.nodes.len();
+                self.nodes.push(RouteTrieNode::default());
+                self.nodes[node_index]
+                    .edges
+                    .insert(segment.clone(), next_index);
+                next_index
+            };
+            node_index = next_index;
+        }
+
+        self.nodes[node_index].best_child = Some(index);
+    }
+
+    /// Resolves one destination path using one segment walk.
+    #[must_use]
+    pub fn route(&self, dst_path: &[String]) -> RouteDecision {
+        if !is_prefix(&self.local_path, dst_path) {
+            return if self.has_parent {
+                RouteDecision::Parent
+            } else {
+                RouteDecision::Drop
+            };
+        }
+
+        let mut best_child = None;
+        let mut node_index = 0usize;
+        for segment in &dst_path[self.local_path.len()..] {
+            let Some(next_index) = self.nodes[node_index].edges.get(segment) else {
+                break;
+            };
+            node_index = *next_index;
+            if let Some(index) = self.nodes[node_index].best_child {
+                best_child = Some(index);
+            }
+        }
+
+        if let Some(index) = best_child {
+            return RouteDecision::Child(index);
+        }
+        if self.local_path == dst_path {
+            return RouteDecision::Local;
+        }
+        RouteDecision::Drop
+    }
 }
 
 /// Returns `true` if `prefix` is a path prefix of `path`.
@@ -163,6 +250,24 @@ mod tests {
             ),
             RouteDecision::Child(1)
         );
+    }
+
+    #[test]
+    fn compiled_routes_choose_longest_prefix_without_child_scan() {
+        let table = CompiledRoutes::new(
+            &[String::from("a")],
+            &[
+                vec![String::from("a"), String::from("b")],
+                vec![String::from("a"), String::from("x")],
+            ],
+            true,
+        );
+
+        assert_eq!(
+            table.route(&[String::from("a"), String::from("b"), String::from("c")]),
+            RouteDecision::Child(0)
+        );
+        assert_eq!(table.route(&[String::from("z")]), RouteDecision::Parent);
     }
 
     #[test]

@@ -5,13 +5,13 @@
 
 use alloc::{collections::BTreeSet, string::String, vec::Vec};
 
-use crate::protocol::tree::ActiveHook;
+use crate::protocol::tree::{ActiveHook, HookKey};
 use crate::protocol::{
     CallMessage, DataMessage, FrameBytes, HookTarget, PacketHeader, PacketType, ValidationError,
     encode_packet, validate_call, validate_header, validate_procedure_id,
 };
 
-use super::super::RouteDecision;
+use super::super::{CompiledRoutes, RouteDecision};
 use super::core::{ChildRoute, EndpointError, EndpointOutcome, ProtocolEndpoint};
 use crate::protocol::tree::LeafSpec;
 
@@ -63,6 +63,8 @@ impl ProtocolEndpoint {
                     peer_path: header.dst_path.clone(),
                     procedure_id: call.procedure_id.clone(),
                     dst_leaf: header.dst_leaf.clone(),
+                    local_ended: false,
+                    peer_ended: false,
                 })
                 .is_err()
         {
@@ -114,9 +116,15 @@ impl ProtocolEndpoint {
         children: Vec<ChildRoute>,
         leaves: Vec<LeafSpec>,
     ) -> Self {
+        let registered_children = children
+            .iter()
+            .filter(|child| child.state == super::core::ConnectionState::Registered)
+            .map(|child| child.path.clone())
+            .collect::<Vec<_>>();
+
         Self {
+            routing: CompiledRoutes::new(&path, &registered_children, parent_path.is_some()),
             path,
-            parent_path,
             children,
             leaves: leaves
                 .into_iter()
@@ -201,6 +209,13 @@ impl ProtocolEndpoint {
         end_hook: bool,
     ) -> Result<EndpointOutcome, EndpointError> {
         let (header, message) = self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
+
+        if end_hook {
+            let key = HookKey::new(self.path.clone(), hook_id);
+            if self.hooks.mark_local_end(&key) {
+                self.hooks.remove_active(&key);
+            }
+        }
 
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_data(header, message),

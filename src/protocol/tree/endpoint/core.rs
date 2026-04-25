@@ -16,7 +16,7 @@ use crate::protocol::{
     CallMessage, DataMessage, FaultMessage, FrameBytes, FrameError, PacketHeader, ValidationError,
 };
 
-use super::super::{HookTable, RouteDecision};
+use super::super::{CompiledRoutes, HookTable, RouteDecision};
 
 /// Local connection state used for child route eligibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,8 +182,8 @@ pub trait Endpoint {
 #[derive(Debug, Default)]
 pub struct ProtocolEndpoint {
     pub(crate) path: Vec<String>,
-    pub(crate) parent_path: Option<Vec<String>>,
     pub(crate) children: Vec<ChildRoute>,
+    pub(crate) routing: CompiledRoutes,
     pub(crate) leaves: BTreeMap<String, LeafSpec>,
     pub(crate) endpoint_procedures: BTreeSet<String>,
     pub(crate) hooks: HookTable,

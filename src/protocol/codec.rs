@@ -78,6 +78,12 @@ impl<'a> ParsedFrame<'a> {
         self.header.clone()
     }
 
+    /// Consumes the parsed frame and returns its owned header and borrowed payload.
+    #[must_use]
+    pub fn into_parts(self) -> (PacketHeader, &'a [u8]) {
+        (self.header, self.payload_bytes)
+    }
+
     /// Deserializes the payload as a [`CallMessage`].
     pub fn deserialize_call(&self) -> Result<CallMessage, FrameError> {
         deserialize_archived_bytes::<ArchivedCallMessage, CallMessage>(self.payload_bytes)
