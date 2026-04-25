@@ -41,12 +41,6 @@ pub struct ActiveHook {
     pub peer_ended: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct PeerHookKey {
-    hook_id: u64,
-    peer_path: Vec<String>,
-}
-
 /// Duplicate hook insertion error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HookConflict;
@@ -56,7 +50,7 @@ pub struct HookConflict;
 pub struct HookTable {
     pending: BTreeMap<HookKey, PendingHook>,
     active: BTreeMap<HookKey, ActiveHook>,
-    active_by_peer: BTreeMap<PeerHookKey, HookKey>,
+    active_by_peer: BTreeMap<u64, BTreeMap<Vec<String>, HookKey>>,
     next_id: u64,
 }
 
@@ -94,17 +88,19 @@ impl HookTable {
 
     pub fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict> {
         let key = HookKey::new(active.return_path.clone(), active.hook_id);
-        let peer_key = PeerHookKey {
-            hook_id: active.hook_id,
-            peer_path: active.peer_path.clone(),
-        };
         if self.pending.contains_key(&key)
             || self.active.contains_key(&key)
-            || self.active_by_peer.contains_key(&peer_key)
+            || self
+                .active_by_peer
+                .get(&active.hook_id)
+                .is_some_and(|peer_paths| peer_paths.contains_key(active.peer_path.as_slice()))
         {
             return Err(HookConflict);
         }
-        self.active_by_peer.insert(peer_key, key.clone());
+        self.active_by_peer
+            .entry(active.hook_id)
+            .or_default()
+            .insert(active.peer_path.clone(), key.clone());
         self.active.insert(key, active);
         Ok(())
     }
@@ -115,10 +111,12 @@ impl HookTable {
 
     pub fn remove_active(&mut self, key: &HookKey) -> Option<ActiveHook> {
         let active = self.active.remove(key)?;
-        self.active_by_peer.remove(&PeerHookKey {
-            hook_id: active.hook_id,
-            peer_path: active.peer_path.clone(),
-        });
+        if let Some(peer_paths) = self.active_by_peer.get_mut(&active.hook_id) {
+            peer_paths.remove(active.peer_path.as_slice());
+            if peer_paths.is_empty() {
+                self.active_by_peer.remove(&active.hook_id);
+            }
+        }
         Some(active)
     }
 
@@ -147,12 +145,7 @@ impl HookTable {
         if self.active.contains_key(&host_key) {
             return Some(host_key);
         }
-        self.active_by_peer
-            .get(&PeerHookKey {
-                hook_id,
-                peer_path: peer_path.to_vec(),
-            })
-            .cloned()
+        self.active_by_peer.get(&hook_id)?.get(peer_path).cloned()
     }
 
     pub fn mark_local_end(&mut self, key: &HookKey) -> bool {

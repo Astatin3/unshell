@@ -6,7 +6,7 @@ use crate::protocol::{
     introspection::INTROSPECTION_PROCEDURE_ID, validate_call, validate_header,
 };
 
-use super::super::{HookKey, PendingHook, RouteDecision};
+use super::super::{ActiveHook, HookKey, RouteDecision};
 use super::core::{
     Endpoint, EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint,
 };
@@ -22,26 +22,7 @@ impl ProtocolEndpoint {
             .as_ref()
             .map(|hook| HookKey::new(hook.return_path.clone(), hook.hook_id));
 
-        if let Some(hook) = &message.response_hook
-            && hook.return_path != self.path
-            && self
-                .hooks
-                .insert_pending(PendingHook {
-                    return_path: hook.return_path.clone(),
-                    hook_id: hook.hook_id,
-                    caller_src_path: header.src_path.clone(),
-                    procedure_id: message.procedure_id.clone(),
-                    dst_leaf: header.dst_leaf.clone(),
-                })
-                .is_err()
-        {
-            return self.emit_fault_if_possible(key, ProtocolFault::INTERNAL_ERROR);
-        }
-
         if message.procedure_id == INTROSPECTION_PROCEDURE_ID {
-            if let Some(key) = &key {
-                self.hooks.activate_pending(key);
-            }
             return self.handle_introspection(&header, key);
         }
 
@@ -71,10 +52,22 @@ impl ProtocolEndpoint {
             return self.emit_fault_if_possible(key, fault);
         }
 
-        if let Some(key) = &key
-            && self.hooks.activate_pending(key).is_none()
+        if let Some(hook) = &message.response_hook
+            && hook.return_path != self.path
+            && self
+                .hooks
+                .insert_active(ActiveHook {
+                    return_path: hook.return_path.clone(),
+                    hook_id: hook.hook_id,
+                    peer_path: header.src_path.clone(),
+                    procedure_id: message.procedure_id.clone(),
+                    dst_leaf: header.dst_leaf.clone(),
+                    local_ended: false,
+                    peer_ended: false,
+                })
+                .is_err()
         {
-            return self.emit_fault_if_possible(Some(key.clone()), ProtocolFault::INTERNAL_ERROR);
+            return self.emit_fault_if_possible(key, ProtocolFault::INTERNAL_ERROR);
         }
 
         Ok(EndpointOutcome::event(LocalEvent::Call { header, message }))
