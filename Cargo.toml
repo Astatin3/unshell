@@ -1,3 +1,5 @@
+cargo-features = ["trim-paths", "panic-immediate-abort"]
+
 [workspace]
 members = [
     "ush-obfuscate",
@@ -44,6 +46,16 @@ thiserror         = { workspace = true, optional = true }
 chrono            = { workspace = true, optional = true }
 # ush-obfuscate     = { workspace = true }
 static_init       = { workspace = true }
+
+[profile.minimize]
+inherits = "release"
+strip = true             # Strip symbols from the binary
+opt-level = "z"          # Optimize for size
+lto = true               # Link tree optimization
+codegen-units = 1
+panic = "immediate-abort"
+debug = false            # Remove debug
+trim-paths="all"
 
 [lints.rust]
 elided_lifetimes_in_paths          = "warn"

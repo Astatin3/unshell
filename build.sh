@@ -8,9 +8,9 @@
 set -e
 
 OBFUSCATION_KEY=kjwerkwerkjbwejehrwhje \
-cargo build --profile minimize -p ush-payload $@
+cargo build --profile minimize -p treetest $@
 
-export BINARY=./target/minimize/ush-payload
+export BINARY=./target/minimize/treetest
 
 declare -a headers=(
     ".gnu_debuglink" # - Debug information link
@@ -28,9 +28,9 @@ declare -a headers=(
 for section in "${headers[@]}"
 do
     strip --remove-section="$section" $BINARY
-    echo "Removed section header $section"
+    # echo "Removed section header $section"
 done
 
-echo "## STARTING "
+echo "Binary size: $(wc -c $BINARY)"
 
-$BINARY
+# $BINARY
