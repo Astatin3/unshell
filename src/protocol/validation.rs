@@ -60,7 +60,7 @@ pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
     Ok(())
 }
 
-/// Validates the canonical dotted `procedure_id` shape.
+/// Validates the protocol-level `procedure_id` invariant.
 pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> {
     if procedure_id == INTROSPECTION_PROCEDURE_ID {
         return Ok(());
@@ -69,15 +69,6 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
     if procedure_id.is_empty() {
         return Err(ValidationError::ProcedureId(
             "procedure identifier cannot be empty except for introspection",
-        ));
-    }
-
-    if !procedure_id
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
-    {
-        return Err(ValidationError::ProcedureId(
-            "procedure identifier should use alphanumeric characters, dots, and underscores",
         ));
     }
 

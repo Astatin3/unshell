@@ -6,9 +6,9 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use crossbeam_channel::unbounded;
-use unshell::protocol::tree::{ChildRoute, ConnectionState, LeafBehavior, ProtocolEndpoint};
+use unshell::protocol::tree::{ChildRoute, ConnectionState, ProtocolEndpoint};
 
-use crate::model::{DemoTree, LeafKind, NodeId, ScenarioDefinition, Selection};
+use crate::model::{DemoTree, NodeId, ScenarioDefinition, Selection};
 
 use super::knowledge::{InspectorMode, RootKnowledge};
 use super::types::{ChatSession, SimError, SimNode, Simulation};
@@ -53,9 +53,6 @@ impl Simulation {
                 .map(|leaf| unshell::protocol::tree::LeafSpec {
                     name: leaf.name.clone(),
                     procedures: leaf.procedures.clone(),
-                    behavior: match leaf.kind {
-                        LeafKind::Echo => LeafBehavior::Echo,
-                    },
                 })
                 .collect::<Vec<_>>();
 

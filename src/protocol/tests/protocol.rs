@@ -16,11 +16,11 @@ fn packet_framing_roundtrip_preserves_header_and_payload() {
         packet_type: PacketType::Call,
         src_path: path(&["root", "caller"]),
         dst_path: path(&["root", "callee"]),
-        dst_leaf: Some("echo".to_owned()),
+        dst_leaf: Some("service".to_owned()),
         hook_id: None,
     };
     let call = CallMessage {
-        procedure_id: "unshell.echo.v1.alpha.invoke".to_owned(),
+        procedure_id: "example.service.v1.invoke".to_owned(),
         data: vec![1, 2, 3, 4],
         response_hook: Some(HookTarget {
             hook_id: 7,
@@ -45,7 +45,7 @@ fn header_and_call_validation_reject_invalid_combinations() {
         packet_type: PacketType::Data,
         src_path: path(&["peer"]),
         dst_path: path(&["host"]),
-        dst_leaf: Some("echo".to_owned()),
+        dst_leaf: Some("service".to_owned()),
         hook_id: None,
     };
     assert_eq!(
@@ -59,11 +59,11 @@ fn header_and_call_validation_reject_invalid_combinations() {
         packet_type: PacketType::Call,
         src_path: path(&["caller"]),
         dst_path: path(&["callee"]),
-        dst_leaf: Some("echo".to_owned()),
+        dst_leaf: Some("service".to_owned()),
         hook_id: None,
     };
     let invalid_call = CallMessage {
-        procedure_id: "unshell.echo.v1.alpha.invoke".to_owned(),
+        procedure_id: "example.service.v1.invoke".to_owned(),
         data: Vec::new(),
         response_hook: Some(HookTarget {
             hook_id: 5,
@@ -79,18 +79,10 @@ fn header_and_call_validation_reject_invalid_combinations() {
 }
 
 #[test]
-fn procedure_validation_accepts_introspection_and_rejects_bad_shapes() {
+fn procedure_validation_accepts_introspection_and_non_empty_opaque_ids() {
     assert_eq!(validate_procedure_id(""), Ok(()));
-    assert_eq!(
-        validate_procedure_id("unshell.echo.v01.alpha.invoke"),
-        Ok(())
-    );
-    assert_eq!(
-        validate_procedure_id("contains spaces"),
-        Err(ValidationError::ProcedureId(
-            "procedure identifier should use alphanumeric characters, dots, and underscores"
-        ))
-    );
+    assert_eq!(validate_procedure_id("example.service.v01.invoke"), Ok(()));
+    assert_eq!(validate_procedure_id("contains spaces"), Ok(()));
 }
 
 #[test]

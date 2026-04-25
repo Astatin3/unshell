@@ -74,7 +74,7 @@ fn echo_leaf() -> ScenarioDefinition {
         name: "Echo Leaf".to_owned(),
         description: "Call a concrete leaf and watch the hook finish normally.".to_owned(),
         highlights: vec![
-            "The leaf uses the built-in `Echo` behavior from the core runtime.".to_owned(),
+            "The demo application echoes the payload after the protocol runtime delivers the call locally.".to_owned(),
             "The final response sets `end_hook = true`.".to_owned(),
         ],
         root: NodeSpec {

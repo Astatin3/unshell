@@ -9,6 +9,8 @@ pub const INTROSPECTION_PROCEDURE_ID: &str = "";
 /// Endpoint-wide introspection payload.
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct EndpointIntrospection {
+    /// Direct child path segments currently registered under this endpoint.
+    pub sub_endpoints: Vec<String>,
     /// Hosted leaves and their supported procedures.
     pub leaves: Vec<LeafIntrospectionSummary>,
 }

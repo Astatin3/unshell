@@ -6,8 +6,8 @@
 use alloc::vec;
 
 use crate::protocol::{
-    CallMessage, DataMessage, PacketType, ProtocolFault, decode_frame,
-    introspection::INTROSPECTION_PROCEDURE_ID, validate_call, validate_header,
+    CallMessage, PacketType, ProtocolFault, decode_frame, introspection::INTROSPECTION_PROCEDURE_ID,
+    validate_call, validate_header,
 };
 
 use super::super::{HookKey, PendingHook, RouteDecision};
@@ -77,51 +77,10 @@ impl ProtocolEndpoint {
             self.hooks.activate_pending(key, header.src_path.clone());
         }
 
-        match header
-            .dst_leaf
-            .as_ref()
-            .and_then(|name| self.leaves.get(name))
-        {
-            Some(leaf) if leaf.behavior == super::core::LeafBehavior::Echo && key.is_some() => {
-                let hook = message.response_hook.expect("synchronized");
-                let response = DataMessage {
-                    procedure_id: message.procedure_id.clone(),
-                    data: message.data,
-                    end_hook: true,
-                };
-                let response_header = crate::protocol::PacketHeader {
-                    packet_type: PacketType::Data,
-                    src_path: self.path.clone(),
-                    dst_path: hook.return_path.clone(),
-                    dst_leaf: None,
-                    hook_id: Some(hook.hook_id),
-                };
-                let route = self.decide_route(&hook.return_path);
-                self.hooks
-                    .remove_active(&HookKey::new(hook.return_path.clone(), hook.hook_id));
-
-                match route {
-                    RouteDecision::Local => Ok(EndpointOutcome {
-                        events: vec![LocalEvent::Data {
-                            header: response_header,
-                            message: response,
-                        }],
-                        ..EndpointOutcome::default()
-                    }),
-                    _ => {
-                        let frame = crate::protocol::encode_packet(&response_header, &response)?;
-                        Ok(EndpointOutcome {
-                            forwards: vec![(route, frame)],
-                            ..EndpointOutcome::default()
-                        })
-                    }
-                }
-            }
-            _ => Ok(EndpointOutcome {
-                events: vec![LocalEvent::Call { header, message }],
-                ..EndpointOutcome::default()
-            }),
-        }
+        Ok(EndpointOutcome {
+            events: vec![LocalEvent::Call { header, message }],
+            ..EndpointOutcome::default()
+        })
     }
 }
 

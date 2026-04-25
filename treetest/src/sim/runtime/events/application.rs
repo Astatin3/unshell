@@ -7,7 +7,7 @@
 
 use unshell::protocol::{CallMessage, PacketHeader};
 
-use crate::model::{EndpointProcedureKind, EndpointProcedureSpec, NodeId};
+use crate::model::{EndpointProcedureKind, EndpointProcedureSpec, LeafKind, NodeId};
 
 use super::super::super::types::{SimError, Simulation};
 
@@ -17,12 +17,31 @@ impl Simulation {
     pub(super) fn handle_application_call(
         &mut self,
         node_id: NodeId,
-        _header: &PacketHeader,
+        header: &PacketHeader,
         message: &CallMessage,
     ) -> Result<(), SimError> {
         let Some(hook) = &message.response_hook else {
             return Ok(());
         };
+
+        if let Some(leaf_name) = &header.dst_leaf {
+            let leaf = self.require_leaf(node_id, leaf_name)?.clone();
+            match leaf.kind {
+                LeafKind::Echo => {
+                    let frame = self.make_endpoint_data_frame(
+                        node_id,
+                        hook.return_path.clone(),
+                        hook.hook_id,
+                        message.procedure_id.clone(),
+                        message.data.clone(),
+                        true,
+                    )?;
+                    self.record_trace(node_id, format!("leaf {leaf_name} echoed {} bytes", message.data.len()));
+                    self.process_local_frame(node_id, frame)?;
+                }
+            }
+            return Ok(());
+        }
 
         // Clone the procedure spec once so later reply generation can borrow the
         // rest of the simulator state freely.

@@ -47,13 +47,6 @@ impl ChildRoute {
     }
 }
 
-/// Test leaf behavior implemented by the endpoint runtime.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LeafBehavior {
-    /// Mirrors the incoming payload back over the declared response hook.
-    Echo,
-}
-
 /// Static leaf metadata used for procedure dispatch and introspection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeafSpec {
@@ -61,8 +54,6 @@ pub struct LeafSpec {
     pub name: String,
     /// Procedures supported by the leaf.
     pub procedures: Vec<String>,
-    /// Built-in behavior used by the lightweight test runtime.
-    pub behavior: LeafBehavior,
 }
 
 /// Where a frame entered the local endpoint.

@@ -1,7 +1,7 @@
 use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use crate::protocol::tree::{
-    DefaultRouteProvider, Endpoint, Ingress, LeafBehavior, LeafNode, LeafSpec, LocalEvent,
+    ChildRoute, DefaultRouteProvider, Endpoint, Ingress, LeafNode, LeafSpec, LocalEvent,
     ProtocolEndpoint, RouteDecision, RouteProvider, TreeNode,
 };
 use crate::protocol::{
@@ -19,8 +19,8 @@ fn tree_node_paths_flatten_explicitly() {
         children: vec![TreeNode::Endpoint {
             segment: "branch".to_owned(),
             leaves: vec![LeafNode {
-                name: "echo".to_owned(),
-                procedures: vec!["unshell.echo.v1.alpha.invoke".to_owned()],
+                name: "service".to_owned(),
+                procedures: vec!["example.service.v1.invoke".to_owned()],
             }],
             children: vec![TreeNode::Endpoint {
                 segment: "leaf".to_owned(),
@@ -60,11 +60,10 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
     let mut endpoint = ProtocolEndpoint::new(
         path(&["root"]),
         Some(Vec::new()),
-        Vec::new(),
+        vec![ChildRoute::registered(path(&["root", "child"]))],
         vec![LeafSpec {
-            name: "echo".to_owned(),
-            procedures: vec!["unshell.echo.v1.alpha.invoke".to_owned()],
-            behavior: LeafBehavior::Echo,
+            name: "service".to_owned(),
+            procedures: vec!["example.service.v1.invoke".to_owned()],
         }],
     );
 
@@ -96,11 +95,12 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
     .expect("introspection payload should deserialize");
 
     assert!(response.end_hook);
+    assert_eq!(introspection.sub_endpoints, vec!["child".to_owned()]);
     assert_eq!(introspection.leaves.len(), 1);
-    assert_eq!(introspection.leaves[0].leaf_name, "echo");
+    assert_eq!(introspection.leaves[0].leaf_name, "service");
     assert_eq!(
         introspection.leaves[0].procedures,
-        vec!["unshell.echo.v1.alpha.invoke".to_owned()]
+        vec!["example.service.v1.invoke".to_owned()]
     );
 }
 
@@ -113,7 +113,7 @@ fn invalid_hook_peer_emits_local_fault_event() {
         .make_call(
             path(&["server"]),
             None,
-            "unshell.echo.v1.alpha.invoke",
+            "example.service.v1.invoke",
             Some(hook_id),
             vec![1, 2, 3],
         )
@@ -128,7 +128,7 @@ fn invalid_hook_peer_emits_local_fault_event() {
             hook_id: Some(hook_id),
         },
         &DataMessage {
-            procedure_id: "unshell.echo.v1.alpha.invoke".to_owned(),
+            procedure_id: "example.service.v1.invoke".to_owned(),
             data: vec![9],
             end_hook: false,
         },

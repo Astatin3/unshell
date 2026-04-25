@@ -42,6 +42,12 @@ impl ProtocolEndpoint {
             .to_vec()
         } else {
             to_bytes::<RkyvError>(&EndpointIntrospection {
+                sub_endpoints: self
+                    .children
+                    .iter()
+                    .filter(|child| child.state == super::core::ConnectionState::Registered)
+                    .filter_map(|child| child.path.get(self.path.len()).cloned())
+                    .collect(),
                 leaves: self
                     .leaves
                     .values()

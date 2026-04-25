@@ -5,8 +5,8 @@ mod hook;
 mod routing;
 
 pub use endpoint::{
-    ChildRoute, ConnectionState, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafBehavior,
-    LeafSpec, LocalEvent, ProtocolEndpoint,
+    ChildRoute, ConnectionState, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafSpec,
+    LocalEvent, ProtocolEndpoint,
 };
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
 pub use routing::{

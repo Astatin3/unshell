@@ -14,7 +14,7 @@ pub struct NodeId(pub usize);
 /// Supported demo leaf kinds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeafKind {
-    /// Uses the built-in echo leaf behavior from `unshell`.
+    /// Demo leaf that returns the incoming payload through the declared hook.
     Echo,
 }
 
