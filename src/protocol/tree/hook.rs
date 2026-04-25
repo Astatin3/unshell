@@ -22,16 +22,6 @@ impl HookKey {
     }
 }
 
-/// Pending hook context created by a received call.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PendingHook {
-    pub caller_src_path: Vec<String>,
-    pub return_path: Vec<String>,
-    pub hook_id: u64,
-    pub procedure_id: String,
-    pub dst_leaf: Option<String>,
-}
-
 /// Active hook context used for ordinary data traffic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveHook {
@@ -40,7 +30,13 @@ pub struct ActiveHook {
     pub peer_path: Vec<String>,
     pub procedure_id: String,
     pub dst_leaf: Option<String>,
-    pub peer_finished: bool,
+}
+
+/// Peer-scoped index key used by the non-host side of a hook.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct PeerHookKey {
+    hook_id: u64,
+    peer_path: Vec<String>,
 }
 
 /// Duplicate hook insertion error.
@@ -50,16 +46,16 @@ pub struct HookConflict;
 /// Durable hook state tables.
 #[derive(Debug)]
 pub struct HookTable {
-    pending: BTreeMap<HookKey, PendingHook>,
     active: BTreeMap<HookKey, ActiveHook>,
+    active_by_peer: BTreeMap<PeerHookKey, HookKey>,
     next_id: u64,
 }
 
 impl Default for HookTable {
     fn default() -> Self {
         Self {
-            pending: BTreeMap::new(),
             active: BTreeMap::new(),
+            active_by_peer: BTreeMap::new(),
             next_id: 1,
         }
     }
@@ -77,57 +73,29 @@ impl HookTable {
         id
     }
 
-    /// Inserts a pending hook created by an inbound call.
-    pub fn insert_pending(&mut self, pending: PendingHook) -> Result<(), HookConflict> {
-        let key = HookKey::new(pending.return_path.clone(), pending.hook_id);
-        if self.pending.contains_key(&key) || self.active.contains_key(&key) {
-            return Err(HookConflict);
-        }
-        self.pending.insert(key, pending);
-        Ok(())
-    }
-
     /// Inserts an already-active hook flow.
     pub fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict> {
         let key = HookKey::new(active.return_path.clone(), active.hook_id);
-        if self.pending.contains_key(&key) || self.active.contains_key(&key) {
+        let peer_key = PeerHookKey {
+            hook_id: active.hook_id,
+            peer_path: active.peer_path.clone(),
+        };
+        if self.active.contains_key(&key) || self.active_by_peer.contains_key(&peer_key) {
             return Err(HookConflict);
         }
+        self.active_by_peer.insert(peer_key, key.clone());
         self.active.insert(key, active);
         Ok(())
     }
 
-    /// Promotes a pending hook into the active table once its peer is known.
-    pub fn activate_pending(&mut self, key: &HookKey, peer_path: Vec<String>) -> Option<()> {
-        let pending = self.pending.remove(key)?;
-        self.active.insert(
-            key.clone(),
-            ActiveHook {
-                return_path: pending.return_path,
-                hook_id: pending.hook_id,
-                peer_path,
-                procedure_id: pending.procedure_id,
-                dst_leaf: pending.dst_leaf,
-                peer_finished: false,
-            },
-        );
-        Some(())
-    }
-
-    /// Removes a pending hook entry.
-    pub fn remove_pending(&mut self, key: &HookKey) -> Option<PendingHook> {
-        self.pending.remove(key)
-    }
-
     /// Removes an active hook entry.
     pub fn remove_active(&mut self, key: &HookKey) -> Option<ActiveHook> {
-        self.active.remove(key)
-    }
-
-    /// Returns a pending hook by its host-scoped key.
-    #[must_use]
-    pub fn pending(&self, key: &HookKey) -> Option<&PendingHook> {
-        self.pending.get(key)
+        let active = self.active.remove(key)?;
+        self.active_by_peer.remove(&PeerHookKey {
+            hook_id: active.hook_id,
+            peer_path: active.peer_path.clone(),
+        });
+        Some(active)
     }
 
     /// Returns an active hook by its host-scoped key.
@@ -136,34 +104,25 @@ impl HookTable {
         self.active.get(key)
     }
 
-    /// Returns mutable access to an active hook by its host-scoped key.
-    pub fn active_mut(&mut self, key: &HookKey) -> Option<&mut ActiveHook> {
-        self.active.get_mut(key)
-    }
-
-    /// Finds an active hook key for a non-host peer receiving continued data.
-    ///
-    /// Rationale: `hook_id` is scoped to the hook host, so a subordinate peer
-    /// cannot derive the full key from the packet header alone. The peer uses
-    /// its already-validated active state to recover the host-scoped key.
-    pub fn find_active_key_by_peer(&self, hook_id: u64, peer_path: &[String]) -> Option<HookKey> {
-        let mut matching_keys = self
-            .active
-            .iter()
-            .filter(|(_key, active)| active.hook_id == hook_id && active.peer_path == peer_path)
-            .map(|(key, _)| key.clone());
-
-        let key = matching_keys.next()?;
-        if matching_keys.next().is_some() {
-            return None;
-        }
-        Some(key)
-    }
-
-    /// Returns the number of pending hooks.
+    /// Resolves one active hook key from either the host side or the peer side.
     #[must_use]
-    pub fn pending_len(&self) -> usize {
-        self.pending.len()
+    pub fn resolve_active_key(
+        &self,
+        return_path: &[String],
+        hook_id: u64,
+        peer_path: &[String],
+    ) -> Option<HookKey> {
+        let host_key = HookKey::new(return_path.to_vec(), hook_id);
+        if self.active.contains_key(&host_key) {
+            return Some(host_key);
+        }
+
+        self.active_by_peer
+            .get(&PeerHookKey {
+                hook_id,
+                peer_path: peer_path.to_vec(),
+            })
+            .cloned()
     }
 
     /// Returns the number of active hooks.

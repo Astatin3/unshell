@@ -23,7 +23,6 @@ impl ProtocolEndpoint {
             return Ok(EndpointOutcome::dropped());
         };
 
-        self.hooks.remove_pending(&key);
         self.hooks.remove_active(&key);
 
         let header = PacketHeader {
@@ -52,28 +51,12 @@ impl ProtocolEndpoint {
         message: DataMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
         let hook_id = header.hook_id.expect("validated");
-        // The hook host can address its hook directly with `self.path + hook_id`.
-        // A non-host peer only knows the hook id it was given earlier, so it must
-        // recover the host-scoped key from active state using its validated path.
-        let key = self
+        let Some(key) = self
             .hooks
-            .active(&HookKey::new(self.path.clone(), hook_id))
-            .map(|_| HookKey::new(self.path.clone(), hook_id))
-            .or_else(|| {
-                self.hooks
-                    .find_active_key_by_peer(hook_id, &header.src_path)
-            })
-            .unwrap_or_else(|| HookKey::new(self.path.clone(), hook_id));
-
-        if self.hooks.active(&key).is_none() {
-            let matches = self.hooks.pending(&key).is_some_and(|pending| {
-                pending.caller_src_path == header.src_path
-                    && pending.procedure_id == message.procedure_id
-            });
-            if matches {
-                self.hooks.activate_pending(&key, header.src_path.clone());
-            }
-        }
+            .resolve_active_key(&self.path, hook_id, &header.src_path)
+        else {
+            return Ok(EndpointOutcome::dropped());
+        };
 
         let Some(active) = self.hooks.active(&key) else {
             return Ok(EndpointOutcome::dropped());
@@ -81,7 +64,6 @@ impl ProtocolEndpoint {
 
         if active.peer_path != header.src_path {
             self.hooks.remove_active(&key);
-            self.hooks.remove_pending(&key);
             return Ok(EndpointOutcome::event(LocalEvent::Fault {
                 header: PacketHeader {
                     packet_type: PacketType::Fault,
@@ -113,22 +95,15 @@ impl ProtocolEndpoint {
         header: PacketHeader,
         message: FaultMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
-        let key = HookKey::new(self.path.clone(), header.hook_id.expect("validated"));
-        let matches = self
-            .hooks
-            .active(&key)
-            .is_some_and(|active| active.peer_path == header.src_path)
-            || self
-                .hooks
-                .pending(&key)
-                .is_some_and(|pending| pending.caller_src_path == header.src_path);
-
-        if !matches {
+        let Some(key) = self.hooks.resolve_active_key(
+            &self.path,
+            header.hook_id.expect("validated"),
+            &header.src_path,
+        ) else {
             return Ok(EndpointOutcome::dropped());
-        }
+        };
 
         self.hooks.remove_active(&key);
-        self.hooks.remove_pending(&key);
 
         Ok(EndpointOutcome::event(LocalEvent::Fault { header, message }))
     }

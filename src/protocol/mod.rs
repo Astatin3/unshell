@@ -4,7 +4,6 @@
 
 pub mod codec;
 pub mod introspection;
-pub mod traits;
 pub mod tree;
 mod types;
 pub mod validation;
@@ -16,7 +15,6 @@ pub use codec::{
     FrameBytes, FrameCodec, FrameError, ParsedFrame, RkyvCodec, deserialize_archived_bytes,
 };
 pub use introspection::{EndpointIntrospection, LeafIntrospection, LeafIntrospectionSummary};
-pub use traits::{HookStore, LeafMetadata, PacketFraming, PacketProcessor, RouteResolution};
 pub use types::{
     CallMessage, DataMessage, FaultMessage, HookTarget, PacketHeader, PacketType, ProtocolFault,
 };

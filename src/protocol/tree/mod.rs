@@ -8,7 +8,7 @@ pub use endpoint::{
     ChildRoute, ConnectionState, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafSpec,
     LocalEvent, ProtocolEndpoint,
 };
-pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
+pub use hook::{ActiveHook, HookConflict, HookKey, HookTable};
 pub use routing::{
     DefaultRouteProvider, LeafNode, RouteDecision, RouteProvider, TreeNode, is_prefix,
     route_destination,

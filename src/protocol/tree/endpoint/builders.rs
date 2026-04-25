@@ -63,7 +63,6 @@ impl ProtocolEndpoint {
                     peer_path: header.dst_path.clone(),
                     procedure_id: call.procedure_id.clone(),
                     dst_leaf: header.dst_leaf.clone(),
-                    peer_finished: false,
                 })
                 .is_err()
         {
