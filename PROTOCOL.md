@@ -74,7 +74,7 @@ Leaves are hosted by endpoints.
 
 A superior endpoint issues a downwards `Call` toward a subordinate endpoint or one of its leaves.
 
-If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets toward the hook host. Once a hook exists, either side MAY continue exchanging `Data` packets associated with that hook until one side terminates the interaction. If normal execution cannot proceed, the endpoint MAY instead send a `Fault` packet upstream for that hook.
+If the caller wants output, it declares a hook inside the call. The recipient returns one or more `Data` packets toward the hook host. Once a hook exists, either side MAY continue exchanging `Data` packets associated with that hook. A side signals it is done by setting `end_hook = true` on its final `Data` packet; the hook closes when both sides have done so. If normal execution cannot proceed, the endpoint MAY instead send a `Fault` packet upstream for that hook, which closes it immediately.
 
 The protocol therefore has three core packet roles:
 
@@ -122,21 +122,23 @@ Hook identity is carried in `hook_id`.
 
 No path prefixes are reserved by this protocol.
 
+`dst_leaf` names a specific leaf hosted by the destination endpoint. Leaf names SHOULD follow the same dotted convention as `procedure_id`: `org.product.vN.part.name`. The reserved empty string `""` MUST NOT be used as a leaf name.
+
 `procedure_id` is the canonical identifier for a procedure contract. A procedure contract includes the source library or namespace, the specific procedure identity, and the expected input and output schema pair.
 
-`procedure_id` MUST use the canonical dotted form `org.product.vN.part.name`, except for the reserved empty string `""` used by the required introspection procedure defined in Section 12.1, where:
+`procedure_id` SHOULD follow the dotted convention `org.product.vN.part.name`, except for the reserved empty string `""` used by the required introspection procedure defined in Section 12.1, where:
 
 - `org` identifies the owning organization or namespace root
 - `product` identifies the product or system namespace
-- `vN` identifies the contract version, where `N` is a positive integer written in decimal form
+- `vN` identifies the contract version in whatever versioning scheme the owning product uses
 - `part` identifies the subsystem, leaf family, or functional area
 - `name` identifies the exact procedure or payload contract name
 
-Each segment MUST be non-empty. Implementations SHOULD restrict segments to lowercase ASCII letters, digits, and underscores for portability. The version segment MUST appear exactly in the third position.
+Each segment SHOULD be non-empty. Implementations SHOULD restrict segments to lowercase ASCII letters, digits, and underscores for portability. The version segment SHOULD appear in the third position.
 
 For `Data` packets, the same `procedure_id` is used on both `Call` and `Data` packets.
 
-> **Rationale:** `procedure_id` is intentionally stricter than a method name or content type. It identifies a full callable contract, not just a label.
+> **Rationale:** `procedure_id` is intentionally stricter than a method name or content type. It identifies a full callable contract, not just a label. The dotted convention is a strong recommendation rather than a wire-format requirement because the protocol itself does not parse or validate `procedure_id` structure — it is treated as an opaque string for routing and matching purposes. Version segment format is deliberately left to the owning product to avoid constraining existing versioning schemes.
 
 ## 7. Endpoint Model
 
@@ -150,7 +152,7 @@ At a local routing boundary:
 
 - a `Call` packet MUST be accepted only if it arrives from the direct parent connection permitted to issue downwards calls into the destination subtree represented by that boundary
 - a `Call` packet that violates that rule MUST be dropped silently
-- a `Data` packet MAY arrive from either direction if it belongs to a valid hook flow, routes correctly by path, and its `src_path` matches the expected peer recorded in local hook state
+- a `Data` packet MUST be accepted only if it belongs to a valid hook flow, routes correctly by path, and its `src_path` matches the expected peer recorded in local hook state; otherwise it MUST be discarded
 - a `Fault` packet MAY arrive only from the subordinate side of a hook-attributable call flow, and its `src_path` MUST match the expected subordinate peer recorded in local hook state or pending call context
 
 This protocol does not define a protocol-level authority error packet.
@@ -246,7 +248,7 @@ pub enum PacketType {
 Header rules:
 
 - `src_path` and `dst_path` MUST be present on all packets
-- the immediate receiver MUST validate that `src_path` is valid for the connection on which the packet arrived
+- the immediate receiver MUST validate that `src_path` matches the registered path of the peer on the connection from which the packet arrived; a packet whose `src_path` does not match MUST be discarded
 - `dst_leaf` MUST be `None` on `Data` and `Fault`
 - `hook_id` MUST be `None` on `Call`
 - `hook_id` MUST appear on `Data` and `Fault`
@@ -284,20 +286,18 @@ A path `A` lies within the subtree of path `B` if and only if `B` is a prefix of
 
 The root endpoint's path is the empty path, and its subtree contains all paths.
 
-When forwarding a packet, an implementation MUST:
+When forwarding a packet, an implementation MUST evaluate the following steps in order, stopping at the first that applies:
 
-1. compare `dst_path` against its locally registered child paths
-2. choose the longest matching prefix
-3. forward the packet toward that child if such a child exists
-4. otherwise, deliver the packet locally if `dst_path` identifies the local endpoint
-5. otherwise, forward the packet upward toward the direct parent connection if the destination lies outside the local endpoint's subtree
-6. otherwise, drop the packet silently
+1. If a registered child path is a prefix of `dst_path`, forward toward the child with the longest matching prefix.
+2. If `dst_path` identifies the local endpoint, deliver the packet locally.
+3. If `dst_path` lies outside the local endpoint's subtree, forward the packet upward toward the direct parent connection.
+4. Otherwise, drop the packet silently.
+
+Steps are evaluated in order; a packet that matches step 1 is never re-evaluated against steps 2 or 3.
 
 The protocol defines no mandatory error packet for unresolved destinations.
 
 > **Rationale:** Longest-prefix routing is defined as a path-selection rule, not as a way to resolve duplicate ownership. The tree model assumes each endpoint path names exactly one place in the topology. If two child routes claim the same path, the local routing table is already invalid.
-
-> **Rationale:** The upward-routing rule can look backwards at first glance because it is phrased from the perspective of the current endpoint rather than from the root. Defining subtree membership by path-prefix makes the decision mechanical: if the destination is not inside the current endpoint's subtree and no child owns a more specific prefix, the only remaining path is upward.
 
 ### 11.2 Call Enforcement
 
@@ -305,23 +305,13 @@ When forwarding or receiving a `Call`, an endpoint MUST apply the local-authorit
 
 ### 11.3 Data and Fault Routing
 
-`Data` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
+`Data` and `Fault` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
 
 The sender of a `Data` packet MUST set `dst_path` to the path of the peer endpoint for that hook packet.
 
-`Fault` packets are routed by `dst_path` using the same path-routing rules as `Call` packets.
-
 The sender of a `Fault` packet MUST set `dst_path` to the path of the hook host recorded in the active hook context or pending call context.
 
-### 11.4 Hook Fastpath
-
-An implementation MAY maintain an internal fastpath keyed by locally validated hook state for performance.
-
-Such an optimization MUST remain behaviorally equivalent to path-based routing.
-
-The protocol itself does not route by `hook_id` alone.
-
-> **Rationale:** `hook_id` is scoped to the calling endpoint and is not globally routable, so path remains the canonical routing key.
+An implementation MAY maintain an internal fastpath keyed by locally validated hook state for performance, provided it remains behaviorally equivalent to path-based routing. `hook_id` is scoped to the calling endpoint and is not globally routable, so path remains the canonical routing key.
 
 ## 12. Call Definition
 
@@ -337,9 +327,8 @@ Rules:
 
 - the receiver MUST interpret `procedure_id` as the identifier of the procedure being invoked
 - the protocol does not define argument encoding beyond raw bytes in `data`
-- a `Call` that expects a result MUST include `response_hook`
-- if `response_hook` is present, `response_hook.return_path` MUST be present and MUST equal `src_path`
-- if `response_hook` is absent, the receiver MAY execute the procedure but MUST NOT fabricate an implicit response path
+- a `Call` without `response_hook` will receive no response; the receiver MAY execute the procedure but MUST NOT fabricate an implicit response path
+- if `response_hook` is present, `response_hook.return_path` MUST equal `src_path`
 
 The canonical archived payload of a `Call` packet MUST be:
 
@@ -371,9 +360,7 @@ A `Call` with `procedure_id == ""` MUST include `response_hook`.
 
 If the destination endpoint does not exist, the packet is dropped during routing.
 
-If the destination endpoint exists but `dst_leaf` names no local leaf, the endpoint MUST treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
-
-If `procedure_id` is unknown or unsupported, the endpoint MUST treat the declared `response_hook`, if present, as sufficient authority to emit a protocol fault upstream even though the requested procedure cannot be executed. If no hook exists, the endpoint MUST discard the `Call` silently.
+If the destination endpoint exists but the `Call` cannot be executed — because `dst_leaf` names no local leaf, or because `procedure_id` is unknown or unsupported — the endpoint MUST send a `Fault` upstream using the declared `response_hook` if one is present. If no `response_hook` is present, the endpoint MUST discard the `Call` silently.
 
 > **Rationale:** Fault reporting for an invalid call would be self-defeating if the callee first had to prove that the application procedure was valid before it could use the declared hook. The hook exists to carry either normal returned data or a protocol fault explaining why normal execution could not proceed.
 
@@ -390,28 +377,18 @@ There is no standalone hook-open packet.
 | `hook_id` | Identifier scoped to the calling endpoint that declared the hook. |
 | `return_path` | Endpoint path to which returned `Data` or `Fault` packets are sent. |
 
-Pending call context is local transient state created when an endpoint receives a `Call` that declares `response_hook` and before that call has either been accepted into active hook state, rejected with `Fault`, or discarded.
-
-Each pending call context MUST contain at least:
-
-- the caller `src_path`
-- the declared `return_path`
-- the declared `hook_id`
-- the invoked `procedure_id`
-- the destination `dst_leaf`
-
-A pending call context MUST be keyed by the pair `(`return_path`, `hook_id`)`.
+Pending call context is local transient state created when an endpoint receives a `Call` that declares `response_hook` and before that call has either been accepted into active hook state, rejected with `Fault`, or discarded. It MUST be keyed by `(return_path, hook_id)` and MUST retain enough information to emit an upstream `Fault` for that call if needed.
 
 Rules:
 
-- `hook_id` MUST be unique within the active hook set of the calling endpoint identified by `return_path`
+- `hook_id` MUST be unique across all hooks at the calling endpoint — active, pending, and inactive — for the lifetime of the endpoint
 - `return_path` MUST name the calling endpoint that hosts the hook
 - a hook is declared by `response_hook` inside a `Call`
-- a pending call context MAY be used only to validate and emit an upstream `Fault` for that received `Call`
+- a pending call context MUST NOT be used to forward or process application data; it exists solely to validate and emit an upstream `Fault` for that received `Call`
 - a hook becomes active when the destination endpoint accepts that `Call` and allocates local hook state for it
 - when a `Call` is accepted, its pending call context MUST transition into active hook state
 - when a `Call` is rejected with `Fault` or discarded, its pending call context MUST be removed
-- once active, either side MAY send `Data` packets associated with that hook until the interaction ends or is canceled
+- once active, either side MAY send `Data` packets associated with that hook until the interaction ends
 - all protocol faults associated with the call MUST use that same `hook_id`
 
 > **Rationale:** Pending call context exists because some failures are discovered before normal application execution begins. The callee still needs enough validated state to attribute an upstream `Fault` to the declared hook without pretending that the hook was fully active for ordinary bidirectional traffic.
@@ -434,11 +411,10 @@ pub struct HookTarget {
 |---|---|
 | `procedure_id` | Identifier of the procedure contract to which this returned payload belongs. |
 | `data` | Application-defined output payload. |
-| `end_hook` | Sender indicates that its application protocol is ending the hook interaction. |
+| `end_hook` | When `true`, this is the sender's final packet for this hook. No further `Data` packets may follow from this side. |
 
 Rules:
 
-- the receiver MUST interpret `procedure_id` as the contract identifier for the returned payload
 - the router MUST NOT inspect or validate `procedure_id`
 - the receiver MUST validate that `procedure_id` matches the `procedure_id` of the `Call` that established the hook
 - for hook-associated `Data`, the receiver MUST validate `src_path` against the expected hook peer recorded in local hook state
@@ -456,53 +432,21 @@ pub struct DataMessage {
 }
 ```
 
-### 14.1 Hook Data
+### 14.1 Hook Data and Continuation
 
-For hook-associated responses:
+A hook MAY carry multiple `Data` packets in either direction if the application requires chunking, phased output, or prolonged bidirectional interaction. There is no protocol-level requirement that the callee send the first `Data` packet.
 
-- `end_hook` SHOULD be `true` on the final packet a sender emits for that hook
+Every `Data` packet for a hook MUST set `dst_path` to the path of the peer endpoint for that hook packet.
 
-A hook MAY emit multiple `Data` packets if the application requires chunking, phased output, or prolonged bidirectional interaction.
+A `Data` packet that arrives for a `hook_id` not yet in active hook state MUST be discarded.
 
-### 14.2 Hook Continuation
+> **Rationale:** The protocol allows symmetric hook traffic after activation but does not introduce a readiness or acknowledgment packet to synchronize the first `Data` frame. Requiring discard of packets that arrive before activation keeps the rule simple and safe: a sender that races ahead of activation will need to retransmit or rely on higher-layer sequencing. Higher-layer protocols that need stricter startup guarantees should define their own first-packet discipline inside the hook.
 
-A hook continuation follows the declaration and activation rules in Section 13.
+### 14.2 Hook End
 
-Once active, either side MAY send the first `Data` packet for that hook.
+A sender SHOULD set `end_hook = true` on its final `Data` packet for that hook. A sender MUST NOT send further `Data` packets on a hook after sending a packet with `end_hook = true`. A hook closes when both sides have sent `end_hook = true`, or when either side sends or receives a `Fault`.
 
-If an endpoint sends hook `Data` before the peer has activated local hook state for that hook, the peer MAY discard that packet as not yet attributable to an active hook.
-
-> **Rationale:** The protocol allows symmetric hook traffic after activation, but it does not introduce a separate readiness or acknowledgment packet just to synchronize the first `Data` frame. Allowing early packets to be discarded keeps the core protocol small while making the race explicit. Higher-layer protocols that need stricter startup guarantees are expected to define their own handshake or first-packet discipline inside the hook.
-
-Every `Data` packet for a hook MUST:
-
-- set `dst_path` to the path of the peer endpoint for that hook packet
-
-There is no protocol-level requirement that the callee send the first `Data` packet.
-
-`hook_id` is scoped to the calling endpoint that declared and hosts that hook.
-
-An endpoint MUST NOT reuse an active `hook_id` within its own local hook table.
-
-After normal completion without a `Fault` packet, the protocol does not require immediate retirement or reuse of the `hook_id`. An implementation MAY retain inactive hook records for any implementation-defined period.
-
-When allocating a new hook, an implementation SHOULD choose the lowest available inactive `hook_id`.
-
-> **Rationale:** The protocol needs a clear uniqueness rule for active hooks, but it does not need to over-specify local allocator policy after normal completion. Some implementations may want to retain inactive entries briefly for diagnostics, duplicate suppression, or transport reordering tolerance. Recommending the lowest available inactive `hook_id` keeps allocation predictable without forcing immediate recycling.
-
-### 14.3 Hook End
-
-Rules:
-
-- a sender MAY set `end_hook = true` when its application protocol has decided to end the hook interaction
-- a receiver of `end_hook = true` SHOULD treat the sender as finished with that hook
-- any finer-grained shutdown, acknowledgment, or cancellation sequencing MUST be defined by the application protocol carried in `procedure_id` and `data`
-
-There is no separate hook-close packet.
-
-After normal completion without a `Fault` packet, the moment at which a hook becomes inactive is implementation-defined unless a higher-layer protocol carried on that hook defines a stricter rule.
-
-> **Rationale:** `end_hook` only communicates that one sender is finished. The core protocol intentionally avoids defining a universal half-close or close-ack state machine because different applications want different shutdown behavior. A simple request-response hook can retire immediately after the final packet, while a richer bidirectional protocol can define a stricter end-of-stream sequence above this layer.
+> **Rationale:** Making `end_hook = true` a hard final marker rather than a soft hint removes ambiguity about whether the hook is still open. Both sides can close cleanly once they have each signaled completion, without needing a separate close packet or higher-layer shutdown sequence.
 
 ### 14.4 Fault Definition
 
@@ -550,7 +494,7 @@ When an endpoint can attribute a protocol-level failure to a specific hook or de
 - the same `hook_id`
 - a `ProtocolFault` payload describing the condition
 
-Sending a `Fault` packet ends the hook immediately. After sending or receiving a `Fault` packet, an implementation MUST remove that hook from active state.
+Sending a `Fault` packet closes the hook immediately for both sides. After sending or receiving a `Fault` packet, an implementation MUST remove that hook from active state.
 
 If an endpoint receives a fault value it does not recognize, it MUST still treat the packet as a protocol fault and close the hook.
 
@@ -580,13 +524,14 @@ Returned when `procedure_id == ""` and `dst_leaf == None`.
 
 | Field | Meaning |
 |---|---|
+| `sub_endpoints` | The path segment identifiers of directly registered child endpoints. Each entry is the single path segment that distinguishes the child from the local endpoint. The full path of a child can be inferred by appending its segment to the local endpoint's path. |
 | `leaves` | List of introspection summaries for the endpoint's hosted leaves. |
 
 Each `LeafIntrospectionSummary` contains:
 
 | Field | Meaning |
 |---|---|
-| `leaf_name` | The leaf's local name. |
+| `leaf_name` | The leaf's canonical name, following the `org.product.vN.part.name` scheme. |
 | `procedures` | Full canonical `procedure_id` values supported by the leaf. |
 
 The canonical archived payload of endpoint introspection MUST be:
@@ -594,6 +539,7 @@ The canonical archived payload of endpoint introspection MUST be:
 ```rust
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct EndpointIntrospection {
+    pub sub_endpoints: Vec<String>,
     pub leaves: Vec<LeafIntrospectionSummary>,
 }
 
@@ -610,7 +556,7 @@ Returned when `procedure_id == ""` and `dst_leaf` names a specific leaf.
 
 | Field | Meaning |
 |---|---|
-| `leaf_name` | The leaf's local name. |
+| `leaf_name` | The leaf's canonical name, following the `org.product.vN.part.name` scheme. |
 | `procedures` | Full canonical `procedure_id` values supported by the leaf. |
 
 The canonical archived payload of leaf introspection MUST be:
@@ -626,9 +572,9 @@ pub struct LeafIntrospection {
 Rules:
 
 - each listed procedure MUST be identified by its full canonical `procedure_id`, not by a leaf-local short name
-- endpoint introspection and leaf introspection MUST use the same per-leaf discovery shape
+- `sub_endpoints` MUST list only the direct children registered at this endpoint; it MUST NOT enumerate deeper descendants
 
-> **Rationale:** Returning full `procedure_id` values avoids forcing the caller to reconstruct contract names from leaf-local fragments. Endpoint introspection and leaf introspection deliberately share the same leaf record shape so the endpoint-wide form is just a list of the leaf-specific form.
+> **Rationale:** Returning full `procedure_id` values avoids forcing the caller to reconstruct contract names from leaf-local fragments. Endpoint introspection and leaf introspection deliberately share the same leaf record shape so the endpoint-wide form is just a list of the leaf-specific form. `sub_endpoints` returns only immediate child identifiers rather than a full subtree description because the tree topology is not assumed to be globally known; callers that need deeper discovery can issue further introspection calls toward each discovered child.
 
 ## 16. Protocol Description
 
