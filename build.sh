@@ -20,33 +20,6 @@ declare -a headers=(
     ".eh_frame" ".eh_frame_hdr" # Exception handling info (can break C++ exceptions if removed)
     #".gnu.version" ".gnu.version_r" # Symbol versioning (may be needed for some shared libraries)
     ".gnu.hash" # Hash table for symbol lookup optimization
-
-
-
-    # .shstrtab
-    # .interp
-    # .note.ABI-tag
-    # .dynsym
-    # .dynstr
-    # .rela.dyn
-    # .rodata
-    # .text
-    # .init
-    # .fini
-    # .tbss
-    # .fini_array
-    # .init_array
-    # .data.rel.ro
-    # .dynamic
-    # .got
-    # .got.plt
-    # .relro_padding
-    # .tm_clone_table
-    # .data
-    # .bss
-
-
-
 )
 
 # TODO: Implement FAKE section header comments and information

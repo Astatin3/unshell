@@ -29,6 +29,7 @@ Key routing rules:
 - Commit at every real milestone. Create a local git commit each time a meaningful milestone is reached. Commit messages must be accurate, specific, and reflect the actual change.
 - Explain unintuitive choices. Whenever an implementation, algorithm, or control flow could appear backwards, surprising, or overly indirect, add a short rationale comment or documentation note explaining why it is correct.
 - Track work with TODOs. Use a task list throughout the work so progress, remaining steps, and milestone boundaries stay explicit.
+- ALL Sub-agents must be told to read this file before continuing.
 
 ## Plan mode rules
 
