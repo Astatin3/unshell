@@ -384,8 +384,9 @@ Rules:
 - `hook_id` MUST be unique across all hooks at the calling endpoint — active, pending, and inactive — for the lifetime of the endpoint
 - `return_path` MUST name the calling endpoint that hosts the hook
 - a hook is declared by `response_hook` inside a `Call`
-- a pending call context MUST NOT be used to forward or process application data; it exists solely to validate and emit an upstream `Fault` for that received `Call`
+- at the callee, a pending call context MUST NOT be used to forward or process application data; it exists solely to validate and emit an upstream `Fault` for that received `Call`
 - a hook becomes active when the destination endpoint accepts that `Call` and allocates local hook state for it
+- at the hook host, an outbound pending hook MAY be promoted to active by the first valid returned `Data` or `Fault` packet from the expected peer, because the protocol defines no separate acceptance acknowledgment packet
 - when a `Call` is accepted, its pending call context MUST transition into active hook state
 - when a `Call` is rejected with `Fault` or discarded, its pending call context MUST be removed
 - once active, either side MAY send `Data` packets associated with that hook until the interaction ends
@@ -438,9 +439,9 @@ A hook MAY carry multiple `Data` packets in either direction if the application 
 
 Every `Data` packet for a hook MUST set `dst_path` to the path of the peer endpoint for that hook packet.
 
-A `Data` packet that arrives for a `hook_id` not yet in active hook state MUST be discarded.
+A `Data` packet that arrives for a `hook_id` not yet in active hook state MUST be discarded, except that the hook host MAY treat the first valid returned `Data` packet from the expected peer as the activation point for its outbound pending hook and then process that same packet as the first active `Data` packet.
 
-> **Rationale:** The protocol allows symmetric hook traffic after activation but does not introduce a readiness or acknowledgment packet to synchronize the first `Data` frame. Requiring discard of packets that arrive before activation keeps the rule simple and safe: a sender that races ahead of activation will need to retransmit or rely on higher-layer sequencing. Higher-layer protocols that need stricter startup guarantees should define their own first-packet discipline inside the hook.
+> **Rationale:** The protocol allows symmetric hook traffic after activation but does not introduce a readiness or acknowledgment packet to synchronize the first `Data` frame. Callee-side pending context still never carries application data. The one exception is the hook host's first valid returned packet, which can safely serve as the observable proof that the remote side accepted the call. Higher-layer protocols that need stricter startup guarantees should still define their own first-packet discipline inside the hook.
 
 ### 14.2 Hook End
 

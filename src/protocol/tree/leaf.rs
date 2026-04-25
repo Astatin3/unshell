@@ -62,8 +62,10 @@ pub trait CallProcedures: ProtocolLeaf {
 /// Rationale: derive macros cannot reliably inspect Cargo workspace metadata, but
 /// they can always access the current package name, module path, crate version,
 /// and Rust type name at the expansion site. This helper normalizes those inputs
-/// into one stable dotted identifier without leaking Rust separators or casing
-/// into protocol-visible names.
+/// into one deterministic dotted identifier without leaking Rust separators or
+/// casing into protocol-visible names. Deterministic is not the same as stable
+/// across refactors, so shipped protocol surfaces should prefer explicit `id`
+/// overrides.
 pub fn derive_leaf_name(
     package_name: &str,
     version_major: &str,
@@ -78,7 +80,7 @@ pub fn derive_leaf_name(
     id: Option<&str>,
 ) -> String {
     if let Some(id) = id.filter(|value| !value.is_empty()) {
-        return normalize_leaf_path(id);
+        return String::from(id);
     }
 
     let package_segment = normalize_leaf_segment(package_name);
@@ -108,10 +110,6 @@ pub fn derive_leaf_name(
     }
 
     segments.join(".")
-}
-
-fn normalize_leaf_path(value: &str) -> String {
-    split_leaf_path(value).join(".")
 }
 
 fn split_leaf_path(value: &str) -> Vec<String> {

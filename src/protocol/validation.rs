@@ -11,6 +11,7 @@ pub enum ValidationError {
     HeaderInvariant(&'static str),
     ProcedureId(&'static str),
     CallInvariant(&'static str),
+    HookInvariant(&'static str),
     InvalidHookId,
 }
 
@@ -20,6 +21,7 @@ impl fmt::Display for ValidationError {
             Self::HeaderInvariant(message) => write!(f, "invalid header: {message}"),
             Self::ProcedureId(message) => write!(f, "invalid procedure id: {message}"),
             Self::CallInvariant(message) => write!(f, "invalid call: {message}"),
+            Self::HookInvariant(message) => write!(f, "invalid hook state: {message}"),
             Self::InvalidHookId => f.write_str("invalid hook identifier"),
         }
     }

@@ -5,7 +5,6 @@ use std::io;
 pub enum ShellLeafError {
     Io(io::Error),
     MissingHook,
-    MissingSession,
 }
 
 impl fmt::Display for ShellLeafError {
@@ -13,7 +12,6 @@ impl fmt::Display for ShellLeafError {
         match self {
             Self::Io(error) => write!(f, "{error}"),
             Self::MissingHook => f.write_str("shell open requires a response hook"),
-            Self::MissingSession => f.write_str("shell session missing for active hook"),
         }
     }
 }

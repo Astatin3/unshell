@@ -42,6 +42,8 @@ pub struct PendingHook {
     pub procedure_id: String,
     /// Optional destination leaf inside the peer endpoint.
     pub dst_leaf: Option<String>,
+    /// Set once the local side has already emitted its terminal message before activation.
+    pub local_ended: bool,
 }
 
 /// Active hook context used for ordinary data traffic.
@@ -110,7 +112,7 @@ impl HookTable {
             peer_path: pending.caller_src_path,
             procedure_id: pending.procedure_id,
             dst_leaf: pending.dst_leaf,
-            local_ended: false,
+            local_ended: pending.local_ended,
             peer_ended: false,
         })
         .ok()?;
@@ -140,6 +142,13 @@ impl HookTable {
     /// Removes a pending hook without affecting active state.
     pub fn remove_pending(&mut self, key: &HookKey) -> Option<PendingHook> {
         self.pending.remove(key)
+    }
+
+    /// Marks the local side finished before the hook becomes active.
+    pub fn mark_pending_local_end(&mut self, key: &HookKey) {
+        if let Some(pending) = self.pending.get_mut(key) {
+            pending.local_ended = true;
+        }
     }
 
     /// Removes an active hook and its secondary peer-path index entry.

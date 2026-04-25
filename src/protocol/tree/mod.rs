@@ -9,6 +9,7 @@ mod call;
 mod endpoint;
 mod hook;
 mod leaf;
+mod procedure;
 mod routing;
 
 pub use call::{
@@ -22,6 +23,10 @@ pub use endpoint::{
 };
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
 pub use leaf::{CallProcedures, ProtocolLeaf, derive_leaf_name};
+pub use procedure::{
+    Procedure, ProcedureEffect, ProcedureRuntime, ProcedureRuntimeError, ProcedureStore,
+    StatefulProcedureMetadata,
+};
 pub use routing::{
     CompiledRoutes, DefaultRouteProvider, LeafNode, RouteDecision, RouteProvider, TreeNode,
     is_prefix, route_destination,

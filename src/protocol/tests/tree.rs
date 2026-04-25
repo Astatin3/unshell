@@ -106,7 +106,15 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
 
 #[test]
 fn invalid_hook_peer_emits_local_fault_event() {
-    let mut endpoint = ProtocolEndpoint::new(path(&["client"]), None, Vec::new(), Vec::new());
+    let mut endpoint = ProtocolEndpoint::new(
+        Vec::new(),
+        None,
+        vec![
+            ChildRoute::registered(path(&["server"])),
+            ChildRoute::registered(path(&["intruder"])),
+        ],
+        Vec::new(),
+    );
     let hook_id = endpoint.allocate_hook_id();
 
     endpoint
@@ -119,11 +127,31 @@ fn invalid_hook_peer_emits_local_fault_event() {
         )
         .expect("call should establish an active hook");
 
+    let valid_frame = encode_packet(
+        &PacketHeader {
+            packet_type: PacketType::Data,
+            src_path: path(&["server"]),
+            dst_path: Vec::new(),
+            dst_leaf: None,
+            hook_id: Some(hook_id),
+        },
+        &DataMessage {
+            procedure_id: "example.service.v1.invoke".to_owned(),
+            data: vec![8],
+            end_hook: false,
+        },
+    )
+    .expect("valid server data should encode");
+
+    endpoint
+        .receive(&Ingress::Child(path(&["server"])), valid_frame)
+        .expect("first server data should activate the hook");
+
     let frame = encode_packet(
         &PacketHeader {
             packet_type: PacketType::Data,
-            src_path: path(&["client"]),
-            dst_path: path(&["client"]),
+            src_path: path(&["intruder"]),
+            dst_path: Vec::new(),
             dst_leaf: None,
             hook_id: Some(hook_id),
         },
@@ -136,13 +164,13 @@ fn invalid_hook_peer_emits_local_fault_event() {
     .expect("data frame should encode");
 
     let outcome = endpoint
-        .receive(&Ingress::Local, frame)
+        .receive(&Ingress::Child(path(&["intruder"])), frame)
         .expect("invalid peer should be handled");
 
     assert!(outcome.forward.is_none());
     assert!(!outcome.dropped);
 
-    match outcome.event.as_ref().expect("expected event") {
+    match outcome.event.as_ref().expect("expected local fault event") {
         LocalEvent::Fault {
             header, message, ..
         } => {
@@ -180,6 +208,27 @@ fn hook_closes_only_after_both_sides_end() {
         .expect("call should establish an active hook");
 
     let host_key = crate::protocol::tree::HookKey::new(Vec::new(), hook_id);
+    assert!(endpoint.hooks.pending(&host_key).is_some());
+
+    let activation_frame = encode_packet(
+        &PacketHeader {
+            packet_type: PacketType::Data,
+            src_path: path(&["server"]),
+            dst_path: Vec::new(),
+            dst_leaf: None,
+            hook_id: Some(hook_id),
+        },
+        &DataMessage {
+            procedure_id: "example.service.v1.invoke".to_owned(),
+            data: vec![9],
+            end_hook: false,
+        },
+    )
+    .expect("activation data should encode");
+
+    endpoint
+        .receive(&Ingress::Child(path(&["server"])), activation_frame)
+        .expect("first server data should activate the hook");
     assert!(endpoint.hooks.active(&host_key).is_some());
 
     endpoint
@@ -242,6 +291,7 @@ fn pending_hook_fault_is_delivered_before_activation() {
             caller_src_path: path(&["client"]),
             procedure_id: call.procedure_id.clone(),
             dst_leaf: None,
+            local_ended: false,
         })
         .expect("pending hook should insert");
 

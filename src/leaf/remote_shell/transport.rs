@@ -7,6 +7,7 @@ use unshell::protocol::FrameBytes;
 use unshell::protocol::tree::EndpointOutcome;
 
 pub const LISTEN_ADDR: &str = "127.0.0.1:4444";
+const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[allow(dead_code)]
 pub fn send_forward(stream: &mut TcpStream, outcome: EndpointOutcome) -> io::Result<()> {
@@ -33,7 +34,7 @@ pub fn write_frames(stream: &mut TcpStream, frames: &[FrameBytes]) -> io::Result
 }
 
 pub fn spawn_frame_reader(mut stream: TcpStream) -> Receiver<io::Result<FrameBytes>> {
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(64);
 
     thread::spawn(move || {
         loop {
@@ -56,22 +57,41 @@ pub fn spawn_frame_reader(mut stream: TcpStream) -> Receiver<io::Result<FrameByt
 }
 
 fn read_frame(stream: &mut TcpStream) -> io::Result<Option<FrameBytes>> {
-    let mut len_bytes = [0u8; 4];
-    match stream.read_exact(&mut len_bytes) {
-        Ok(()) => {}
-        Err(error) if error.kind() == ErrorKind::UnexpectedEof => return Ok(None),
-        Err(error) => return Err(error),
-    }
+    let Some(len_bytes) = read_prefix(stream)? else {
+        return Ok(None);
+    };
 
     let frame_len = u32::from_be_bytes(len_bytes) as usize;
+    if frame_len > MAX_FRAME_BYTES {
+        return Err(io::Error::new(
+            ErrorKind::InvalidData,
+            "frame exceeds remote shell example transport limit",
+        ));
+    }
     let mut bytes = vec![0u8; frame_len];
     match stream.read_exact(&mut bytes) {
         Ok(()) => {}
-        Err(error) if error.kind() == ErrorKind::UnexpectedEof => return Ok(None),
         Err(error) => return Err(error),
     }
 
     let mut frame = FrameBytes::with_capacity(bytes.len());
     frame.extend_from_slice(&bytes);
     Ok(Some(frame))
+}
+
+fn read_prefix(stream: &mut TcpStream) -> io::Result<Option<[u8; 4]>> {
+    let mut len_bytes = [0u8; 4];
+    let mut filled = 0usize;
+
+    while filled < len_bytes.len() {
+        match stream.read(&mut len_bytes[filled..]) {
+            Ok(0) if filled == 0 => return Ok(None),
+            Ok(0) => return Err(io::Error::from(ErrorKind::UnexpectedEof)),
+            Ok(read_len) => filled += read_len,
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    Ok(Some(len_bytes))
 }

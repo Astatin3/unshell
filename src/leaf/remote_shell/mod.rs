@@ -1,123 +1,93 @@
 //! Stateful remote shell leaf used by the protocol examples.
 //!
-//! This module intentionally lives outside the core `protocol::tree` runtime.
-//! The protocol runtime stays generic, while this leaf layers one concrete
-//! application contract on top: one opening `Call`, then one bidirectional hook
-//! stream whose lifetime is tied to the spawned shell process.
+//! # Design
+//!
+//! The leaf owns all live hook sessions explicitly in `sessions`. Each entry in
+//! that map is one `ProcedureOpen`, keyed by the caller-owned hook identity.
+//! The protocol runtime still owns packet validation and transport close state,
+//! while the procedure session owns application resources such as the spawned
+//! shell process.
+//!
+//! This keeps the storage obvious:
+//! - the leaf owns session maps
+//! - the procedure type owns one hook conversation
+//! - the runtime routes later `Data` and `Fault` packets automatically
 
 mod errors;
 mod session;
 mod transport;
 
 use std::collections::BTreeMap;
-use std::io::Write;
 
+use unshell::Leaf;
 use unshell::protocol::tree::{
-    Call, CallLeaf, HookKey, IncomingData, IncomingFault, LeafRuntime, OutgoingData,
-    ProtocolEndpoint,
+    Call, HookKey, Procedure, ProcedureEffect, ProcedureRuntime, ProcedureStore, ProtocolEndpoint,
 };
-use unshell::{Leaf, procedures};
 
 pub use errors::ShellLeafError;
-use session::{ShellSession, close_session};
+pub use session::ProcedureOpen;
 pub use transport::LISTEN_ADDR;
 
+/// Leaf state for the remote shell example.
+///
+/// The map is explicit on purpose. Stateful procedures are easier to debug when
+/// the leaf clearly owns its live sessions instead of relying on generated hidden
+/// enums or side tables.
 #[derive(Default, Leaf)]
 #[leaf(org = "org", product = "example", version = "v1", leaf_name = "shell")]
 pub struct RemoteShellLeaf {
-    sessions: BTreeMap<HookKey, ShellSession>,
+    sessions: BTreeMap<HookKey, ProcedureOpen>,
 }
 
-#[procedures(error = ShellLeafError)]
-impl RemoteShellLeaf {
-    #[call]
-    fn open(&mut self, call: Call<()>) -> Result<(), ShellLeafError> {
-        let hook_key = call.response_hook.ok_or(ShellLeafError::MissingHook)?;
-        let session = ShellSession::spawn(
-            hook_key.return_path.clone(),
-            hook_key.hook_id,
-            call.procedure_id,
-        )?;
-
-        if let Some(mut previous) = self.sessions.insert(hook_key, session) {
-            previous.terminate()?;
-        }
-        Ok(())
+impl ProcedureStore<ProcedureOpen> for RemoteShellLeaf {
+    fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, ProcedureOpen> {
+        &mut self.sessions
     }
 }
 
-impl CallLeaf for RemoteShellLeaf {
+impl Procedure<RemoteShellLeaf> for ProcedureOpen {
     type Error = ShellLeafError;
+    type Input = ();
 
-    fn on_data(&mut self, data: IncomingData) -> Result<Vec<OutgoingData>, Self::Error> {
-        let Some(session) = self.sessions.get_mut(&data.hook_key) else {
-            return Ok(Vec::new());
-        };
-
-        if !data.message.data.is_empty() {
-            let Some(stdin) = session.stdin.as_mut() else {
-                return Ok(Vec::new());
-            };
-            stdin.write_all(&data.message.data)?;
-            stdin.flush()?;
-        }
-
-        if !data.message.end_hook {
-            return Ok(Vec::new());
-        }
-
-        let session = self
-            .sessions
-            .remove(&data.hook_key)
-            .ok_or(ShellLeafError::MissingSession)?;
-        close_session(session)
+    fn open(_leaf: &mut RemoteShellLeaf, call: Call<Self::Input>) -> Result<Self, Self::Error> {
+        let hook_key = call.response_hook.ok_or(ShellLeafError::MissingHook)?;
+        ProcedureOpen::spawn(hook_key.return_path, hook_key.hook_id, call.procedure_id)
     }
 
-    fn on_fault(&mut self, fault: IncomingFault) -> Result<(), Self::Error> {
-        if let Some(mut session) = self.sessions.remove(&fault.hook_key) {
-            session.terminate()?;
-        }
+    fn on_data(
+        _leaf: &mut RemoteShellLeaf,
+        session: &mut Self,
+        data: unshell::protocol::tree::IncomingData,
+    ) -> Result<ProcedureEffect, Self::Error> {
+        session.on_data(data)
+    }
+
+    fn on_fault(
+        _leaf: &mut RemoteShellLeaf,
+        _session: &mut Self,
+        _fault: unshell::protocol::tree::IncomingFault,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn poll(&mut self) -> Result<Vec<OutgoingData>, Self::Error> {
-        let mut outgoing = Vec::new();
-        let mut closed = Vec::new();
+    fn poll(
+        _leaf: &mut RemoteShellLeaf,
+        session: &mut Self,
+    ) -> Result<ProcedureEffect, Self::Error> {
+        session.poll()
+    }
 
-        for key in self.sessions.keys().cloned().collect::<Vec<_>>() {
-            let Some(session) = self.sessions.get_mut(&key) else {
-                continue;
-            };
-
-            session.drain_output(&mut outgoing);
-
-            if session.local_end_sent {
-                continue;
-            }
-
-            if session.exit_status.is_none() {
-                session.exit_status = session.child.try_wait()?;
-            }
-
-            if session.exit_status.is_some() && session.readers_closed >= 2 {
-                outgoing.push(session.packet(Vec::new(), true));
-                session.local_end_sent = true;
-                closed.push(key);
-            }
-        }
-
-        for key in closed {
-            self.sessions.remove(&key);
-        }
-
-        Ok(outgoing)
+    fn close(_leaf: &mut RemoteShellLeaf, mut session: Self) -> Result<(), Self::Error> {
+        session.terminate()
     }
 }
 
+/// Returns the example endpoint path used by both shell binaries.
 pub fn agent_path() -> Vec<String> {
     path(&["agent"])
 }
 
+/// Builds the controller endpoint used by the receiver example.
 #[allow(dead_code)]
 pub fn build_controller_endpoint() -> ProtocolEndpoint {
     ProtocolEndpoint::new(
@@ -128,28 +98,34 @@ pub fn build_controller_endpoint() -> ProtocolEndpoint {
     )
 }
 
+/// Builds the stateful shell runtime used by the endpoint example.
 #[allow(dead_code)]
-pub fn build_agent_runtime() -> LeafRuntime<RemoteShellLeaf> {
+pub fn build_agent_runtime() -> ProcedureRuntime<RemoteShellLeaf, ProcedureOpen> {
     let endpoint = ProtocolEndpoint::new(
         agent_path(),
         Some(Vec::new()),
         Vec::new(),
-        vec![RemoteShellLeaf::protocol_leaf_spec()],
+        vec![unshell::protocol::tree::LeafSpec {
+            name: RemoteShellLeaf::protocol_leaf_name(),
+            procedures: vec![ProcedureOpen::protocol_procedure_id()],
+        }],
     );
-    LeafRuntime::new(endpoint, RemoteShellLeaf::default())
+    ProcedureRuntime::new(endpoint, RemoteShellLeaf::default())
 }
 
+/// Returns the canonical leaf id used by the receiver example.
 #[allow(dead_code)]
 pub fn shell_leaf_name() -> String {
     RemoteShellLeaf::protocol_leaf_name()
 }
 
+/// Returns the opening `procedure_id` used to create one shell session.
 #[allow(dead_code)]
 pub fn shell_open_procedure() -> String {
-    RemoteShellLeaf::protocol_procedure_id("open")
-        .expect("remote shell leaf declares an open procedure")
+    ProcedureOpen::protocol_procedure_id()
 }
 
+/// Encodes the empty opening payload used by the shell example.
 #[allow(dead_code)]
 pub fn shell_open_payload() -> Vec<u8> {
     unshell::protocol::tree::encode_call_reply(&()).expect("unit shell open payload should encode")

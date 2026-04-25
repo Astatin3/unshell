@@ -50,11 +50,22 @@ impl ProtocolEndpoint {
         message: DataMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
         let hook_id = header.hook_id.expect("validated");
-        let Some(key) = self
-            .hooks
-            .resolve_active_key(&self.path, hook_id, &header.src_path)
-        else {
-            return Ok(EndpointOutcome::dropped());
+        let key = if let Some(key) =
+            self.hooks
+                .resolve_active_key(&self.path, hook_id, &header.src_path)
+        {
+            key
+        } else {
+            let pending_key = HookKey::new(self.path.clone(), hook_id);
+            if self.hooks.pending(&pending_key).is_some_and(|pending| {
+                pending.caller_src_path == header.src_path
+                    && pending.procedure_id == message.procedure_id
+            }) {
+                self.hooks.activate_pending(&pending_key);
+                pending_key
+            } else {
+                return Ok(EndpointOutcome::dropped());
+            }
         };
 
         let Some(active) = self.hooks.active(&key) else {
@@ -65,19 +76,7 @@ impl ProtocolEndpoint {
             // A reused hook id from the wrong peer is treated as terminal for this hook,
             // because the endpoint can no longer trust future traffic on it.
             self.hooks.remove_active(&key);
-            return Ok(EndpointOutcome::event(LocalEvent::Fault {
-                header: PacketHeader {
-                    packet_type: PacketType::Fault,
-                    src_path: header.src_path,
-                    dst_path: self.path.clone(),
-                    dst_leaf: None,
-                    hook_id: Some(key.hook_id),
-                },
-                message: FaultMessage {
-                    fault: ProtocolFault::INVALID_HOOK_PEER,
-                },
-                hook_key: key,
-            }));
+            return self.emit_fault_if_possible(Some(key), ProtocolFault::INVALID_HOOK_PEER);
         }
 
         if active.procedure_id != message.procedure_id {

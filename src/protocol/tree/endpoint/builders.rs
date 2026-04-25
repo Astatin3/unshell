@@ -2,7 +2,7 @@
 
 use alloc::{collections::BTreeSet, string::String, vec::Vec};
 
-use crate::protocol::tree::{ActiveHook, HookKey};
+use crate::protocol::tree::{HookKey, PendingHook};
 use crate::protocol::{
     CallMessage, DataMessage, FrameBytes, HookTarget, PacketHeader, PacketType, ValidationError,
     encode_packet, validate_call, validate_header, validate_procedure_id,
@@ -80,19 +80,19 @@ impl ProtocolEndpoint {
         call: &CallMessage,
     ) -> Result<(), EndpointError> {
         // Outbound calls reserve their response hook before the frame is emitted so
-        // the endpoint can accept a synchronous local response path as well as a
-        // remote one.
+        // the endpoint can attribute returned Fault packets even before the callee
+        // accepts the call. The hook only becomes active once valid hook traffic
+        // comes back from the expected peer.
         if let Some(hook) = &call.response_hook
             && self
                 .hooks
-                .insert_active(ActiveHook {
+                .insert_pending(PendingHook {
                     return_path: hook.return_path.clone(),
                     hook_id: hook.hook_id,
-                    peer_path: header.dst_path.clone(),
+                    caller_src_path: header.dst_path.clone(),
                     procedure_id: call.procedure_id.clone(),
                     dst_leaf: header.dst_leaf.clone(),
                     local_ended: false,
-                    peer_ended: false,
                 })
                 .is_err()
         {
@@ -175,6 +175,13 @@ impl ProtocolEndpoint {
 
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_call(header, call),
+            RouteDecision::Drop => {
+                if let Some(hook) = &call.response_hook {
+                    self.hooks
+                        .remove_pending(&HookKey::new(hook.return_path.clone(), hook.hook_id));
+                }
+                Ok(EndpointOutcome::dropped())
+            }
             route => Ok(EndpointOutcome::forward(
                 route,
                 encode_packet(&header, &call)?,
@@ -205,7 +212,21 @@ impl ProtocolEndpoint {
         data: Vec<u8>,
         end_hook: bool,
     ) -> Result<EndpointOutcome, EndpointError> {
+        if let Some(active_key) = self
+            .hooks
+            .resolve_active_key(&dst_path, hook_id, &self.path)
+            && self
+                .hooks
+                .active(&active_key)
+                .is_some_and(|active| active.local_ended)
+        {
+            return Err(EndpointError::Validation(ValidationError::HookInvariant(
+                "local side already closed this hook",
+            )));
+        }
+
         let local_end_dst_path = dst_path.clone();
+        let host_key = HookKey::new(self.path.clone(), hook_id);
         let (header, message) =
             self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
 
@@ -215,14 +236,17 @@ impl ProtocolEndpoint {
             let local_hook_key = self
                 .hooks
                 .resolve_active_key(&local_end_dst_path, hook_id, &self.path)
-                .unwrap_or_else(|| HookKey::new(self.path.clone(), hook_id));
-            if self.hooks.mark_local_end(&local_hook_key) {
+                .unwrap_or_else(|| host_key.clone());
+            if self.hooks.pending(&host_key).is_some() {
+                self.hooks.mark_pending_local_end(&host_key);
+            } else if self.hooks.mark_local_end(&local_hook_key) {
                 self.hooks.remove_active(&local_hook_key);
             }
         }
 
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_data(header, message),
+            RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
             route => Ok(EndpointOutcome::forward(
                 route,
                 encode_packet(&header, &message)?,
