@@ -1,34 +1,31 @@
 ![unshell logo](https://github.com/astatin3/unshell/blob/main/media/full_banner.png?raw=true)
 
-UnShell is a tree-addressed RPC and data-exchange protocol designed for a hierarchy of endpoints. It provides a lightweight way to route calls, streams, and faults through a tree-structured network of nodes.
+UnShell is an exploitation orchestration framework.
 
-## Features
+<details>
+<summary>UnShell Orca</summary>
+The control plane. A specialized endpoint that provides an orchestration interface to manage and interact with the tree, allowing sophisticated control of implants across a network.
 
-- **Tree-Based Routing**: Path-based addressing with longest-prefix matching.
-- **RPC and Streaming**: Supports simple request-response (Call) and bidirectional streaming (Data).
-- **Hierarchical Control**: Authority-restricted downward calls and upstream-only faults.
-- **Introspection**: Mandatory discovery mechanism for endpoints and leaves.
-- **no_std Compatible**: Core protocol implementation is designed for constrained environments.
+- **status:** Not started.
+</details>
 
-## Architecture
+<details>
+<summary>UnShell Protocol</summary>
+The communication bedrock. A hierarchical, lightweight, and flexible protocol for the control of implants across a network.
 
-The protocol is organized into:
-- `unshell`: Core protocol logic, framing, and routing.
-- `ush-treetest`: A testbed implementation for validating the protocol.
-- `ush-obfuscate`: Utilities for code obfuscation.
-- `base62`: Encoding utilities.
+- **status:** Protocol and implementation drafted. See [PROTOCOL.md](https://github.com/astatin3/unshell/blob/main/PROTOCOL.md)
+</details>
 
-## Getting Started
+<details>
+<summary>UnShell Build</summary>
+A tool built on the rust compiler that compiles projects to very small binaries with obfuscation techniques. The `msfvenom` of this project.
 
-### Build
-```bash
-cargo build
-```
+- **status:** Not started.
+</details>
 
-### Run Tests
-```bash
-cargo test
-```
+<details>
+<summary>libunshell</summary>
+A rust library which provides easy creation of implants through pre-made libraries and endpoints connected to the UnShell protocol.
 
-## Protocol Specification
-For detailed information on the wire format and behavioral invariants, please refer to `PROTOCOL.md`.
+- **status:** Not started.
+</details>
