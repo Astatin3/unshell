@@ -12,7 +12,7 @@ leaf_tui = []
 [dependencies]
 rkyv = { workspace = true }
 portable-pty = { workspace = true, optional = true }
-unshell-macros = { path = "../unshell-macros" }
+unshell-macros = { workspace = true }
 unshell-protocol = { workspace = true }
 
 [lints.rust]
