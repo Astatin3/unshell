@@ -1,6 +1,5 @@
 //! Proc macros for `unshell` application-layer leaf declarations.
 
-mod leaf;
 mod leaf_decl;
 mod procedure;
 mod procedures;
@@ -38,33 +37,6 @@ pub fn leaf(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Derives canonical protocol-leaf identity helpers for one host type.
-///
-/// What it is: a derive macro that implements `ProtocolLeaf` and generates the
-/// `protocol_leaf_name()` convenience method.
-///
-/// Why it exists: simple leaves and compatibility paths still need a lightweight
-/// way to say "this host type exposes this canonical wire name" without writing
-/// the trait implementation by hand.
-///
-/// # Example
-/// ```ignore
-/// use unshell::Leaf;
-///
-/// #[derive(Leaf)]
-/// #[leaf(leaf_name = "echo")]
-/// struct EchoLeaf;
-///
-/// assert!(EchoLeaf::protocol_leaf_name().contains("echo"));
-/// ```
-#[proc_macro_derive(Leaf, attributes(leaf))]
-pub fn derive_leaf(input: TokenStream) -> TokenStream {
-    match leaf::expand_leaf(parse_macro_input!(input as DeriveInput)) {
-        Ok(tokens) => tokens.into(),
-        Err(error) => error.to_compile_error().into(),
-    }
-}
-
 /// Derives canonical stateful-procedure metadata for one procedure type.
 ///
 /// What it is: a derive macro that records one procedure suffix and generates
@@ -75,10 +47,16 @@ pub fn derive_leaf(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 /// ```ignore
-/// use unshell::{Leaf, Procedure};
+/// use unshell::{Procedure, leaf};
 ///
-/// #[derive(Leaf)]
-/// #[leaf(leaf_name = "shell")]
+/// struct ShellLeaf;
+///
+/// leaf! {
+///     name = "shell",
+///     procedures = [OpenSession],
+///     endpoint_struct = ShellLeaf,
+/// }
+///
 /// struct ShellLeaf;
 ///
 /// #[derive(Procedure)]
@@ -106,11 +84,15 @@ pub fn derive_procedure(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 /// ```ignore
-/// use unshell::{Leaf, procedures};
+/// use unshell::{leaf, procedures};
 ///
-/// #[derive(Leaf)]
-/// #[leaf(id = "org.example.v1.echo")]
 /// struct EchoLeaf;
+///
+/// leaf! {
+///     id = "org.example.v1.echo",
+///     procedures = [echo],
+///     endpoint_struct = EchoLeaf,
+/// }
 ///
 /// #[procedures(error = core::convert::Infallible)]
 /// impl EchoLeaf {

@@ -46,7 +46,7 @@ use super::{
 /// struct Open;
 /// impl ProcedureMetadata for Open {
 ///     type Leaf = ExampleLeaf;
-///     fn procedure_suffix() -> &'static str { "open" }
+///     const PROCEDURE_SUFFIX: &'static str = "open";
 /// }
 /// assert_eq!(Open::procedure_id(), "org.example.v1.shell.open");
 /// ```
@@ -55,7 +55,12 @@ pub trait ProcedureMetadata: Sized {
     type Leaf: ProtocolLeaf;
 
     /// Returns the local suffix used to derive the full canonical `procedure_id`.
-    fn procedure_suffix() -> &'static str;
+    const PROCEDURE_SUFFIX: &'static str;
+
+    /// Returns the local suffix used to derive the full canonical `procedure_id`.
+    fn procedure_suffix() -> &'static str {
+        Self::PROCEDURE_SUFFIX
+    }
 
     /// Returns the canonical `procedure_id` for this procedure.
     fn procedure_id() -> String {
@@ -81,8 +86,7 @@ pub trait ProcedureMetadata: Sized {
 /// struct Open;
 /// impl ProcedureMetadata for Open {
 ///     type Leaf = ExampleLeaf;
-///
-///     fn procedure_suffix() -> &'static str { "open" }
+///     const PROCEDURE_SUFFIX: &'static str = "open";
 /// }
 /// fn _compat<T: StatefulProcedureMetadata<ExampleLeaf>>() {}
 /// _compat::<Open>();
@@ -133,13 +137,18 @@ pub trait ProcedureStore<P> {
 /// ```rust
 /// use std::collections::BTreeMap;
 /// use std::string::String;
-/// use unshell::{Leaf, Procedure};
+/// use unshell::{Procedure, leaf};
 /// use unshell::protocol::tree::{Call, HookKey, Procedure, ProcedureEffect, ProcedureStore};
 ///
-/// #[derive(Default, Leaf)]
-/// #[leaf(id = "org.example.v1.stream")]
+/// #[derive(Default)]
 /// struct StreamLeaf {
 ///     sessions: BTreeMap<HookKey, OpenProcedure>,
+/// }
+///
+/// leaf! {
+///     id = "org.example.v1.stream",
+///     procedures = [OpenProcedure],
+///     endpoint_struct = StreamLeaf,
 /// }
 ///
 /// impl ProcedureStore<OpenProcedure> for StreamLeaf {

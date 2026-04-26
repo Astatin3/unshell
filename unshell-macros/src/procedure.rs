@@ -95,9 +95,7 @@ pub(crate) fn expand_procedure(input: DeriveInput) -> Result<proc_macro2::TokenS
         {
             type Leaf = #leaf_ty;
 
-            fn procedure_suffix() -> &'static str {
-                #suffix
-            }
+            const PROCEDURE_SUFFIX: &'static str = #suffix;
         }
 
         impl #impl_generics #procedure_name #ty_generics #where_clause {

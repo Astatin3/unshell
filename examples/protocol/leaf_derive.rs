@@ -1,22 +1,28 @@
-//! Small end-to-end example for the `Leaf` and `procedures` derive macros.
+//! Small end-to-end example for the `leaf!` and `Procedure` macros.
 //!
-//! This stays entirely local. A controller endpoint opens one call against a single in-process
-//! leaf runtime, and the example decodes the returned reply payload.
+//! This stays entirely local. A controller endpoint opens one hook-backed procedure against a
+//! single in-process leaf runtime, and the example decodes the returned reply payload.
 
 use std::error::Error;
-use std::{convert::Infallible, string::String};
+use std::{collections::BTreeMap, convert::Infallible, string::String};
 
 use rkyv::{Archive, Deserialize, Serialize};
 use unshell::protocol::tree::{
-    Call, CallLeaf, ChildRoute, EndpointOutcome, Ingress, LeafRuntime, ProtocolEndpoint,
+    Call, ChildRoute, EndpointOutcome, HookKey, Ingress, OutgoingData, Procedure, ProcedureEffect,
+    ProcedureRuntime, ProcedureStore, ProtocolEndpoint,
 };
 use unshell::protocol::{PacketType, decode_frame};
-use unshell::{Leaf, procedures};
+use unshell::{Procedure, leaf};
 
-#[derive(Leaf)]
-#[leaf(org = "org", product = "example", version = "v1", leaf_name = "echo")]
+#[derive(Default)]
 struct EchoLeaf {
-    prefix: String,
+    sessions: BTreeMap<HookKey, EchoOpen>,
+}
+
+leaf! {
+    id = "org.example.v1.echo",
+    procedures = [EchoOpen],
+    endpoint_struct = EchoLeaf,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -29,18 +35,53 @@ struct EchoResponse {
     text: String,
 }
 
-#[procedures(error = Infallible)]
-impl EchoLeaf {
-    #[call]
-    fn echo(&mut self, request: Call<EchoRequest>) -> EchoResponse {
-        EchoResponse {
-            text: format!("{}{}", self.prefix, request.input.text),
-        }
+#[derive(Debug, Clone, PartialEq, Eq, Procedure)]
+#[procedure(leaf = EchoLeaf, name = "echo")]
+struct EchoOpen {
+    prefix: String,
+    return_path: Vec<String>,
+    hook_id: u64,
+    sent_reply: bool,
+}
+
+impl ProcedureStore<EchoOpen> for EchoLeaf {
+    fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, EchoOpen> {
+        &mut self.sessions
     }
 }
 
-impl CallLeaf for EchoLeaf {
+impl Procedure<EchoLeaf> for EchoOpen {
     type Error = Infallible;
+    type Input = EchoRequest;
+
+    fn open(_leaf: &mut EchoLeaf, call: Call<Self::Input>) -> Result<Self, Self::Error> {
+        let response_hook = call
+            .response_hook
+            .expect("example call declares a response hook");
+        Ok(Self {
+            prefix: call.input.text,
+            return_path: response_hook.return_path,
+            hook_id: response_hook.hook_id,
+            sent_reply: false,
+        })
+    }
+
+    fn poll(_leaf: &mut EchoLeaf, session: &mut Self) -> Result<ProcedureEffect, Self::Error> {
+        if session.sent_reply {
+            return Ok(ProcedureEffect::default());
+        }
+        session.sent_reply = true;
+        Ok(ProcedureEffect::close(vec![OutgoingData {
+            dst_path: session.return_path.clone(),
+            hook_id: session.hook_id,
+            procedure_id: EchoOpen::protocol_procedure_id(),
+            data: unshell::protocol::tree::encode_call_reply(&EchoResponse {
+                text: format!("echo: {}", session.prefix),
+            })
+            .expect("response should encode"),
+            end_hook: true,
+        }]))
+    }
 }
 
 fn path(parts: &[&str]) -> Vec<String> {
@@ -54,12 +95,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Vec::new(),
         vec![EchoLeaf::protocol_leaf_spec()],
     );
-    let mut runtime = LeafRuntime::new(
-        endpoint,
-        EchoLeaf {
-            prefix: String::from("echo: "),
-        },
-    );
+    let mut runtime = ProcedureRuntime::<EchoLeaf, EchoOpen>::new(endpoint, EchoLeaf::default());
 
     let mut controller = ProtocolEndpoint::new(
         Vec::new(),
@@ -74,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let controller_outcome = controller.send_call(
         path(&["agent"]),
         Some(EchoLeaf::protocol_leaf_name()),
-        EchoLeaf::protocol_procedure_id("echo").expect("known procedure suffix"),
+        EchoOpen::protocol_procedure_id(),
         Some(hook_id),
         unshell::protocol::tree::encode_call_reply(&EchoRequest {
             text: String::from("hello leaf"),
@@ -84,7 +120,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("expected controller to forward call".into());
     };
 
-    let outcome = runtime.receive(&Ingress::Parent, frame)?;
+    let receive_outcome = runtime.receive(&Ingress::Parent, frame)?;
+    assert!(receive_outcome.frames.is_empty());
+    let outcome = runtime.poll()?;
     let [response_frame] = outcome.frames.as_slice() else {
         return Err("expected one response frame".into());
     };
@@ -100,7 +138,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "leaf={} procedure={} response={}",
         EchoLeaf::protocol_leaf_name(),
-        EchoLeaf::protocol_procedure_id("echo").expect("known procedure suffix"),
+        EchoOpen::protocol_procedure_id(),
         response.text,
     );
     Ok(())

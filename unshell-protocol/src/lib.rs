@@ -17,4 +17,4 @@ pub mod protocol;
 pub use protocol::*;
 
 #[cfg(test)]
-pub use unshell_macros::{Leaf, Procedure, procedures};
+pub use unshell_macros::{Procedure, leaf, procedures};

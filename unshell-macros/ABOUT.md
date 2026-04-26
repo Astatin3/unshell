@@ -14,7 +14,6 @@ compile time.
 
 In practical terms, the macro system is responsible for:
 
-- deriving canonical leaf identities
 - deriving canonical procedure identifiers
 - generating compile-time procedure inventories for leaves
 - binding one leaf declaration to separate endpoint and TUI host structs without
@@ -57,18 +56,14 @@ compile-time inventory instead of handwritten lists.
 
 ## Current direction
 
-The current migration keeps the older derive-based APIs working while adding a
-new declaration-first API.
+The public declaration model is now centered on `leaf!`.
 
-That migration is intentionally incremental:
+- `leaf!` declares the canonical protocol surface once
+- `#[derive(Procedure)]` derives stateful procedure metadata
+- `#[procedures]` derives one-shot call dispatch for simple leaves
 
-1. keep `#[derive(Leaf)]`, `#[derive(Procedure)]`, and `#[procedures]` working
-2. introduce one declaration macro for compile-time leaf metadata
-3. let endpoint and TUI structs bind to the declaration instead of duplicating
-   metadata
-4. remove leaf-owned endpoint-construction boilerplate by generating leaf specs
-   from the declaration
-5. add typed remote-method metadata on top of the same declaration model
+The next evolution from here is typed remote-method metadata on top of the same
+declaration model.
 
 ## Design constraints
 

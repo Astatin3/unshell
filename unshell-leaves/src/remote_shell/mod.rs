@@ -6,6 +6,8 @@
 //! - `leaf_tui` builds a placeholder client-side TUI surface
 
 use rkyv::{Archive, Deserialize, Serialize};
+#[cfg(not(feature = "leaf_endpoint"))]
+use std::string::String;
 
 #[cfg(feature = "leaf_endpoint")]
 pub mod endpoint;
@@ -23,6 +25,23 @@ pub use tui::RemoteShellTui;
 /// Compile-time procedure symbol kept available even when the endpoint runtime is
 /// not built, so the leaf declaration still validates its declared inventory.
 pub struct Open;
+
+#[cfg(not(feature = "leaf_endpoint"))]
+#[doc(hidden)]
+pub struct RemoteShellDeclarationPlaceholder;
+
+#[cfg(not(feature = "leaf_endpoint"))]
+impl crate::protocol::tree::ProtocolLeaf for RemoteShellDeclarationPlaceholder {
+    fn leaf_name() -> String {
+        String::from("remote_shell")
+    }
+}
+
+#[cfg(not(feature = "leaf_endpoint"))]
+impl crate::protocol::tree::ProcedureMetadata for Open {
+    type Leaf = RemoteShellDeclarationPlaceholder;
+    const PROCEDURE_SUFFIX: &'static str = "open";
+}
 
 /// Open-request payload for the remote shell leaf.
 ///

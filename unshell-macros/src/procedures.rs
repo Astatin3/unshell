@@ -108,24 +108,10 @@ pub(crate) fn expand_procedures(
         ));
     }
 
-    let suffix_literals = dispatch_arms
-        .iter()
-        .map(|arm| arm.suffix_literal.clone())
-        .collect::<Vec<_>>();
-    let procedure_matches = dispatch_arms.iter().map(|arm| {
-        let suffix = &arm.suffix_literal;
-        quote! { #suffix => <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(#suffix), }
-    });
     let dispatch_checks = dispatch_arms.iter().map(|arm| arm.dispatch_tokens.clone());
 
     Ok(quote! {
         #item
-
-        impl #impl_generics_tokens ::unshell::protocol::tree::LeafDeclaration for #self_ty #where_clause {
-            fn procedure_suffixes() -> &'static [&'static str] {
-                &[#(#suffix_literals),*]
-            }
-        }
 
         impl #impl_generics_tokens ::unshell::protocol::tree::CallProcedures for #self_ty #where_clause {
             type Error = #error_ty;
@@ -142,22 +128,6 @@ pub(crate) fn expand_procedures(
             }
         }
 
-        impl #impl_generics_tokens #self_ty #where_clause {
-            /// Returns the canonical protocol leaf metadata for this type.
-            pub fn protocol_leaf_spec() -> ::unshell::protocol::tree::LeafSpec {
-                <Self as ::unshell::protocol::tree::LeafDeclaration>::leaf_spec()
-            }
-
-            /// Resolves one local procedure suffix to its full canonical `procedure_id`.
-            pub fn protocol_procedure_id(
-                suffix: &str,
-            ) -> ::core::option::Option<::unshell::alloc::string::String> {
-                match suffix {
-                    #(#procedure_matches)*
-                    _ => ::core::option::Option::None,
-                }
-            }
-        }
     })
 }
 
@@ -165,8 +135,12 @@ fn expand_call_arm(method: &ImplItemFn) -> Result<CallArm> {
     let method_name = &method.sig.ident;
     let suffix_literal = call_suffix_literal(method)?;
     let call_id_expr = quote! {
-        <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(#suffix_literal)
-            .expect("generated procedure id must exist")
+        {
+            let mut __unshell_id = <Self as ::unshell::protocol::tree::ProtocolLeaf>::leaf_name();
+            __unshell_id.push('.');
+            __unshell_id.push_str(#suffix_literal);
+            __unshell_id
+        }
     };
 
     let inputs = method

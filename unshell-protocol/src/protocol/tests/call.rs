@@ -8,16 +8,20 @@ use crate::protocol::tree::{
     decode_call_input, encode_call_reply,
 };
 use crate::protocol::{PacketType, decode_frame};
-use crate::{Leaf, procedures};
+use crate::{leaf, procedures};
 
 fn path(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
 }
 
-#[derive(Leaf)]
-#[leaf(id = "org.example.v1.echo")]
 struct EchoLeaf {
     prefix: String,
+}
+
+leaf! {
+    id = "org.example.v1.echo",
+    endpoint_struct = EchoLeaf,
+    procedures = ["echo"],
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -6,16 +6,21 @@ use crate::protocol::tree::{
     ProcedureEffect, ProcedureRuntime, ProcedureStore, ProtocolEndpoint, encode_call_reply,
 };
 use crate::protocol::{PacketType, decode_frame};
-use crate::{Leaf, Procedure};
+use crate::{Procedure, leaf};
 
 fn path(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
 }
 
-#[derive(Default, Leaf)]
-#[leaf(id = "org.example.v1.stream")]
+#[derive(Default)]
 struct StreamLeaf {
     sessions: BTreeMap<HookKey, ProcedureOpen>,
+}
+
+leaf! {
+    id = "org.example.v1.stream",
+    procedures = [ProcedureOpen],
+    endpoint_struct = StreamLeaf,
 }
 
 impl ProcedureStore<ProcedureOpen> for StreamLeaf {
@@ -67,10 +72,7 @@ fn procedure_runtime_routes_data_to_stored_session() {
         path(&["agent"]),
         Some(Vec::new()),
         Vec::new(),
-        vec![crate::protocol::tree::LeafSpec {
-            name: StreamLeaf::protocol_leaf_name(),
-            procedures: vec![ProcedureOpen::protocol_procedure_id()],
-        }],
+        vec![StreamLeaf::protocol_leaf_spec()],
     );
     let mut runtime =
         ProcedureRuntime::<StreamLeaf, ProcedureOpen>::new(endpoint, StreamLeaf::default());
@@ -139,10 +141,15 @@ fn procedure_runtime_routes_data_to_stored_session() {
     assert!(runtime.leaf_mut().procedure_sessions().is_empty());
 }
 
-#[derive(Default, Leaf)]
-#[leaf(id = "org.example.v1.duplex")]
+#[derive(Default)]
 struct DuplexLeaf {
     sessions: BTreeMap<HookKey, DuplexProcedure>,
+}
+
+leaf! {
+    id = "org.example.v1.duplex",
+    procedures = [DuplexProcedure],
+    endpoint_struct = DuplexLeaf,
 }
 
 impl ProcedureStore<DuplexProcedure> for DuplexLeaf {
@@ -197,10 +204,7 @@ fn procedure_runtime_keeps_session_after_local_end_until_explicit_close() {
         path(&["agent"]),
         Some(Vec::new()),
         Vec::new(),
-        vec![crate::protocol::tree::LeafSpec {
-            name: DuplexLeaf::protocol_leaf_name(),
-            procedures: vec![DuplexProcedure::protocol_procedure_id()],
-        }],
+        vec![DuplexLeaf::protocol_leaf_spec()],
     );
     let mut runtime =
         ProcedureRuntime::<DuplexLeaf, DuplexProcedure>::new(endpoint, DuplexLeaf::default());

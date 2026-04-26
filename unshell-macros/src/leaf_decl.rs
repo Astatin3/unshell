@@ -17,7 +17,7 @@ pub(crate) struct LeafDeclarationInput {
     version: Option<LitStr>,
     endpoint_struct: Option<Ident>,
     tui_struct: Option<Ident>,
-    procedures: Vec<Ident>,
+    procedures: Vec<ProcedureRef>,
 }
 
 impl Parse for LeafDeclarationInput {
@@ -119,7 +119,21 @@ enum LeafAssignment {
     Version(LitStr),
     EndpointStruct(Ident),
     TuiStruct(Ident),
-    Procedures(Vec<Ident>),
+    Procedures(Vec<ProcedureRef>),
+}
+
+enum ProcedureRef {
+    Symbol(Ident),
+    Suffix(LitStr),
+}
+
+impl Parse for ProcedureRef {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        if input.peek(LitStr) {
+            return Ok(Self::Suffix(input.parse()?));
+        }
+        Ok(Self::Symbol(input.parse()?))
+    }
 }
 
 impl Parse for LeafAssignment {
@@ -137,7 +151,7 @@ impl Parse for LeafAssignment {
             "procedures" => {
                 let content;
                 syn::bracketed!(content in input);
-                let values = Punctuated::<Ident, Token![,]>::parse_terminated(&content)?
+                let values = Punctuated::<ProcedureRef, Token![,]>::parse_terminated(&content)?
                     .into_iter()
                     .collect::<Vec<_>>();
                 Ok(Self::Procedures(values))
@@ -165,9 +179,20 @@ pub(crate) fn expand_leaf_declaration(input: LeafDeclarationInput) -> Result<Tok
     let procedure_suffixes = input
         .procedures
         .iter()
-        .map(|procedure| LitStr::new(&normalize_suffix(&procedure.to_string()), procedure.span()))
+        .map(|procedure| match procedure {
+            ProcedureRef::Symbol(procedure) => {
+                quote! { <#procedure as ::unshell::protocol::tree::ProcedureMetadata>::PROCEDURE_SUFFIX }
+            }
+            ProcedureRef::Suffix(suffix) => quote! { #suffix },
+        })
         .collect::<Vec<_>>();
-    let procedure_type_checks = input.procedures.iter();
+    let procedure_type_checks = input
+        .procedures
+        .iter()
+        .filter_map(|procedure| match procedure {
+            ProcedureRef::Symbol(procedure) => Some(procedure),
+            ProcedureRef::Suffix(_) => None,
+        });
 
     let endpoint_impl = input
         .endpoint_struct
@@ -271,42 +296,5 @@ fn expand_binding_impl(host: &Ident, declaration: &Ident) -> TokenStream {
                 <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(suffix)
             }
         }
-    }
-}
-
-fn normalize_suffix(value: &str) -> String {
-    let mut normalized = String::with_capacity(value.len());
-    let mut previous_was_separator = false;
-
-    for character in value.chars() {
-        if character.is_ascii_uppercase() {
-            if !normalized.is_empty() && !previous_was_separator {
-                normalized.push('_');
-            }
-            normalized.push(character.to_ascii_lowercase());
-            previous_was_separator = false;
-            continue;
-        }
-
-        if character.is_ascii_lowercase() || character.is_ascii_digit() {
-            normalized.push(character);
-            previous_was_separator = false;
-            continue;
-        }
-
-        if !normalized.is_empty() && !previous_was_separator {
-            normalized.push('_');
-            previous_was_separator = true;
-        }
-    }
-
-    while normalized.ends_with('_') {
-        normalized.pop();
-    }
-
-    if normalized.is_empty() {
-        String::from("procedure")
-    } else {
-        normalized
     }
 }
