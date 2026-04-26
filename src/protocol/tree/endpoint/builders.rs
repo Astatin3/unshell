@@ -84,16 +84,17 @@ impl ProtocolEndpoint {
         // accepts the call. The hook only becomes active once valid hook traffic
         // comes back from the expected peer.
         if let Some(hook) = &call.response_hook
+            && let key = HookKey::new(hook.return_path.clone(), hook.hook_id)
             && self
                 .hooks
-                .insert_pending(PendingHook {
-                    return_path: hook.return_path.clone(),
-                    hook_id: hook.hook_id,
-                    caller_src_path: header.dst_path.clone(),
-                    procedure_id: call.procedure_id.clone(),
-                    dst_leaf: header.dst_leaf.clone(),
-                    local_ended: false,
-                })
+                .insert_pending(
+                    key,
+                    PendingHook {
+                        caller_src_path: header.dst_path.clone(),
+                        procedure_id: call.procedure_id.clone(),
+                        local_ended: false,
+                    },
+                )
                 .is_err()
         {
             return Err(EndpointError::Validation(ValidationError::InvalidHookId));

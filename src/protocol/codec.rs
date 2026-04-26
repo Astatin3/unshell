@@ -1,6 +1,8 @@
 //! Framed packet encoding and decoding.
 use core::{fmt, mem};
-use rkyv::{Serialize, access, api::high::to_bytes_in, deserialize, rancor::Error, util::AlignedVec};
+use rkyv::{
+    Serialize, access, api::high::to_bytes_in, deserialize, rancor::Error, util::AlignedVec,
+};
 
 use super::types::{
     ArchivedCallMessage, ArchivedDataMessage, ArchivedFaultMessage, ArchivedPacketHeader,
@@ -85,17 +87,19 @@ where
     >,
 {
     let header_start = align_up(8usize, SECTION_ALIGN);
-    let mut frame = FrameBytes::new();
+    // Reserve enough space for the framing prefix plus a typical header/payload pair so the
+    // common encode path avoids early growth reallocations inside `to_bytes_in`.
+    let mut frame = FrameBytes::with_capacity(header_start + 256);
     frame.resize(header_start, 0);
     frame = to_bytes_in::<_, Error>(header, frame).map_err(FrameError::Serialize)?;
-    let header_len = u32::try_from(frame.len() - header_start)
-        .map_err(|_| FrameError::LengthOverflow)?;
+    let header_len =
+        u32::try_from(frame.len() - header_start).map_err(|_| FrameError::LengthOverflow)?;
 
     let payload_start = align_up(frame.len(), SECTION_ALIGN);
     frame.resize(payload_start, 0);
     frame = to_bytes_in::<_, Error>(payload, frame).map_err(FrameError::Serialize)?;
-    let payload_len = u32::try_from(frame.len() - payload_start)
-        .map_err(|_| FrameError::LengthOverflow)?;
+    let payload_len =
+        u32::try_from(frame.len() - payload_start).map_err(|_| FrameError::LengthOverflow)?;
 
     frame[0..4].copy_from_slice(&header_len.to_be_bytes());
     frame[4..8].copy_from_slice(&payload_len.to_be_bytes());
@@ -104,36 +108,15 @@ where
 
 /// Decodes one aligned two-section frame.
 pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
-    if bytes.len() < 8 {
-        return Err(FrameError::Truncated);
-    }
-
-    let header_len = read_u32(bytes, 0)? as usize;
-    let payload_len = read_u32(bytes, 4)? as usize;
-    let header_start = align_up(8usize, SECTION_ALIGN);
-    let header_end = header_start + header_len;
-    if header_end > bytes.len() {
-        return Err(FrameError::Truncated);
-    }
-
-    let payload_start = align_up(header_end, SECTION_ALIGN);
-    let payload_end = payload_start + payload_len;
-    if payload_end != bytes.len() {
-        return Err(FrameError::Truncated);
-    }
-
+    let (header_bytes, payload_bytes) = split_frame_sections(bytes)?;
     let header = deserialize_section::<ArchivedPacketHeader, PacketHeader>(
-        bytes
-            .get(header_start..header_end)
-            .ok_or(FrameError::Truncated)?,
+        header_bytes,
         FrameError::InvalidHeader,
     )?;
 
     Ok(ParsedFrame {
         header,
-        payload_bytes: bytes
-            .get(payload_start..payload_end)
-            .ok_or(FrameError::Truncated)?,
+        payload_bytes,
     })
 }
 
@@ -156,6 +139,35 @@ fn read_u32(bytes: &[u8], start: usize) -> Result<u32, FrameError> {
             .ok_or(FrameError::Truncated)?
             .try_into()
             .expect("slice width checked"),
+    ))
+}
+
+fn split_frame_sections(bytes: &[u8]) -> Result<(&[u8], &[u8]), FrameError> {
+    if bytes.len() < 8 {
+        return Err(FrameError::Truncated);
+    }
+
+    let header_len = read_u32(bytes, 0)? as usize;
+    let payload_len = read_u32(bytes, 4)? as usize;
+    let header_start = align_up(8usize, SECTION_ALIGN);
+    let header_end = header_start + header_len;
+    if header_end > bytes.len() {
+        return Err(FrameError::Truncated);
+    }
+
+    let payload_start = align_up(header_end, SECTION_ALIGN);
+    let payload_end = payload_start + payload_len;
+    if payload_end != bytes.len() {
+        return Err(FrameError::Truncated);
+    }
+
+    Ok((
+        bytes
+            .get(header_start..header_end)
+            .ok_or(FrameError::Truncated)?,
+        bytes
+            .get(payload_start..payload_end)
+            .ok_or(FrameError::Truncated)?,
     ))
 }
 

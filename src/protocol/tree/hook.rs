@@ -6,6 +6,8 @@
 //!
 //! The table indexes active hooks both by their host-side return path and by the remote
 //! peer path so routing code can resolve whichever side of the relationship it currently has.
+//! The `HookKey` already carries the host path and hook id, so the pending/active records only
+//! store the extra state that actually changes across the hook lifecycle.
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
@@ -32,16 +34,10 @@ impl HookKey {
 /// Pending hook context used only for fault attribution before activation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingHook {
-    /// Path of the endpoint hosting the pending hook.
-    pub return_path: Vec<String>,
-    /// Per-host hook identifier.
-    pub hook_id: u64,
     /// Caller path to promote into `peer_path` once the hook becomes active.
     pub caller_src_path: Vec<String>,
     /// Procedure that created the hook.
     pub procedure_id: String,
-    /// Optional destination leaf inside the peer endpoint.
-    pub dst_leaf: Option<String>,
     /// Set once the local side has already emitted its terminal message before activation.
     pub local_ended: bool,
 }
@@ -49,16 +45,10 @@ pub struct PendingHook {
 /// Active hook context used for ordinary data traffic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveHook {
-    /// Path of the endpoint hosting the active hook.
-    pub return_path: Vec<String>,
-    /// Per-host hook identifier.
-    pub hook_id: u64,
     /// Remote endpoint path currently paired with this hook.
     pub peer_path: Vec<String>,
     /// Procedure that owns the hook conversation.
     pub procedure_id: String,
-    /// Optional destination leaf inside the peer endpoint.
-    pub dst_leaf: Option<String>,
     /// Set once the local side has emitted its terminal message.
     pub local_ended: bool,
     /// Set once the peer side has emitted its terminal message.
@@ -91,8 +81,11 @@ impl HookTable {
     }
 
     /// Inserts a hook that has been announced but not yet accepted by the callee.
-    pub fn insert_pending(&mut self, pending: PendingHook) -> Result<(), HookConflict> {
-        let key = HookKey::new(pending.return_path.clone(), pending.hook_id);
+    pub fn insert_pending(
+        &mut self,
+        key: HookKey,
+        pending: PendingHook,
+    ) -> Result<(), HookConflict> {
         if self.pending.contains_key(&key) || self.active.contains_key(&key) {
             return Err(HookConflict);
         }
@@ -106,33 +99,32 @@ impl HookTable {
     /// pending caller attribution into the active peer path used for data routing.
     pub fn activate_pending(&mut self, key: &HookKey) -> Option<()> {
         let pending = self.pending.remove(key)?;
-        self.insert_active(ActiveHook {
-            return_path: pending.return_path,
-            hook_id: pending.hook_id,
-            peer_path: pending.caller_src_path,
-            procedure_id: pending.procedure_id,
-            dst_leaf: pending.dst_leaf,
-            local_ended: pending.local_ended,
-            peer_ended: false,
-        })
+        self.insert_active(
+            key.clone(),
+            ActiveHook {
+                peer_path: pending.caller_src_path,
+                procedure_id: pending.procedure_id,
+                local_ended: pending.local_ended,
+                peer_ended: false,
+            },
+        )
         .ok()?;
         Some(())
     }
 
     /// Inserts a live hook and its peer-path lookup entry.
-    pub fn insert_active(&mut self, active: ActiveHook) -> Result<(), HookConflict> {
-        let key = HookKey::new(active.return_path.clone(), active.hook_id);
+    pub fn insert_active(&mut self, key: HookKey, active: ActiveHook) -> Result<(), HookConflict> {
         if self.pending.contains_key(&key)
             || self.active.contains_key(&key)
             || self
                 .active_by_peer
-                .get(&active.hook_id)
+                .get(&key.hook_id)
                 .is_some_and(|peer_paths| peer_paths.contains_key(active.peer_path.as_slice()))
         {
             return Err(HookConflict);
         }
         self.active_by_peer
-            .entry(active.hook_id)
+            .entry(key.hook_id)
             .or_default()
             .insert(active.peer_path.clone(), key.clone());
         self.active.insert(key, active);
@@ -154,10 +146,10 @@ impl HookTable {
     /// Removes an active hook and its secondary peer-path index entry.
     pub fn remove_active(&mut self, key: &HookKey) -> Option<ActiveHook> {
         let active = self.active.remove(key)?;
-        if let Some(peer_paths) = self.active_by_peer.get_mut(&active.hook_id) {
+        if let Some(peer_paths) = self.active_by_peer.get_mut(&key.hook_id) {
             peer_paths.remove(active.peer_path.as_slice());
             if peer_paths.is_empty() {
-                self.active_by_peer.remove(&active.hook_id);
+                self.active_by_peer.remove(&key.hook_id);
             }
         }
         Some(active)
@@ -192,11 +184,16 @@ impl HookTable {
         hook_id: u64,
         peer_path: &[String],
     ) -> Option<HookKey> {
-        let host_key = HookKey::new(return_path.to_vec(), hook_id);
-        if self.active.contains_key(&host_key) {
-            return Some(host_key);
+        if let Some(key) = self
+            .active_by_peer
+            .get(&hook_id)
+            .and_then(|peer_paths| peer_paths.get(peer_path))
+        {
+            return Some(key.clone());
         }
-        self.active_by_peer.get(&hook_id)?.get(peer_path).cloned()
+
+        let host_key = HookKey::new(return_path.to_vec(), hook_id);
+        self.active.contains_key(&host_key).then_some(host_key)
     }
 
     /// Marks the local side finished and returns `true` once both sides are finished.

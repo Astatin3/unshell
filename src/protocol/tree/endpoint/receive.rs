@@ -2,7 +2,7 @@
 
 use crate::protocol::types::{ArchivedCallMessage, ArchivedDataMessage, ArchivedFaultMessage};
 use crate::protocol::{
-    CallMessage, PacketType, ProtocolFault, decode_frame, deserialize_archived_bytes,
+    CallMessage, ProtocolFault, decode_frame, deserialize_archived_bytes,
     introspection::INTROSPECTION_PROCEDURE_ID, validate_call, validate_header,
 };
 
@@ -58,21 +58,22 @@ impl ProtocolEndpoint {
         }
 
         if let Some(hook) = &message.response_hook
+            && let Some(key) = key.clone()
             && hook.return_path != self.path
             && self
                 .hooks
-                .insert_active(ActiveHook {
-                    return_path: hook.return_path.clone(),
-                    hook_id: hook.hook_id,
-                    peer_path: header.src_path.clone(),
-                    procedure_id: message.procedure_id.clone(),
-                    dst_leaf: header.dst_leaf.clone(),
-                    local_ended: false,
-                    peer_ended: false,
-                })
+                .insert_active(
+                    key.clone(),
+                    ActiveHook {
+                        peer_path: header.src_path.clone(),
+                        procedure_id: message.procedure_id.clone(),
+                        local_ended: false,
+                        peer_ended: false,
+                    },
+                )
                 .is_err()
         {
-            return self.emit_fault_if_possible(key, ProtocolFault::INTERNAL_ERROR);
+            return self.emit_fault_if_possible(Some(key), ProtocolFault::INTERNAL_ERROR);
         }
 
         Ok(EndpointOutcome::Local(LocalEvent::Call { header, message }))
@@ -98,7 +99,7 @@ impl Endpoint for ProtocolEndpoint {
         }
 
         match header.packet_type {
-            PacketType::Call => {
+            crate::protocol::PacketType::Call => {
                 // Calls only enter from the parent side of the tree or from the endpoint
                 // itself. Children can return data/faults, but they do not initiate new
                 // calls through this node.
@@ -126,7 +127,7 @@ impl Endpoint for ProtocolEndpoint {
                     }
                 }
             }
-            PacketType::Data => match self.decide_route(&header.dst_path) {
+            crate::protocol::PacketType::Data => match self.decide_route(&header.dst_path) {
                 RouteDecision::Local => {
                     let (header, payload) = parsed.into_parts();
                     let message = deserialize_archived_bytes::<
@@ -145,7 +146,7 @@ impl Endpoint for ProtocolEndpoint {
                 }),
                 RouteDecision::Drop => Ok(EndpointOutcome::Dropped),
             },
-            PacketType::Fault => match self.decide_route(&header.dst_path) {
+            crate::protocol::PacketType::Fault => match self.decide_route(&header.dst_path) {
                 RouteDecision::Local => {
                     let (header, payload) = parsed.into_parts();
                     let message = deserialize_archived_bytes::<

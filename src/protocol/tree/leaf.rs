@@ -66,6 +66,9 @@ pub trait CallProcedures: ProtocolLeaf {
 /// casing into protocol-visible names. Deterministic is not the same as stable
 /// across refactors, so shipped protocol surfaces should prefer explicit `id`
 /// overrides.
+#[allow(clippy::too_many_arguments)]
+// This helper mirrors derive-macro inputs directly so callers do not have to allocate an
+// intermediate metadata struct just to compute one deterministic protocol identifier.
 pub fn derive_leaf_name(
     package_name: &str,
     version_major: &str,

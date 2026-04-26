@@ -1,6 +1,6 @@
 //! Stateful application-layer call runtime built on top of `ProtocolEndpoint`.
 
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
 use core::fmt;
 
 use rkyv::{Archive, Serialize, rancor::Error, to_bytes, util::AlignedVec};
@@ -240,14 +240,10 @@ where
         outcome: crate::protocol::tree::EndpointOutcome,
     ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         match outcome {
-            crate::protocol::tree::EndpointOutcome::Forward { frame, .. } => {
-                let mut frames = Vec::with_capacity(1);
-                frames.push(frame);
-                Ok(RuntimeOutcome {
-                    frames,
-                    dropped: false,
-                })
-            }
+            crate::protocol::tree::EndpointOutcome::Forward { frame, .. } => Ok(RuntimeOutcome {
+                frames: vec![frame],
+                dropped: false,
+            }),
             crate::protocol::tree::EndpointOutcome::Dropped => Ok(RuntimeOutcome {
                 frames: Vec::new(),
                 dropped: true,

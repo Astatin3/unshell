@@ -15,7 +15,7 @@
 //! The protocol still owns transport truth such as half-close state and fault
 //! routing. Procedure sessions only own application resources and behavior.
 
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 use core::{fmt, marker::PhantomData};
 
 use rkyv::{Archive, rancor::Error};
@@ -341,14 +341,10 @@ where
         outcome: super::EndpointOutcome,
     ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
         match outcome {
-            super::EndpointOutcome::Forward { frame, .. } => {
-                let mut frames = Vec::with_capacity(1);
-                frames.push(frame);
-                Ok(ProcedureRuntimeOutcome {
-                    frames,
-                    dropped: false,
-                })
-            }
+            super::EndpointOutcome::Forward { frame, .. } => Ok(ProcedureRuntimeOutcome {
+                frames: vec![frame],
+                dropped: false,
+            }),
             super::EndpointOutcome::Dropped => Ok(ProcedureRuntimeOutcome {
                 frames: Vec::new(),
                 dropped: true,
@@ -360,7 +356,9 @@ where
                     LocalEvent::Call { header, message } => {
                         if message.procedure_id != P::procedure_id() {
                             runtime.frames.extend(
-                                self.emit_internal_fault_if_possible(message.response_hook.as_ref())?,
+                                self.emit_internal_fault_if_possible(
+                                    message.response_hook.as_ref(),
+                                )?,
                             );
                             return Ok(runtime);
                         }
@@ -372,9 +370,9 @@ where
                         let session = match self.open_session(header, message) {
                             Ok(session) => session,
                             Err(error) => {
-                                runtime.frames.extend(
-                                    self.emit_internal_fault(Some(hook_key.clone()))?,
-                                );
+                                runtime
+                                    .frames
+                                    .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
                                 let _ = error;
                                 return Ok(runtime);
                             }
@@ -387,7 +385,8 @@ where
                         message,
                         hook_key,
                     } => {
-                        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key) else {
+                        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key)
+                        else {
                             return Ok(runtime);
                         };
                         let effect = match P::on_data(
@@ -402,7 +401,9 @@ where
                             Ok(effect) => self.ensure_terminal_packet(&hook_key, effect),
                             Err(error) => {
                                 let _ = P::close(&mut self.leaf, session);
-                                runtime.frames.extend(self.emit_internal_fault(Some(hook_key.clone()))?);
+                                runtime
+                                    .frames
+                                    .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
                                 let _ = error;
                                 return Ok(runtime);
                             }
@@ -429,7 +430,8 @@ where
                         message,
                         hook_key,
                     } => {
-                        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key) else {
+                        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key)
+                        else {
                             return Ok(runtime);
                         };
                         let on_fault_result = P::on_fault(
@@ -444,12 +446,16 @@ where
                         let close_result = P::close(&mut self.leaf, session);
                         if let Err(error) = on_fault_result {
                             let _ = close_result;
-                            runtime.frames.extend(self.emit_internal_fault(Some(hook_key.clone()))?);
+                            runtime
+                                .frames
+                                .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
                             let _ = error;
                             return Ok(runtime);
                         }
                         if let Err(error) = close_result {
-                            runtime.frames.extend(self.emit_internal_fault(Some(hook_key))?);
+                            runtime
+                                .frames
+                                .extend(self.emit_internal_fault(Some(hook_key))?);
                             let _ = error;
                             return Ok(runtime);
                         }
@@ -471,7 +477,8 @@ where
             data,
             response_hook,
         } = message;
-        let input = decode_call_input::<P::Input>(data.as_slice()).map_err(DispatchError::Decode)?;
+        let input =
+            decode_call_input::<P::Input>(data.as_slice()).map_err(DispatchError::Decode)?;
         P::open(
             &mut self.leaf,
             super::Call {
@@ -479,7 +486,8 @@ where
                 caller_path: header.src_path,
                 procedure_id,
                 dst_leaf: header.dst_leaf,
-                response_hook: response_hook.map(|hook| HookKey::new(hook.return_path, hook.hook_id)),
+                response_hook: response_hook
+                    .map(|hook| HookKey::new(hook.return_path, hook.hook_id)),
             },
         )
         .map_err(DispatchError::Handler)
@@ -511,12 +519,17 @@ where
         &mut self,
         hook: Option<&HookTarget>,
     ) -> Result<Vec<FrameBytes>, ProcedureRuntimeError<P::Error>> {
-        let Some(HookTarget { return_path, hook_id }) = hook else {
+        let Some(HookTarget {
+            return_path,
+            hook_id,
+        }) = hook
+        else {
             return Ok(Vec::new());
         };
-        let outcome = self
-            .endpoint
-            .emit_fault_if_possible(Some(HookKey::new(return_path.clone(), *hook_id)), ProtocolFault::INTERNAL_ERROR)?;
+        let outcome = self.endpoint.emit_fault_if_possible(
+            Some(HookKey::new(return_path.clone(), *hook_id)),
+            ProtocolFault::INTERNAL_ERROR,
+        )?;
         Ok(self.process_endpoint_outcome(outcome)?.frames)
     }
 
@@ -544,7 +557,7 @@ where
             .endpoint
             .hooks
             .active(hook_key)
-            .map_or(true, |active| active.local_ended);
+            .is_none_or(|active| active.local_ended);
         if effect.close_session
             && !effect.outgoing.iter().any(|packet| packet.end_hook)
             && !local_end_already_sent
@@ -562,5 +575,4 @@ where
         }
         effect
     }
-
 }

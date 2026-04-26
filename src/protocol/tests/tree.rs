@@ -167,19 +167,19 @@ fn invalid_hook_peer_emits_local_fault_event() {
 
     match &outcome {
         EndpointOutcome::Local(event) => match event {
-        LocalEvent::Fault {
-            header, message, ..
-        } => {
-            assert_eq!(header.packet_type, PacketType::Fault);
-            assert_eq!(header.hook_id, Some(hook_id));
-            assert_eq!(
-                message,
-                &FaultMessage {
-                    fault: ProtocolFault::INVALID_HOOK_PEER,
-                }
-            );
-        }
-        other => panic!("expected fault event, got {other:?}"),
+            LocalEvent::Fault {
+                header, message, ..
+            } => {
+                assert_eq!(header.packet_type, PacketType::Fault);
+                assert_eq!(header.hook_id, Some(hook_id));
+                assert_eq!(
+                    message,
+                    &FaultMessage {
+                        fault: ProtocolFault::INVALID_HOOK_PEER,
+                    }
+                );
+            }
+            other => panic!("expected fault event, got {other:?}"),
         },
         other => panic!("expected local fault event, got {other:?}"),
     }
@@ -283,14 +283,14 @@ fn pending_hook_fault_is_delivered_before_activation() {
 
     endpoint
         .hooks
-        .insert_pending(crate::protocol::tree::PendingHook {
-            return_path: path(&["client"]),
-            hook_id: 11,
-            caller_src_path: path(&["client"]),
-            procedure_id: call.procedure_id.clone(),
-            dst_leaf: None,
-            local_ended: false,
-        })
+        .insert_pending(
+            crate::protocol::tree::HookKey::new(path(&["client"]), 11),
+            crate::protocol::tree::PendingHook {
+                caller_src_path: path(&["client"]),
+                procedure_id: call.procedure_id.clone(),
+                local_ended: false,
+            },
+        )
         .expect("pending hook should insert");
 
     let outcome = endpoint
