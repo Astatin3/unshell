@@ -1,6 +1,6 @@
 //! Framed packet encoding and decoding.
 use core::{fmt, mem};
-use rkyv::{Serialize, access, deserialize, rancor::Error, to_bytes, util::AlignedVec};
+use rkyv::{Serialize, access, api::high::to_bytes_in, deserialize, rancor::Error, util::AlignedVec};
 
 use super::types::{
     ArchivedCallMessage, ArchivedDataMessage, ArchivedFaultMessage, ArchivedPacketHeader,
@@ -84,24 +84,21 @@ where
         rkyv::api::high::HighSerializer<AlignedVec, rkyv::ser::allocator::ArenaHandle<'a>, Error>,
     >,
 {
-    let header_bytes: FrameBytes = to_bytes::<Error>(header).map_err(FrameError::Serialize)?;
-    let payload_bytes: FrameBytes = to_bytes::<Error>(payload).map_err(FrameError::Serialize)?;
-    let header_len = u32::try_from(header_bytes.len()).map_err(|_| FrameError::LengthOverflow)?;
-    let payload_len = u32::try_from(payload_bytes.len()).map_err(|_| FrameError::LengthOverflow)?;
-
     let header_start = align_up(8usize, SECTION_ALIGN);
-    let payload_start = align_up(header_start + header_bytes.len(), SECTION_ALIGN);
-    let total_len = payload_start + payload_bytes.len();
-
-    let header_end = header_start + header_bytes.len();
-    let payload_end = payload_start + payload_bytes.len();
-
     let mut frame = FrameBytes::new();
-    frame.resize(total_len, 0);
+    frame.resize(header_start, 0);
+    frame = to_bytes_in::<_, Error>(header, frame).map_err(FrameError::Serialize)?;
+    let header_len = u32::try_from(frame.len() - header_start)
+        .map_err(|_| FrameError::LengthOverflow)?;
+
+    let payload_start = align_up(frame.len(), SECTION_ALIGN);
+    frame.resize(payload_start, 0);
+    frame = to_bytes_in::<_, Error>(payload, frame).map_err(FrameError::Serialize)?;
+    let payload_len = u32::try_from(frame.len() - payload_start)
+        .map_err(|_| FrameError::LengthOverflow)?;
+
     frame[0..4].copy_from_slice(&header_len.to_be_bytes());
     frame[4..8].copy_from_slice(&payload_len.to_be_bytes());
-    frame[header_start..header_end].copy_from_slice(&header_bytes);
-    frame[payload_start..payload_end].copy_from_slice(&payload_bytes);
     Ok(frame)
 }
 
