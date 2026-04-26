@@ -98,18 +98,29 @@ impl HookTable {
     /// Activation intentionally reuses the original hook id and host path, but swaps the
     /// pending caller attribution into the active peer path used for data routing.
     pub fn activate_pending(&mut self, key: &HookKey) -> Option<()> {
+        self.activate_pending_with_peer_end(key, false).map(|_| ())
+    }
+
+    /// Promotes a pending hook into the active table and returns whether the local side had
+    /// already ended before the peer accepted the hook.
+    pub fn activate_pending_with_peer_end(
+        &mut self,
+        key: &HookKey,
+        peer_ended: bool,
+    ) -> Option<bool> {
         let pending = self.pending.remove(key)?;
+        let local_ended = pending.local_ended;
         self.insert_active(
             key.clone(),
             ActiveHook {
                 peer_path: pending.caller_src_path,
                 procedure_id: pending.procedure_id,
-                local_ended: pending.local_ended,
-                peer_ended: false,
+                local_ended,
+                peer_ended,
             },
         )
         .ok()?;
-        Some(())
+        Some(local_ended)
     }
 
     /// Inserts a live hook and its peer-path lookup entry.

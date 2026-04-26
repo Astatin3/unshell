@@ -60,8 +60,18 @@ impl ProtocolEndpoint {
             pending.caller_src_path == header.src_path
                 && pending.procedure_id == message.procedure_id
         }) {
-            self.hooks.activate_pending(&host_key);
-            host_key
+            let local_ended = self
+                .hooks
+                .activate_pending_with_peer_end(&host_key, message.end_hook)
+                .expect("pending hook was checked above");
+            if message.end_hook && local_ended {
+                self.hooks.remove_active(&host_key);
+            }
+            return Ok(EndpointOutcome::Local(LocalEvent::Data {
+                header,
+                message,
+                hook_key: host_key,
+            }));
         } else {
             return Ok(EndpointOutcome::Dropped);
         };
