@@ -8,6 +8,25 @@ mod utils;
 use proc_macro::TokenStream;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
+/// Derives canonical protocol-leaf identity helpers for one host type.
+///
+/// What it is: a derive macro that implements `ProtocolLeaf` and generates the
+/// `protocol_leaf_name()` convenience method.
+///
+/// Why it exists: simple leaves and compatibility paths still need a lightweight
+/// way to say "this host type exposes this canonical wire name" without writing
+/// the trait implementation by hand.
+///
+/// # Example
+/// ```ignore
+/// use unshell::Leaf;
+///
+/// #[derive(Leaf)]
+/// #[leaf(leaf_name = "echo")]
+/// struct EchoLeaf;
+///
+/// assert!(EchoLeaf::protocol_leaf_name().contains("echo"));
+/// ```
 #[proc_macro_derive(Leaf, attributes(leaf))]
 pub fn derive_leaf(input: TokenStream) -> TokenStream {
     match leaf::expand_leaf(parse_macro_input!(input as DeriveInput)) {
@@ -16,6 +35,28 @@ pub fn derive_leaf(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Derives canonical stateful-procedure metadata for one procedure type.
+///
+/// What it is: a derive macro that records one procedure suffix and generates
+/// the canonical `protocol_procedure_id()` helper for that procedure.
+///
+/// Why it exists: hook-backed procedures need one stable `procedure_id`, but the
+/// runtime should not require each procedure to handwrite the identifier logic.
+///
+/// # Example
+/// ```ignore
+/// use unshell::{Leaf, Procedure};
+///
+/// #[derive(Leaf)]
+/// #[leaf(leaf_name = "shell")]
+/// struct ShellLeaf;
+///
+/// #[derive(Procedure)]
+/// #[procedure(leaf = ShellLeaf, name = "open")]
+/// struct OpenSession;
+///
+/// assert!(OpenSession::protocol_procedure_id().ends_with(".open"));
+/// ```
 #[proc_macro_derive(Procedure, attributes(procedure))]
 pub fn derive_procedure(input: TokenStream) -> TokenStream {
     match procedure::expand_procedure(parse_macro_input!(input as DeriveInput)) {
@@ -24,6 +65,33 @@ pub fn derive_procedure(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Generates dispatch glue for a simple call-driven leaf impl block.
+///
+/// What it is: an attribute macro placed on one `impl` block whose `#[call]`
+/// methods define the callable surface for that leaf.
+///
+/// Why it exists: one-shot leaves should be able to declare a small RPC-like API
+/// on ordinary Rust methods while still producing the canonical procedure list
+/// and dispatch logic expected by the protocol runtime.
+///
+/// # Example
+/// ```ignore
+/// use unshell::{Leaf, procedures};
+///
+/// #[derive(Leaf)]
+/// #[leaf(id = "org.example.v1.echo")]
+/// struct EchoLeaf;
+///
+/// #[procedures(error = core::convert::Infallible)]
+/// impl EchoLeaf {
+///     #[call]
+///     fn echo(&mut self, input: String) -> String {
+///         input
+///     }
+/// }
+///
+/// assert!(EchoLeaf::protocol_procedure_id("echo").is_some());
+/// ```
 #[proc_macro_attribute]
 pub fn procedures(attr: TokenStream, item: TokenStream) -> TokenStream {
     match procedures::expand_procedures(
