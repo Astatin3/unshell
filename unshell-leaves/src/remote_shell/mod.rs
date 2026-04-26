@@ -13,9 +13,16 @@ pub mod endpoint;
 pub mod tui;
 
 #[cfg(feature = "leaf_endpoint")]
+pub use endpoint::Open;
+#[cfg(feature = "leaf_endpoint")]
 pub use endpoint::RemoteShellEndpoint;
 #[cfg(feature = "leaf_tui")]
 pub use tui::RemoteShellTui;
+
+#[cfg(not(feature = "leaf_endpoint"))]
+/// Compile-time procedure symbol kept available even when the endpoint runtime is
+/// not built, so the leaf declaration still validates its declared inventory.
+pub struct Open;
 
 /// Open-request payload for the remote shell leaf.
 ///

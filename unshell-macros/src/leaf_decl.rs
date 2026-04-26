@@ -167,6 +167,7 @@ pub(crate) fn expand_leaf_declaration(input: LeafDeclarationInput) -> Result<Tok
         .iter()
         .map(|procedure| LitStr::new(&normalize_suffix(&procedure.to_string()), procedure.span()))
         .collect::<Vec<_>>();
+    let procedure_type_checks = input.procedures.iter();
 
     let endpoint_impl = input
         .endpoint_struct
@@ -224,6 +225,10 @@ pub(crate) fn expand_leaf_declaration(input: LeafDeclarationInput) -> Result<Tok
                 <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(suffix)
             }
         }
+
+        const _: fn() = || {
+            #(let _ = ::core::marker::PhantomData::<#procedure_type_checks>;)*
+        };
 
         #endpoint_impl
         #tui_impl
