@@ -6,13 +6,14 @@ mod procedures;
 mod utils;
 
 use proc_macro::TokenStream;
-use syn::{DeriveInput, ItemImpl, parse_macro_input};
+use syn::{DeriveInput, ItemImpl, ItemStruct, parse_macro_input};
 
 /// Declares one compile-time leaf surface and binds it to endpoint and/or TUI
 /// host structs.
 ///
-/// What it is: a function-like macro that generates the shared protocol-visible
-/// metadata for one leaf and applies that metadata to the listed host structs.
+/// What it is: an attribute macro placed on a marker struct that generates the
+/// shared protocol-visible metadata for one leaf and applies that metadata to the
+/// listed host structs.
 ///
 /// Why it exists: endpoint and TUI hosts should not each have to repeat the leaf
 /// name and procedure inventory, and endpoint construction should not need a
@@ -20,18 +21,20 @@ use syn::{DeriveInput, ItemImpl, parse_macro_input};
 ///
 /// # Example
 /// ```ignore
-/// unshell::leaf! {
+/// #[unshell::leaf(
 ///     name = "remote_shell",
-///     procedures = [Open, Reset, whoami],
-///     endpoint_struct = RemoteShellEndpoint,
-///     tui_struct = RemoteShellTui,
-/// }
+///     procedures = [Open],
+///     leaf_endpoint = endpoint::RemoteShellEndpoint,
+///     leaf_tui = tui::RemoteShellTui,
+/// )]
+/// pub struct RemoteShell;
 /// ```
-#[proc_macro]
-pub fn leaf(input: TokenStream) -> TokenStream {
-    match leaf_decl::expand_leaf_declaration(parse_macro_input!(
-        input as leaf_decl::LeafDeclarationInput
-    )) {
+#[proc_macro_attribute]
+pub fn leaf(attr: TokenStream, item: TokenStream) -> TokenStream {
+    match leaf_decl::expand_leaf_declaration(
+        parse_macro_input!(attr as leaf_decl::LeafDeclarationAttributes),
+        parse_macro_input!(item as ItemStruct),
+    ) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
@@ -49,13 +52,12 @@ pub fn leaf(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// use unshell::{Procedure, leaf};
 ///
-/// struct ShellLeaf;
-///
-/// leaf! {
+/// #[leaf(
 ///     name = "shell",
 ///     procedures = [OpenSession],
 ///     endpoint_struct = ShellLeaf,
-/// }
+/// )]
+/// struct Shell;
 ///
 /// struct ShellLeaf;
 ///
@@ -86,13 +88,14 @@ pub fn derive_procedure(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// use unshell::{leaf, procedures};
 ///
-/// struct EchoLeaf;
-///
-/// leaf! {
+/// #[leaf(
 ///     id = "org.example.v1.echo",
-///     procedures = [echo],
+///     procedures = ["echo"],
 ///     endpoint_struct = EchoLeaf,
-/// }
+/// )]
+/// struct Echo;
+///
+/// struct EchoLeaf;
 ///
 /// #[procedures(error = core::convert::Infallible)]
 /// impl EchoLeaf {

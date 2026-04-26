@@ -18,11 +18,8 @@ struct EchoLeaf {
     prefix: String,
 }
 
-leaf! {
-    id = "org.example.v1.echo",
-    endpoint_struct = EchoLeaf,
-    procedures = ["echo"],
-}
+#[leaf(id = "org.example.v1.echo", endpoint_struct = EchoLeaf, procedures = ["echo"])]
+struct Echo;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 struct EchoRequest {

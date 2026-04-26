@@ -19,15 +19,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         agent_path(),
         Some(Vec::new()),
         Vec::new(),
-        vec![remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_spec()],
+        vec![remote_shell::endpoint::RemoteShell::protocol_leaf_spec()],
     );
     let mut runtime = ProcedureRuntime::<
-        remote_shell::endpoint::RemoteShellEndpoint,
+        remote_shell::endpoint::RemoteShell,
         remote_shell::endpoint::Open,
-    >::new(
-        endpoint,
-        remote_shell::endpoint::RemoteShellEndpoint::default(),
-    );
+    >::new(endpoint, remote_shell::endpoint::RemoteShell::default());
 
     println!(
         "connected to controller at {}",

@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Vec::new(),
     );
     let hook_id = endpoint.allocate_hook_id();
-    let shell_leaf_name = remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_name();
+    let shell_leaf_name = remote_shell::endpoint::RemoteShell::protocol_leaf_name();
     let open_procedure = remote_shell::endpoint::Open::protocol_procedure_id();
 
     remote_shell::endpoint::send_forward(

@@ -17,11 +17,8 @@ impl ProcedureMetadata for Reset {
     const PROCEDURE_SUFFIX: &'static str = "reset";
 }
 
-leaf! {
-    id = "org.example.v1.demo",
-    procedures = [Open, Reset],
-    endpoint_struct = EndpointHost,
-}
+#[leaf(id = "org.example.v1.demo", procedures = [Open, Reset], endpoint_struct = EndpointHost)]
+struct Demo;
 
 struct EndpointHalf;
 struct TuiHalf;
@@ -32,7 +29,7 @@ impl ProcedureMetadata for Connect {
     const PROCEDURE_SUFFIX: &'static str = "connect";
 }
 
-leaf! {
+#[leaf(
     name = "chat",
     org = "org",
     product = "example",
@@ -40,7 +37,8 @@ leaf! {
     procedures = [Connect],
     endpoint_struct = EndpointHalf,
     tui_struct = TuiHalf,
-}
+)]
+struct Chat;
 
 struct TuiOnly;
 struct Tail;
@@ -50,11 +48,8 @@ impl ProcedureMetadata for Tail {
     const PROCEDURE_SUFFIX: &'static str = "tail";
 }
 
-leaf! {
-    id = "org.example.v1.transcript",
-    procedures = [Tail],
-    tui_struct = TuiOnly,
-}
+#[leaf(id = "org.example.v1.transcript", procedures = [Tail], tui_struct = TuiOnly)]
+struct Transcript;
 
 #[test]
 fn leaf_declaration_generates_endpoint_host_metadata() {

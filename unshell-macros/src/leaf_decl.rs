@@ -1,89 +1,46 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    Error, Ident, LitStr, Result, Token, Visibility,
+    Error, ItemStruct, LitStr, Path, Result, Token,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
 };
 
 use crate::utils::option_litstr_tokens;
 
-pub(crate) struct LeafDeclarationInput {
-    visibility: Visibility,
+pub(crate) struct LeafDeclarationAttributes {
     name: Option<LitStr>,
     id: Option<LitStr>,
     org: Option<LitStr>,
     product: Option<LitStr>,
     version: Option<LitStr>,
-    endpoint_struct: Option<Ident>,
-    tui_struct: Option<Ident>,
     procedures: Vec<ProcedureRef>,
+    host_bindings: Vec<HostBinding>,
 }
 
-impl Parse for LeafDeclarationInput {
+impl Parse for LeafDeclarationAttributes {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let visibility = if input.peek(Token![pub]) {
-            input.parse()?
-        } else {
-            Visibility::Inherited
-        };
-
         let assignments = Punctuated::<LeafAssignment, Token![,]>::parse_terminated(input)?;
         let mut parsed = Self {
-            visibility,
             name: None,
             id: None,
             org: None,
             product: None,
             version: None,
-            endpoint_struct: None,
-            tui_struct: None,
             procedures: Vec::new(),
+            host_bindings: Vec::new(),
         };
 
         for assignment in assignments {
             match assignment {
-                LeafAssignment::Name(value) => {
-                    if parsed.name.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate leaf name"));
-                    }
-                    parsed.name = Some(value);
-                }
-                LeafAssignment::Id(value) => {
-                    if parsed.id.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate leaf id"));
-                    }
-                    parsed.id = Some(value);
-                }
-                LeafAssignment::Org(value) => {
-                    if parsed.org.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate leaf org"));
-                    }
-                    parsed.org = Some(value);
-                }
+                LeafAssignment::Name(value) => set_once(&mut parsed.name, value, "leaf name")?,
+                LeafAssignment::Id(value) => set_once(&mut parsed.id, value, "leaf id")?,
+                LeafAssignment::Org(value) => set_once(&mut parsed.org, value, "leaf org")?,
                 LeafAssignment::Product(value) => {
-                    if parsed.product.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate leaf product"));
-                    }
-                    parsed.product = Some(value);
+                    set_once(&mut parsed.product, value, "leaf product")?
                 }
                 LeafAssignment::Version(value) => {
-                    if parsed.version.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate leaf version"));
-                    }
-                    parsed.version = Some(value);
-                }
-                LeafAssignment::EndpointStruct(value) => {
-                    if parsed.endpoint_struct.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate endpoint_struct"));
-                    }
-                    parsed.endpoint_struct = Some(value);
-                }
-                LeafAssignment::TuiStruct(value) => {
-                    if parsed.tui_struct.is_some() {
-                        return Err(Error::new_spanned(value, "duplicate tui_struct"));
-                    }
-                    parsed.tui_struct = Some(value);
+                    set_once(&mut parsed.version, value, "leaf version")?
                 }
                 LeafAssignment::Procedures(values) => {
                     if !parsed.procedures.is_empty() {
@@ -91,19 +48,20 @@ impl Parse for LeafDeclarationInput {
                     }
                     parsed.procedures = values;
                 }
+                LeafAssignment::HostBinding(binding) => parsed.host_bindings.push(binding),
             }
         }
 
         if parsed.name.is_none() && parsed.id.is_none() {
             return Err(Error::new(
                 input.span(),
-                "leaf! requires either `name = \"...\"` or `id = \"...\"`",
+                "#[leaf(...)] requires either `name = \"...\"` or `id = \"...\"`",
             ));
         }
-        if parsed.endpoint_struct.is_none() && parsed.tui_struct.is_none() {
+        if parsed.host_bindings.is_empty() {
             return Err(Error::new(
                 input.span(),
-                "leaf! requires at least one of `endpoint_struct = ...` or `tui_struct = ...`",
+                "#[leaf(...)] requires at least one host binding",
             ));
         }
 
@@ -117,13 +75,17 @@ enum LeafAssignment {
     Org(LitStr),
     Product(LitStr),
     Version(LitStr),
-    EndpointStruct(Ident),
-    TuiStruct(Ident),
     Procedures(Vec<ProcedureRef>),
+    HostBinding(HostBinding),
+}
+
+struct HostBinding {
+    module_path: Option<Path>,
+    host_path: Option<Path>,
 }
 
 enum ProcedureRef {
-    Symbol(Ident),
+    Symbol(Path),
     Suffix(LitStr),
 }
 
@@ -138,16 +100,26 @@ impl Parse for ProcedureRef {
 
 impl Parse for LeafAssignment {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let name: Ident = input.parse()?;
+        let name: Path = input.parse()?;
         input.parse::<Token![=]>()?;
-        match name.to_string().as_str() {
+        let key = name
+            .get_ident()
+            .ok_or_else(|| Error::new_spanned(&name, "leaf keys must be identifiers"))?
+            .to_string();
+        match key.as_str() {
             "name" => Ok(Self::Name(input.parse()?)),
             "id" => Ok(Self::Id(input.parse()?)),
             "org" => Ok(Self::Org(input.parse()?)),
             "product" => Ok(Self::Product(input.parse()?)),
             "version" => Ok(Self::Version(input.parse()?)),
-            "endpoint_struct" => Ok(Self::EndpointStruct(input.parse()?)),
-            "tui_struct" => Ok(Self::TuiStruct(input.parse()?)),
+            "endpoint_struct" | "tui_struct" => Ok(Self::HostBinding(HostBinding {
+                module_path: None,
+                host_path: Some(input.parse()?),
+            })),
+            "endpoint" | "tui" => Ok(Self::HostBinding(HostBinding {
+                module_path: Some(input.parse()?),
+                host_path: None,
+            })),
             "procedures" => {
                 let content;
                 syn::bracketed!(content in input);
@@ -156,57 +128,47 @@ impl Parse for LeafAssignment {
                     .collect::<Vec<_>>();
                 Ok(Self::Procedures(values))
             }
-            _ => Err(Error::new_spanned(name, "unsupported leaf! assignment")),
+            _ => Err(Error::new_spanned(
+                name,
+                "unsupported #[leaf(...)] key; expected one of name, id, org, product, version, procedures, endpoint, tui, endpoint_struct, or tui_struct",
+            )),
         }
     }
 }
 
-pub(crate) fn expand_leaf_declaration(input: LeafDeclarationInput) -> Result<TokenStream> {
-    let _visibility = input.visibility;
-    let declaration_ident = format_ident!(
-        "__UnshellLeafDecl_{}",
-        input
-            .endpoint_struct
-            .as_ref()
-            .or(input.tui_struct.as_ref())
-            .expect("leaf declaration requires at least one host")
-    );
-    let id = option_litstr_tokens(input.id.as_ref());
-    let org = option_litstr_tokens(input.org.as_ref());
-    let product = option_litstr_tokens(input.product.as_ref());
-    let version = option_litstr_tokens(input.version.as_ref());
-    let leaf_name = option_litstr_tokens(input.name.as_ref());
-    let procedure_suffixes = input
+pub(crate) fn expand_leaf_declaration(
+    attr: LeafDeclarationAttributes,
+    item: ItemStruct,
+) -> Result<TokenStream> {
+    let declaration_ident = item.ident.clone();
+    let id = option_litstr_tokens(attr.id.as_ref());
+    let org = option_litstr_tokens(attr.org.as_ref());
+    let product = option_litstr_tokens(attr.product.as_ref());
+    let version = option_litstr_tokens(attr.version.as_ref());
+    let leaf_name = option_litstr_tokens(attr.name.as_ref());
+    let canonical_procedure_module = attr
+        .host_bindings
+        .iter()
+        .find_map(|binding| binding.module_path.as_ref())
+        .cloned();
+    let procedure_suffixes = attr
         .procedures
         .iter()
-        .map(|procedure| match procedure {
-            ProcedureRef::Symbol(procedure) => {
-                quote! { <#procedure as ::unshell::protocol::tree::ProcedureMetadata>::PROCEDURE_SUFFIX }
-            }
-            ProcedureRef::Suffix(suffix) => quote! { #suffix },
-        })
-        .collect::<Vec<_>>();
-    let procedure_type_checks = input
-        .procedures
+        .map(|procedure| procedure_suffix_tokens(procedure, canonical_procedure_module.as_ref()))
+        .collect::<Result<Vec<_>>>()?;
+    let procedure_type_checks = attr
+        .host_bindings
         .iter()
-        .filter_map(|procedure| match procedure {
-            ProcedureRef::Symbol(procedure) => Some(procedure),
-            ProcedureRef::Suffix(_) => None,
-        });
-
-    let endpoint_impl = input
-        .endpoint_struct
-        .as_ref()
-        .map(|endpoint_struct| expand_binding_impl(endpoint_struct, &declaration_ident));
-    let tui_impl = input
-        .tui_struct
-        .as_ref()
-        .map(|tui_struct| expand_binding_impl(tui_struct, &declaration_ident));
+        .map(|binding| procedure_type_check_tokens(binding, &attr.procedures, &declaration_ident))
+        .collect::<Result<Vec<_>>>()?;
+    let host_impls = attr
+        .host_bindings
+        .iter()
+        .map(|binding| expand_binding_impl(binding, &declaration_ident))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(quote! {
-        #[allow(non_camel_case_types)]
-        #[doc(hidden)]
-        pub struct #declaration_ident;
+        #item
 
         impl ::unshell::protocol::tree::ProtocolLeaf for #declaration_ident {
             fn leaf_name() -> ::unshell::alloc::string::String {
@@ -252,16 +214,16 @@ pub(crate) fn expand_leaf_declaration(input: LeafDeclarationInput) -> Result<Tok
         }
 
         const _: fn() = || {
-            #(let _ = ::core::marker::PhantomData::<#procedure_type_checks>;)*
+            #(#procedure_type_checks)*
         };
 
-        #endpoint_impl
-        #tui_impl
+        #(#host_impls)*
     })
 }
 
-fn expand_binding_impl(host: &Ident, declaration: &Ident) -> TokenStream {
-    quote! {
+fn expand_binding_impl(binding: &HostBinding, declaration: &syn::Ident) -> Result<TokenStream> {
+    let host = host_path_for_binding(binding, declaration)?;
+    Ok(quote! {
         impl ::unshell::protocol::tree::ProtocolLeaf for #host {
             fn leaf_name() -> ::unshell::alloc::string::String {
                 <#declaration as ::unshell::protocol::tree::ProtocolLeaf>::leaf_name()
@@ -296,5 +258,91 @@ fn expand_binding_impl(host: &Ident, declaration: &Ident) -> TokenStream {
                 <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(suffix)
             }
         }
+    })
+}
+
+fn host_path_for_binding(binding: &HostBinding, declaration: &syn::Ident) -> Result<Path> {
+    if let Some(path) = &binding.host_path {
+        return Ok(path.clone());
     }
+
+    let Some(module_path) = &binding.module_path else {
+        return Err(Error::new(
+            declaration.span(),
+            "leaf binding is missing a host path",
+        ));
+    };
+
+    let mut path = module_path.clone();
+    path.segments.push(format_ident!("{declaration}").into());
+    Ok(path)
+}
+
+fn procedure_suffix_tokens(
+    procedure: &ProcedureRef,
+    canonical_module: Option<&Path>,
+) -> Result<TokenStream> {
+    match procedure {
+        ProcedureRef::Symbol(procedure) => {
+            let procedure_path = if let Some(module_path) = canonical_module {
+                let mut path = module_path.clone();
+                let ident = procedure.get_ident().ok_or_else(|| {
+                    Error::new_spanned(
+                        procedure,
+                        "procedure names must be bare identifiers when inferred from a module",
+                    )
+                })?;
+                path.segments.push(ident.clone().into());
+                path
+            } else {
+                procedure.clone()
+            };
+            Ok(
+                quote! { <#procedure_path as ::unshell::protocol::tree::ProcedureMetadata>::PROCEDURE_SUFFIX },
+            )
+        }
+        ProcedureRef::Suffix(suffix) => Ok(quote! { #suffix }),
+    }
+}
+
+fn procedure_type_check_tokens(
+    binding: &HostBinding,
+    procedures: &[ProcedureRef],
+    declaration: &syn::Ident,
+) -> Result<TokenStream> {
+    let Some(module_path) = &binding.module_path else {
+        return Ok(quote! {});
+    };
+
+    let checks = procedures
+        .iter()
+        .filter_map(|procedure| match procedure {
+            ProcedureRef::Symbol(procedure) => Some(procedure),
+            ProcedureRef::Suffix(_) => None,
+        })
+        .map(|procedure| {
+            let mut path = module_path.clone();
+            let ident = procedure.get_ident().ok_or_else(|| {
+                Error::new_spanned(
+                    procedure,
+                    "procedure names must be bare identifiers when inferred from a module",
+                )
+            })?;
+            path.segments.push(ident.clone().into());
+            Ok::<TokenStream, Error>(quote! {
+                let _ = ::core::marker::PhantomData::<#path>;
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let _ = declaration;
+    Ok(quote! { #(#checks)* })
+}
+
+fn set_once(target: &mut Option<LitStr>, value: LitStr, label: &str) -> Result<()> {
+    if target.is_some() {
+        return Err(Error::new_spanned(value, format!("duplicate {label}")));
+    }
+    *target = Some(value);
+    Ok(())
 }

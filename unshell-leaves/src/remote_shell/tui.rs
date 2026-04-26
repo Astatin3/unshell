@@ -8,23 +8,24 @@ use std::string::String;
 use std::vec::Vec;
 
 use unshell::protocol::DataMessage;
+use unshell_macros::Procedure;
 
 use crate::{LeafTui, TuiError};
 
 /// Stub TUI surface for the remote shell leaf.
 #[derive(Default)]
-pub struct RemoteShellTui {
+pub struct RemoteShell {
     transcript: Vec<u8>,
 }
 
-impl RemoteShellTui {
+impl RemoteShell {
     /// Returns a short explanation of the current stub status.
     pub fn status_line(&self) -> &'static str {
         "remote shell TUI stub: rendering is placeholder-only for now"
     }
 }
 
-impl LeafTui for RemoteShellTui {
+impl LeafTui for RemoteShell {
     fn leaf_name(&self) -> String {
         Self::protocol_leaf_name()
     }
@@ -39,3 +40,9 @@ impl LeafTui for RemoteShellTui {
         format!("{}\n\n{}", self.status_line(), body)
     }
 }
+
+/// TUI-side placeholder procedure symbol for the shared `remote_shell` leaf
+/// declaration.
+#[derive(Procedure)]
+#[procedure(leaf = RemoteShell, name = "open")]
+pub struct Open {}

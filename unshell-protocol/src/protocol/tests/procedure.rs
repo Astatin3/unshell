@@ -17,11 +17,8 @@ struct StreamLeaf {
     sessions: BTreeMap<HookKey, ProcedureOpen>,
 }
 
-leaf! {
-    id = "org.example.v1.stream",
-    procedures = [ProcedureOpen],
-    endpoint_struct = StreamLeaf,
-}
+#[leaf(id = "org.example.v1.stream", procedures = [ProcedureOpen], endpoint_struct = StreamLeaf)]
+struct Stream;
 
 impl ProcedureStore<ProcedureOpen> for StreamLeaf {
     fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, ProcedureOpen> {
@@ -146,11 +143,8 @@ struct DuplexLeaf {
     sessions: BTreeMap<HookKey, DuplexProcedure>,
 }
 
-leaf! {
-    id = "org.example.v1.duplex",
-    procedures = [DuplexProcedure],
-    endpoint_struct = DuplexLeaf,
-}
+#[leaf(id = "org.example.v1.duplex", procedures = [DuplexProcedure], endpoint_struct = DuplexLeaf)]
+struct Duplex;
 
 impl ProcedureStore<DuplexProcedure> for DuplexLeaf {
     fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, DuplexProcedure> {

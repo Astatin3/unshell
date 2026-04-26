@@ -14,7 +14,7 @@ use portable_pty::{CommandBuilder, ExitStatus, PtySize, native_pty_system};
 use unshell::Procedure;
 use unshell::protocol::tree::{IncomingData, OutgoingData, ProcedureEffect};
 
-use super::RemoteShellEndpoint;
+use super::RemoteShell;
 use super::errors::ShellLeafError;
 
 /// Per-hook shell session created by the `open` procedure.
@@ -22,7 +22,7 @@ use super::errors::ShellLeafError;
 /// The procedure type is also the stored session type so the mapping between
 /// one opening procedure and one live hook remains direct and visible.
 #[derive(Procedure)]
-#[procedure(leaf = RemoteShellEndpoint, name = "open")]
+#[procedure(leaf = RemoteShell, name = "open")]
 pub struct Open {
     /// Spawned PTY child process.
     pub(super) child: Box<dyn portable_pty::Child + Send>,

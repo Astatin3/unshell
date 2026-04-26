@@ -6,12 +6,12 @@ description = "Application-layer UnShell leaves and client surfaces"
 
 [features]
 default = []
-leaf_endpoint = ["dep:portable-pty"]
+leaf_endpoint = []
 leaf_tui = []
 
 [dependencies]
 rkyv = { workspace = true }
-portable-pty = { workspace = true, optional = true }
+portable-pty = { workspace = true }
 unshell-macros = { workspace = true }
 unshell-protocol = { workspace = true }
 

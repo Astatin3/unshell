@@ -19,11 +19,8 @@ struct EchoLeaf {
     sessions: BTreeMap<HookKey, EchoOpen>,
 }
 
-leaf! {
-    id = "org.example.v1.echo",
-    procedures = [EchoOpen],
-    endpoint_struct = EchoLeaf,
-}
+#[leaf(id = "org.example.v1.echo", procedures = [EchoOpen], endpoint_struct = EchoLeaf)]
+struct Echo;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 struct EchoRequest {

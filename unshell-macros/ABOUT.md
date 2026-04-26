@@ -16,7 +16,7 @@ In practical terms, the macro system is responsible for:
 
 - deriving canonical procedure identifiers
 - generating compile-time procedure inventories for leaves
-- binding one leaf declaration to separate endpoint and TUI host structs without
+- binding one leaf declaration to separate endpoint and TUI host modules without
   repeating the metadata on each host
 - generating dispatch glue for simple call-driven leaves
 
@@ -32,7 +32,7 @@ The declaration answers:
 
 - what is this leaf called on the wire?
 - which procedure suffixes belong to it?
-- which host structs implement its endpoint and TUI roles?
+- which host modules implement its endpoint and TUI roles?
 
 The goal is that this information is written once and reused everywhere.
 
@@ -46,6 +46,28 @@ One leaf can have multiple host structs with different responsibilities.
 Those hosts should not each have to repeat the leaf name or procedure inventory.
 They bind to the declaration instead.
 
+The current convention is module-based. A declaration such as:
+
+```rust
+#[leaf(
+    name = "remote_shell",
+    procedures = [Open],
+    endpoint = endpoint,
+    tui = tui,
+)]
+pub struct RemoteShell;
+```
+
+means:
+
+- the endpoint host type is inferred as `endpoint::RemoteShell`
+- the TUI host type is inferred as `tui::RemoteShell`
+- type-based procedure metadata is resolved from the endpoint module as
+  `endpoint::Open`
+
+This convention removes repeated host type paths from the declaration while still
+keeping the generated code deterministic and inspectable.
+
 ### 3. Procedure and method metadata
 
 Procedures and future typed remote methods need stable canonical identifiers.
@@ -56,9 +78,9 @@ compile-time inventory instead of handwritten lists.
 
 ## Current direction
 
-The public declaration model is now centered on `leaf!`.
+The public declaration model is now centered on `#[leaf(...)]`.
 
-- `leaf!` declares the canonical protocol surface once
+- `#[leaf(...)]` declares the canonical protocol surface once
 - `#[derive(Procedure)]` derives stateful procedure metadata
 - `#[procedures]` derives one-shot call dispatch for simple leaves
 
@@ -75,6 +97,8 @@ The system is optimized for a few constraints that matter to this repository.
 - generated code should stay explicit enough to debug
 - endpoint and TUI roles should share metadata but not be forced into the same
   runtime trait when their behavior differs
+- host inference should stay convention-based instead of discovery-based so a
+  declaration can be understood from its source without macro expansion tools
 - migration should be low-breakage for the existing examples and tests
 
 ## Non-goals
