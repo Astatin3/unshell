@@ -5,13 +5,11 @@
 //! a shell process, so it is the easiest place to see how the endpoint and leaf metadata fit
 //! together.
 
-#[path = "../../src/leaf/remote_shell/mod.rs"]
-mod remote_shell;
-
 use std::error::Error;
 
 use unshell::protocol::tree::{EndpointOutcome, LocalEvent, ProtocolEndpoint};
 use unshell::protocol::{INTROSPECTION_PROCEDURE_ID, LeafIntrospection};
+use unshell_leaves::remote_shell;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut endpoint = ProtocolEndpoint::new(

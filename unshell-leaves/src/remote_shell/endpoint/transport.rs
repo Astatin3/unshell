@@ -6,10 +6,11 @@ use std::thread;
 use unshell::protocol::FrameBytes;
 use unshell::protocol::tree::EndpointOutcome;
 
+/// TCP listen address used by the remote shell examples.
 pub const LISTEN_ADDR: &str = "127.0.0.1:4444";
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
-#[allow(dead_code)]
+/// Writes the forwarded frame produced by one endpoint outcome.
 pub fn send_forward(stream: &mut TcpStream, outcome: EndpointOutcome) -> io::Result<()> {
     match outcome {
         EndpointOutcome::Forward { frame, .. } => write_frames(stream, &[frame]),
@@ -17,6 +18,7 @@ pub fn send_forward(stream: &mut TcpStream, outcome: EndpointOutcome) -> io::Res
     }
 }
 
+/// Writes one or more framed packets onto the example TCP stream.
 pub fn write_frames(stream: &mut TcpStream, frames: &[FrameBytes]) -> io::Result<()> {
     for frame in frames {
         let frame_len = u32::try_from(frame.len()).map_err(|_| {
@@ -29,6 +31,7 @@ pub fn write_frames(stream: &mut TcpStream, frames: &[FrameBytes]) -> io::Result
     Ok(())
 }
 
+/// Spawns the example frame reader that lifts prefixed frames off the TCP stream.
 pub fn spawn_frame_reader(mut stream: TcpStream) -> Receiver<io::Result<FrameBytes>> {
     let (tx, rx) = mpsc::sync_channel(64);
 
@@ -65,10 +68,7 @@ fn read_frame(stream: &mut TcpStream) -> io::Result<Option<FrameBytes>> {
         ));
     }
     let mut bytes = vec![0u8; frame_len];
-    match stream.read_exact(&mut bytes) {
-        Ok(()) => {}
-        Err(error) => return Err(error),
-    }
+    stream.read_exact(&mut bytes)?;
 
     let mut frame = FrameBytes::with_capacity(bytes.len());
     frame.extend_from_slice(&bytes);

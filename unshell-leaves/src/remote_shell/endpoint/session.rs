@@ -1,13 +1,9 @@
 //! Per-hook remote shell session lifecycle.
 //!
-//! A session opens one PTY-backed shell process and then translates protocol hook
-//! traffic into stdin writes and stdout/stderr chunks. The close model is
-//! intentionally two-sided:
-//! - peer end: the caller sets `end_hook`, so no more stdin is accepted
-//! - local end: the shell process exits and the PTY reader drains completely
-//!
-//! Only after both conditions are observed does the session emit its final empty
-//! `end_hook` packet back through the protocol runtime.
+//! A session opens one PTY-backed shell process and translates protocol hook
+//! traffic into stdin writes and stdout or stderr chunks. Close is intentionally
+//! two-sided: the peer signals input completion with `end_hook`, while the local
+//! side closes only after the child exits and the PTY reader drains.
 
 use std::io::{self, Read, Write};
 use std::process::Command;
@@ -15,18 +11,18 @@ use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 use std::thread;
 
 use portable_pty::{CommandBuilder, ExitStatus, PtySize, native_pty_system};
+use unshell::Procedure;
 use unshell::protocol::tree::{IncomingData, OutgoingData, ProcedureEffect};
 
-use unshell::Procedure;
-
+use super::RemoteShellEndpoint;
 use super::errors::ShellLeafError;
 
 /// Per-hook shell session created by the `open` procedure.
 ///
-/// The procedure type is also the stored session type. This keeps the mapping
-/// between protocol procedure and hook state direct and easy to inspect.
+/// The procedure type is also the stored session type so the mapping between
+/// one opening procedure and one live hook remains direct and visible.
 #[derive(Procedure)]
-#[procedure(leaf = RemoteShellLeaf, name = "open")]
+#[procedure(leaf = RemoteShellEndpoint, name = "open")]
 pub struct ProcedureOpen {
     /// Spawned PTY child process.
     pub(super) child: Box<dyn portable_pty::Child + Send>,
@@ -55,8 +51,6 @@ enum OutputEvent {
     Chunk(Vec<u8>),
     ReaderClosed,
 }
-
-use super::RemoteShellLeaf;
 
 impl ProcedureOpen {
     pub(super) fn spawn(
@@ -173,9 +167,7 @@ impl ProcedureOpen {
         }
 
         // Peer end means no more stdin from the caller. Keep the process alive so
-        // any buffered PTY output can drain through the normal poll path. On Unix
-        // we also send SIGHUP so an interactive shell treats this like terminal
-        // hangup instead of waiting forever on the still-open PTY master.
+        // buffered PTY output can drain through the normal poll path.
         self.stdin_tx.take();
         self.signal_process_group("-HUP");
         Ok(ProcedureEffect::default())

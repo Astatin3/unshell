@@ -1440,11 +1440,21 @@ name = "unshell"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "portable-pty",
  "rkyv",
  "static_init",
  "thiserror 2.0.18",
+ "unshell-leaves",
  "unshell-macros",
+ "unshell-protocol",
+]
+
+[[package]]
+name = "unshell-leaves"
+version = "0.1.0"
+dependencies = [
+ "portable-pty",
+ "rkyv",
+ "unshell",
 ]
 
 [[package]]
@@ -1454,6 +1464,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "unshell-protocol"
+version = "0.1.0"
+dependencies = [
+ "rkyv",
+ "unshell-macros",
 ]
 
 [[package]]

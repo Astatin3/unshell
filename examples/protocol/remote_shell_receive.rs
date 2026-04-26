@@ -3,13 +3,11 @@
 //! This binary listens for the endpoint example, opens one remote shell session, sends a few
 //! commands, and prints returned hook data until the shell closes.
 
-#[path = "../../src/leaf/remote_shell/mod.rs"]
-mod remote_shell;
-
 use std::error::Error;
 use std::net::TcpListener;
 
 use unshell::protocol::tree::{Endpoint, EndpointOutcome, Ingress, LocalEvent};
+use unshell_leaves::remote_shell;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(remote_shell::LISTEN_ADDR)?;

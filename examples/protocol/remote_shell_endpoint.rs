@@ -4,15 +4,13 @@
 //! example over TCP, feeds inbound frames into the `ProcedureRuntime`, and flushes any resulting
 //! protocol frames back to the controller.
 
-#[path = "../../src/leaf/remote_shell/mod.rs"]
-mod remote_shell;
-
 use std::error::Error;
 use std::net::TcpStream;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
 use unshell::protocol::tree::Ingress;
+use unshell_leaves::remote_shell;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = TcpStream::connect(remote_shell::LISTEN_ADDR)?;

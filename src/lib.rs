@@ -18,7 +18,10 @@ pub extern crate alloc;
 extern crate self as unshell;
 
 pub mod logger;
-pub mod protocol;
+
+/// Re-export the protocol crate behind the historical `unshell::protocol` path so
+/// proc-macro output and downstream code do not need a second migration.
+pub use unshell_protocol as protocol;
 
 pub use unshell_macros::{Leaf, Procedure, procedures};
 

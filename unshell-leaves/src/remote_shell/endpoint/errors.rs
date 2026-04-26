@@ -1,9 +1,12 @@
 use std::fmt;
 use std::io;
 
+/// Error produced by the remote shell endpoint implementation.
 #[derive(Debug)]
 pub enum ShellLeafError {
+    /// Underlying PTY or I/O failure.
     Io(io::Error),
+    /// Shell open requires a response hook so the session can stream bytes back.
     MissingHook,
 }
 
