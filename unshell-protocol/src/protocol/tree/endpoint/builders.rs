@@ -135,6 +135,7 @@ impl ProtocolEndpoint {
             .collect::<Vec<_>>();
 
         Self {
+            local_id: None,
             routing: CompiledRoutes::new(&path, &registered_child_paths, parent_path.is_some()),
             path,
             children,
@@ -145,6 +146,52 @@ impl ProtocolEndpoint {
             endpoint_procedures: BTreeSet::new(),
             hooks: Default::default(),
         }
+    }
+
+    #[must_use]
+    /// Creates a root-assumed endpoint with one local identifier and predeclared leaves.
+    ///
+    /// What it is: a convenience constructor for the common bootstrap state where an endpoint has
+    /// one local name but has not yet been assigned a non-root path by a parent connection.
+    ///
+    /// Why it exists: endpoint creation should not require every caller to manually pass an empty
+    /// path, no parent, and no children just to host one or more known leaves.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{LeafSpec, ProtocolEndpoint};
+    /// let endpoint = ProtocolEndpoint::root(
+    ///     "worker",
+    ///     vec![LeafSpec {
+    ///         name: "service".into(),
+    ///         procedures: vec!["example.service.v1.invoke".into()],
+    ///     }],
+    /// );
+    /// assert!(endpoint.path().is_empty());
+    /// assert_eq!(endpoint.local_id(), Some("worker"));
+    /// ```
+    pub fn root(local_id: impl Into<String>, leaves: Vec<LeafSpec>) -> Self {
+        let mut endpoint = Self::new(Vec::new(), None, Vec::new(), leaves);
+        endpoint.local_id = Some(local_id.into());
+        endpoint
+    }
+
+    #[must_use]
+    /// Returns the endpoint's local bootstrap identifier, if one was assigned.
+    ///
+    /// What it is: a lightweight label separate from the protocol path.
+    ///
+    /// Why it exists: a freshly created endpoint may know its own local identity before a parent
+    /// connection assigns its final tree path.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let endpoint = ProtocolEndpoint::root("worker", Vec::new());
+    /// assert_eq!(endpoint.local_id(), Some("worker"));
+    /// ```
+    pub fn local_id(&self) -> Option<&str> {
+        self.local_id.as_deref()
     }
 
     /// Registers a procedure that is handled directly by the endpoint.

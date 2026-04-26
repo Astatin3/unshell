@@ -92,6 +92,34 @@ pub trait LeafDeclaration: ProtocolLeaf {
     }
 }
 
+/// Returns the canonical `LeafSpec` for one concrete leaf host value.
+///
+/// What it is: a tiny typed helper that uses a host value only for type inference.
+///
+/// Why it exists: endpoint-construction macros can accept ordinary host expressions like
+/// `RemoteShell::default()` and still derive the compile-time `LeafSpec` without the caller
+/// spelling the leaf type twice.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{LeafDeclaration, ProtocolLeaf, leaf_spec_of};
+/// struct ExampleLeaf;
+/// impl ProtocolLeaf for ExampleLeaf {
+///     fn leaf_name() -> String { "org.example.v1.echo".into() }
+/// }
+/// impl LeafDeclaration for ExampleLeaf {
+///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+/// }
+/// let spec = leaf_spec_of(&ExampleLeaf);
+/// assert_eq!(spec.name, "org.example.v1.echo");
+/// ```
+pub fn leaf_spec_of<L>(_: &L) -> LeafSpec
+where
+    L: LeafDeclaration,
+{
+    L::leaf_spec()
+}
+
 /// Declares that one host struct is bound to one compile-time leaf declaration.
 ///
 /// What it is: a trait that links a concrete host type, such as an endpoint or

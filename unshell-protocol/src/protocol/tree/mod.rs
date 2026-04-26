@@ -24,7 +24,9 @@ pub use endpoint::{
     ProtocolEndpoint,
 };
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
-pub use leaf::{CallProcedures, LeafBinding, LeafDeclaration, ProtocolLeaf, derive_leaf_name};
+pub use leaf::{
+    CallProcedures, LeafBinding, LeafDeclaration, ProtocolLeaf, derive_leaf_name, leaf_spec_of,
+};
 pub use procedure::{
     Procedure, ProcedureEffect, ProcedureMetadata, ProcedureRuntime, ProcedureRuntimeError,
     ProcedureRuntimeOutcome, ProcedureStore, StatefulProcedureMetadata,

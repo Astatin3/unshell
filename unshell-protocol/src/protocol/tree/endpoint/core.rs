@@ -286,6 +286,7 @@ pub trait Endpoint {
 /// ```
 #[derive(Debug, Default)]
 pub struct ProtocolEndpoint {
+    pub(crate) local_id: Option<String>,
     pub(crate) path: Vec<String>,
     pub(crate) children: Vec<ChildRoute>,
     pub(crate) routing: CompiledRoutes,
