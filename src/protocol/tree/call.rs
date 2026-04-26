@@ -256,60 +256,70 @@ where
                 let mut runtime = RuntimeOutcome::default();
 
                 match event {
-            LocalEvent::Call { header, message } => {
-                let incoming = IncomingCall {
-                    header,
-                    message: message.clone(),
-                };
-                match self.leaf.dispatch_call(incoming) {
-                    Ok(CallReply::Reply(bytes)) => {
-                        if let Some(hook) = message.response_hook {
-                            runtime.frames.extend(self.send_reply_data(
-                                hook,
-                                message.procedure_id,
-                                bytes,
-                                true,
-                            )?);
+                    LocalEvent::Call { header, message } => {
+                        let CallMessage {
+                            procedure_id,
+                            data,
+                            response_hook,
+                        } = message;
+                        let fault_hook = response_hook.as_ref();
+                        let incoming = IncomingCall {
+                            header,
+                            message: CallMessage {
+                                procedure_id: procedure_id.clone(),
+                                data,
+                                response_hook: response_hook.clone(),
+                            },
+                        };
+                        match self.leaf.dispatch_call(incoming) {
+                            Ok(CallReply::Reply(bytes)) => {
+                                if let Some(hook) = response_hook {
+                                    runtime.frames.extend(self.send_reply_data(
+                                        hook,
+                                        procedure_id,
+                                        bytes,
+                                        true,
+                                    )?);
+                                }
+                            }
+                            Ok(CallReply::NoReply) => {}
+                            Err(error) => {
+                                runtime
+                                    .frames
+                                    .extend(self.emit_internal_fault_if_possible(fault_hook)?);
+                                return Err(LeafRuntimeError::Dispatch(error));
+                            }
                         }
                     }
-                    Ok(CallReply::NoReply) => {}
-                    Err(error) => {
-                        runtime
-                            .frames
-                            .extend(self.emit_internal_fault_if_possible(&message)?);
-                        return Err(LeafRuntimeError::Dispatch(error));
-                    }
-                }
-            }
-            LocalEvent::Data {
-                header,
-                message,
-                hook_key,
-            } => {
-                let outgoing = self
-                    .leaf
-                    .on_data(IncomingData {
+                    LocalEvent::Data {
                         header,
                         message,
                         hook_key,
-                    })
-                    .map_err(LeafRuntimeError::Leaf)?;
-                runtime.frames.extend(self.emit_outgoing(outgoing)?.frames);
-            }
-            LocalEvent::Fault {
-                header,
-                message,
-                hook_key,
-            } => {
-                self.leaf
-                    .on_fault(IncomingFault {
+                    } => {
+                        let outgoing = self
+                            .leaf
+                            .on_data(IncomingData {
+                                header,
+                                message,
+                                hook_key,
+                            })
+                            .map_err(LeafRuntimeError::Leaf)?;
+                        runtime.frames.extend(self.emit_outgoing(outgoing)?.frames);
+                    }
+                    LocalEvent::Fault {
                         header,
-                        fault: message,
+                        message,
                         hook_key,
-                    })
-                    .map_err(LeafRuntimeError::Leaf)?;
-            }
-        }
+                    } => {
+                        self.leaf
+                            .on_fault(IncomingFault {
+                                header,
+                                fault: message,
+                                hook_key,
+                            })
+                            .map_err(LeafRuntimeError::Leaf)?;
+                    }
+                }
 
                 Ok(runtime)
             }
@@ -355,9 +365,9 @@ where
 
     fn emit_internal_fault_if_possible(
         &mut self,
-        message: &CallMessage,
+        hook: Option<&HookTarget>,
     ) -> Result<Vec<FrameBytes>, LeafRuntimeError<<L as CallLeaf>::Error>> {
-        let Some(hook) = message.response_hook.as_ref() else {
+        let Some(hook) = hook else {
             return Ok(Vec::new());
         };
         let key = HookKey::new(hook.return_path.clone(), hook.hook_id);
