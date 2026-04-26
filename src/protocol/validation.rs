@@ -6,6 +6,22 @@ use crate::protocol::{
 use core::fmt;
 
 /// Validation failures for protocol structures.
+///
+/// These errors exist so callers can reject malformed outbound packets early, before they are
+/// encoded or sent across the tree.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{PacketHeader, PacketType, ValidationError, validate_header};
+/// let invalid = PacketHeader {
+///     packet_type: PacketType::Data,
+///     src_path: vec!["peer".into()],
+///     dst_path: vec!["host".into()],
+///     dst_leaf: Some("service".into()),
+///     hook_id: None,
+/// };
+/// assert!(matches!(validate_header(&invalid), Err(ValidationError::HeaderInvariant(_))));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
     /// One header field combination is invalid for the chosen packet type.
@@ -38,6 +54,20 @@ impl core::error::Error for ValidationError {}
 ///
 /// This checks wire-shape rules only. It does not verify route existence, leaf existence,
 /// hook ownership, or whether the destination actually supports the requested procedure.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{PacketHeader, PacketType, validate_header};
+/// let header = PacketHeader {
+///     packet_type: PacketType::Call,
+///     src_path: vec!["root".into()],
+///     dst_path: vec!["worker".into()],
+///     dst_leaf: Some("service".into()),
+///     hook_id: None,
+/// };
+/// validate_header(&header)?;
+/// # Ok::<(), unshell::protocol::ValidationError>(())
+/// ```
 pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
     match header.packet_type {
         PacketType::Call => {
@@ -67,6 +97,14 @@ pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
 ///
 /// This is intentionally permissive. The protocol reserves only the empty string for
 /// introspection; every other non-empty identifier is treated as opaque application data.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{INTROSPECTION_PROCEDURE_ID, validate_procedure_id};
+/// validate_procedure_id(INTROSPECTION_PROCEDURE_ID)?;
+/// validate_procedure_id("example.service.v1.invoke")?;
+/// # Ok::<(), unshell::protocol::ValidationError>(())
+/// ```
 pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> {
     if procedure_id == INTROSPECTION_PROCEDURE_ID {
         return Ok(());
@@ -83,6 +121,28 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
 ///
 /// This complements [`validate_header`]. It does not verify destination reachability or leaf
 /// support, only consistency between the opening `Call` header and payload.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{CallMessage, HookTarget, PacketHeader, PacketType, validate_call};
+/// let header = PacketHeader {
+///     packet_type: PacketType::Call,
+///     src_path: vec!["root".into()],
+///     dst_path: vec!["worker".into()],
+///     dst_leaf: Some("service".into()),
+///     hook_id: None,
+/// };
+/// let call = CallMessage {
+///     procedure_id: "example.service.v1.invoke".into(),
+///     data: vec![],
+///     response_hook: Some(HookTarget {
+///         hook_id: 7,
+///         return_path: vec!["root".into()],
+///     }),
+/// };
+/// validate_call(&header, &call)?;
+/// # Ok::<(), unshell::protocol::ValidationError>(())
+/// ```
 pub fn validate_call(header: &PacketHeader, call: &CallMessage) -> Result<(), ValidationError> {
     validate_procedure_id(&call.procedure_id)?;
 

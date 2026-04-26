@@ -10,9 +10,41 @@ use super::types::{
 use crate::protocol::{CallMessage, DataMessage, FaultMessage, PacketHeader, PacketType};
 
 /// Archived-section alignment guaranteed by the frame format.
+///
+/// The protocol aligns both archived sections so `rkyv` can usually validate and deserialize
+/// them without first copying into a temporary aligned buffer.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::SECTION_ALIGN;
+/// assert_eq!(SECTION_ALIGN, 16);
+/// ```
 pub const SECTION_ALIGN: usize = 16;
 
 /// Owned framed packet bytes.
+///
+/// This is the concrete buffer type returned by [`encode_packet`]. It keeps archived packet bytes
+/// aligned according to [`SECTION_ALIGN`] so decode can often stay zero-copy.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{CallMessage, FrameBytes, PacketHeader, PacketType, encode_packet};
+/// let header = PacketHeader {
+///     packet_type: PacketType::Call,
+///     src_path: vec!["root".into()],
+///     dst_path: vec!["root".into(), "worker".into()],
+///     dst_leaf: Some("service".into()),
+///     hook_id: None,
+/// };
+/// let message = CallMessage {
+///     procedure_id: "example.service.v1.invoke".into(),
+///     data: vec![],
+///     response_hook: None,
+/// };
+/// let frame: FrameBytes = encode_packet(&header, &message)?;
+/// assert!(!frame.is_empty());
+/// # Ok::<(), unshell::protocol::FrameError>(())
+/// ```
 pub type FrameBytes = AlignedVec<SECTION_ALIGN>;
 
 /// Framing or archive failure.
@@ -48,6 +80,29 @@ impl core::error::Error for FrameError {}
 ///
 /// The frame decoder eagerly materializes the routing header into owned Rust values, but keeps
 /// the payload section borrowed so callers can choose which concrete payload type to decode.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+/// let header = PacketHeader {
+///     packet_type: PacketType::Call,
+///     src_path: vec!["root".into()],
+///     dst_path: vec!["root".into(), "worker".into()],
+///     dst_leaf: Some("service".into()),
+///     hook_id: None,
+/// };
+/// let message = CallMessage {
+///     procedure_id: "example.service.v1.invoke".into(),
+///     data: vec![7; 4],
+///     response_hook: None,
+/// };
+/// let frame = encode_packet(&header, &message)?;
+/// let parsed = decode_frame(&frame)?;
+/// assert_eq!(parsed.packet_type(), PacketType::Call);
+/// let decoded = parsed.deserialize_call()?;
+/// assert_eq!(decoded.data.len(), 4);
+/// # Ok::<(), unshell::protocol::FrameError>(())
+/// ```
 pub struct ParsedFrame<'a> {
     header: PacketHeader,
     payload_bytes: &'a [u8],
@@ -56,39 +111,197 @@ pub struct ParsedFrame<'a> {
 impl<'a> ParsedFrame<'a> {
     #[must_use]
     /// Returns the decoded packet header.
+    ///
+    /// This exists so callers can inspect routing metadata before deciding which payload schema
+    /// to decode.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+    /// let header = PacketHeader {
+    ///     packet_type: PacketType::Call,
+    ///     src_path: vec!["root".into()],
+    ///     dst_path: vec!["worker".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: None,
+    /// };
+    /// let frame = encode_packet(&header, &CallMessage {
+    ///     procedure_id: "example.invoke".into(),
+    ///     data: vec![],
+    ///     response_hook: None,
+    /// })?;
+    /// let parsed = decode_frame(&frame)?;
+    /// assert_eq!(parsed.header().packet_type, PacketType::Call);
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn header(&self) -> &PacketHeader {
         &self.header
     }
 
     #[must_use]
     /// Returns the packet class from the decoded header.
+    ///
+    /// This exists as a cheap dispatch helper so callers do not have to reach into the header
+    /// struct directly when branching on payload type.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+    /// let header = PacketHeader {
+    ///     packet_type: PacketType::Call,
+    ///     src_path: vec!["root".into()],
+    ///     dst_path: vec!["worker".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: None,
+    /// };
+    /// let frame = encode_packet(&header, &CallMessage {
+    ///     procedure_id: "example.invoke".into(),
+    ///     data: vec![],
+    ///     response_hook: None,
+    /// })?;
+    /// let parsed = decode_frame(&frame)?;
+    /// assert!(matches!(parsed.packet_type(), PacketType::Call));
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn packet_type(&self) -> PacketType {
         self.header.packet_type
     }
 
     #[must_use]
     /// Returns the borrowed payload section bytes.
+    ///
+    /// This exists for callers that embed their own archived application payloads inside protocol
+    /// `data` fields and want to defer typed decoding.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+    /// let header = PacketHeader {
+    ///     packet_type: PacketType::Call,
+    ///     src_path: vec!["root".into()],
+    ///     dst_path: vec!["worker".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: None,
+    /// };
+    /// let frame = encode_packet(&header, &CallMessage {
+    ///     procedure_id: "example.invoke".into(),
+    ///     data: vec![1, 2, 3],
+    ///     response_hook: None,
+    /// })?;
+    /// let parsed = decode_frame(&frame)?;
+    /// assert!(!parsed.payload_bytes().is_empty());
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn payload_bytes(&self) -> &'a [u8] {
         self.payload_bytes
     }
 
     #[must_use]
     /// Splits the parsed frame into its owned header and borrowed payload bytes.
+    ///
+    /// This exists when callers want to take ownership of the decoded header while still choosing
+    /// how and when to interpret the payload bytes.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+    /// let header = PacketHeader {
+    ///     packet_type: PacketType::Call,
+    ///     src_path: vec!["root".into()],
+    ///     dst_path: vec!["worker".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: None,
+    /// };
+    /// let frame = encode_packet(&header, &CallMessage {
+    ///     procedure_id: "example.invoke".into(),
+    ///     data: vec![],
+    ///     response_hook: None,
+    /// })?;
+    /// let parsed = decode_frame(&frame)?;
+    /// let (owned_header, payload) = parsed.into_parts();
+    /// assert_eq!(owned_header.packet_type, PacketType::Call);
+    /// assert!(!payload.is_empty());
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn into_parts(self) -> (PacketHeader, &'a [u8]) {
         (self.header, self.payload_bytes)
     }
 
     /// Deserializes the payload section as a [`CallMessage`].
+    ///
+    /// This exists so callers can decode a validated `Call` packet payload without spelling the
+    /// archived-type details themselves.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+    /// let message = CallMessage {
+    ///     procedure_id: "example.invoke".into(),
+    ///     data: vec![1],
+    ///     response_hook: None,
+    /// };
+    /// let frame = encode_packet(&PacketHeader {
+    ///     packet_type: PacketType::Call,
+    ///     src_path: vec!["root".into()],
+    ///     dst_path: vec!["worker".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: None,
+    /// }, &message)?;
+    /// let parsed = decode_frame(&frame)?;
+    /// assert_eq!(parsed.deserialize_call()?.procedure_id, message.procedure_id);
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn deserialize_call(&self) -> Result<CallMessage, FrameError> {
         self.deserialize_payload::<ArchivedCallMessage, CallMessage>()
     }
 
     /// Deserializes the payload section as a [`DataMessage`].
+    ///
+    /// This exists so callers can decode hook `Data` payloads without reaching for the generic
+    /// archived helper directly.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{DataMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+    /// let message = DataMessage {
+    ///     procedure_id: "example.invoke".into(),
+    ///     data: vec![1],
+    ///     end_hook: false,
+    /// };
+    /// let frame = encode_packet(&PacketHeader {
+    ///     packet_type: PacketType::Data,
+    ///     src_path: vec!["worker".into()],
+    ///     dst_path: vec!["root".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: Some(7),
+    /// }, &message)?;
+    /// let parsed = decode_frame(&frame)?;
+    /// assert!(!parsed.deserialize_data()?.end_hook);
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn deserialize_data(&self) -> Result<DataMessage, FrameError> {
         self.deserialize_payload::<ArchivedDataMessage, DataMessage>()
     }
 
     /// Deserializes the payload section as a [`FaultMessage`].
+    ///
+    /// This exists so callers can decode protocol faults with the same selective API used for
+    /// call and data packets.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::{FaultMessage, PacketHeader, PacketType, ProtocolFault, decode_frame, encode_packet};
+    /// let frame = encode_packet(&PacketHeader {
+    ///     packet_type: PacketType::Fault,
+    ///     src_path: vec!["worker".into()],
+    ///     dst_path: vec!["root".into()],
+    ///     dst_leaf: None,
+    ///     hook_id: Some(7),
+    /// }, &FaultMessage { fault: ProtocolFault::INTERNAL_ERROR })?;
+    /// let parsed = decode_frame(&frame)?;
+    /// assert_eq!(parsed.deserialize_fault()?.fault, ProtocolFault::INTERNAL_ERROR);
+    /// # Ok::<(), unshell::protocol::FrameError>(())
+    /// ```
     pub fn deserialize_fault(&self) -> Result<FaultMessage, FrameError> {
         self.deserialize_payload::<ArchivedFaultMessage, FaultMessage>()
     }
@@ -109,6 +322,27 @@ impl<'a> ParsedFrame<'a> {
 /// The frame starts with two big-endian `u32` lengths, followed by an aligned archived header
 /// section and an aligned archived payload section. Both sections use [`SECTION_ALIGN`] so the
 /// archived bytes can usually be accessed without a fallback copy on decode.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{CallMessage, PacketHeader, PacketType, encode_packet};
+/// let frame = encode_packet(
+///     &PacketHeader {
+///         packet_type: PacketType::Call,
+///         src_path: vec!["root".into()],
+///         dst_path: vec!["worker".into()],
+///         dst_leaf: Some("service".into()),
+///         hook_id: None,
+///     },
+///     &CallMessage {
+///         procedure_id: "example.invoke".into(),
+///         data: vec![1, 2, 3],
+///         response_hook: None,
+///     },
+/// )?;
+/// assert!(frame.len() >= 8);
+/// # Ok::<(), unshell::protocol::FrameError>(())
+/// ```
 pub fn encode_packet<P>(header: &PacketHeader, payload: &P) -> Result<FrameBytes, FrameError>
 where
     P: for<'a> Serialize<
@@ -139,6 +373,28 @@ where
 ///
 /// This rejects trailing bytes instead of silently ignoring them, so callers can treat one byte
 /// slice as exactly one protocol frame.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
+/// let frame = encode_packet(
+///     &PacketHeader {
+///         packet_type: PacketType::Call,
+///         src_path: vec!["root".into()],
+///         dst_path: vec!["worker".into()],
+///         dst_leaf: Some("service".into()),
+///         hook_id: None,
+///     },
+///     &CallMessage {
+///         procedure_id: "example.invoke".into(),
+///         data: vec![1, 2, 3],
+///         response_hook: None,
+///     },
+/// )?;
+/// let parsed = decode_frame(&frame)?;
+/// assert_eq!(parsed.packet_type(), PacketType::Call);
+/// # Ok::<(), unshell::protocol::FrameError>(())
+/// ```
 pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
     let (header_bytes, payload_bytes) = split_frame_sections(bytes)?;
     let header = deserialize_section::<ArchivedPacketHeader, PacketHeader>(
@@ -157,6 +413,22 @@ pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
 /// Payload bytes normally come from [`decode_frame`] or one of [`ParsedFrame`]`'s`
 /// `deserialize_*` helpers. This function remains public for callers that archive nested
 /// application payloads inside protocol `data` fields.
+///
+/// # Example
+/// ```rust
+/// use rkyv::{Archive, Deserialize, Serialize};
+/// use unshell::protocol::deserialize_archived_bytes;
+///
+/// #[derive(Archive, Serialize, Deserialize, Debug, PartialEq)]
+/// struct Example {
+///     value: u32,
+/// }
+///
+/// let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&Example { value: 7 }).unwrap();
+/// let decoded = deserialize_archived_bytes::<<Example as Archive>::Archived, Example>(&bytes)?;
+/// assert_eq!(decoded, Example { value: 7 });
+/// # Ok::<(), unshell::protocol::FrameError>(())
+/// ```
 pub fn deserialize_archived_bytes<A, T>(bytes: &[u8]) -> Result<T, FrameError>
 where
     A: rkyv::Portable

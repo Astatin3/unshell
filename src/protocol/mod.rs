@@ -10,6 +10,35 @@
 //!
 //! The concrete wire structs live in the private `types` module and are re-exported here so the
 //! public API stays flat while internal archived-type details remain hidden.
+//!
+//! # Example
+//! ```rust
+//! use unshell::protocol::{
+//!     CallMessage, PacketHeader, PacketType, decode_frame, encode_packet, validate_call,
+//!     validate_header,
+//! };
+//!
+//! let header = PacketHeader {
+//!     packet_type: PacketType::Call,
+//!     src_path: vec!["root".into()],
+//!     dst_path: vec!["root".into(), "worker".into()],
+//!     dst_leaf: Some("service".into()),
+//!     hook_id: None,
+//! };
+//! let call = CallMessage {
+//!     procedure_id: "example.service.v1.invoke".into(),
+//!     data: vec![1, 2, 3],
+//!     response_hook: None,
+//! };
+//!
+//! validate_header(&header).unwrap();
+//! validate_call(&header, &call).unwrap();
+//! let frame = encode_packet(&header, &call)?;
+//! let parsed = decode_frame(&frame)?;
+//! let decoded = parsed.deserialize_call()?;
+//! assert_eq!(decoded.procedure_id, call.procedure_id);
+//! # Ok::<(), unshell::protocol::FrameError>(())
+//! ```
 
 pub mod codec;
 pub mod introspection;

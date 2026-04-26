@@ -6,6 +6,25 @@
 use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 
 /// Explicit tree declaration used for configuration and tests.
+///
+/// This models one protocol tree declaratively so callers can derive endpoint paths, leaf
+/// inventory, or test fixtures without first constructing live endpoints.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{LeafNode, TreeNode};
+/// let tree = TreeNode::Root {
+///     children: vec![TreeNode::Endpoint {
+///         segment: "worker".into(),
+///         leaves: vec![LeafNode {
+///             name: "service".into(),
+///             procedures: vec!["example.service.v1.invoke".into()],
+///         }],
+///         children: Vec::new(),
+///     }],
+/// };
+/// assert_eq!(tree.paths().len(), 2);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeNode {
     /// The protocol root. Its path is always empty.
@@ -25,6 +44,19 @@ pub enum TreeNode {
 }
 
 /// Leaf declaration used inside the explicit tree enum.
+///
+/// This exists so declarative trees can describe the leaves hosted at one endpoint without
+/// constructing the full runtime state machine.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::LeafNode;
+/// let leaf = LeafNode {
+///     name: "service".into(),
+///     procedures: vec!["example.service.v1.invoke".into()],
+/// };
+/// assert_eq!(leaf.name, "service");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeafNode {
     /// Leaf name local to an endpoint path.
@@ -37,6 +69,19 @@ impl TreeNode {
     /// Flattens the explicit tree into the set of endpoint paths it declares.
     ///
     /// The returned list always includes the protocol root as `[]`.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::TreeNode;
+    /// let tree = TreeNode::Root {
+    ///     children: vec![TreeNode::Endpoint {
+    ///         segment: "worker".into(),
+    ///         leaves: Vec::new(),
+    ///         children: Vec::new(),
+    ///     }],
+    /// };
+    /// assert_eq!(tree.paths(), vec![Vec::<String>::new(), vec!["worker".into()]]);
+    /// ```
     pub fn paths(&self) -> Vec<Vec<String>> {
         let mut paths = Vec::new();
         self.collect_paths(&[], &mut paths);
@@ -67,6 +112,16 @@ impl TreeNode {
 }
 
 /// Longest-prefix route decision.
+///
+/// Each decision is evaluated from one endpoint's perspective after comparing its own path and
+/// compiled child subtree against the destination path.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::RouteDecision;
+/// let route = RouteDecision::Child(0);
+/// assert!(matches!(route, RouteDecision::Child(0)));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteDecision {
     /// Forward to the child at the given local child index.
@@ -80,6 +135,16 @@ pub enum RouteDecision {
 }
 
 /// One compiled routing table for one endpoint boundary.
+///
+/// This exists so repeated route lookups can reuse one longest-prefix trie instead of scanning
+/// every child path on every packet.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{CompiledRoutes, RouteDecision};
+/// let routes = CompiledRoutes::new(&["root".into()], &[vec!["root".into(), "worker".into()]], true);
+/// assert_eq!(routes.route(&["root".into(), "worker".into(), "job".into()]), RouteDecision::Child(0));
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct CompiledRoutes {
     local_path: Vec<String>,
@@ -99,6 +164,20 @@ impl CompiledRoutes {
     ///
     /// Only strict descendants of `local_path` participate in the compiled trie. Paths outside
     /// the local subtree, or equal to `local_path` itself, are ignored.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::CompiledRoutes;
+    /// let routes = CompiledRoutes::new(
+    ///     &["root".into()],
+    ///     &[
+    ///         vec!["root".into(), "worker".into()],
+    ///         vec!["other".into()],
+    ///     ],
+    ///     true,
+    /// );
+    /// assert_eq!(routes.route(&["root".into(), "worker".into()]), unshell::protocol::tree::RouteDecision::Child(0));
+    /// ```
     #[must_use]
     pub fn new(local_path: &[String], child_paths: &[Vec<String>], has_parent: bool) -> Self {
         let mut routes = Self {
@@ -119,6 +198,8 @@ impl CompiledRoutes {
             return;
         }
 
+        // Store only strict descendants. The terminal node records which direct child owns that
+        // descendant boundary so later lookups can recover the longest matching child index.
         let mut node_index = 0usize;
         for segment in &child_path[self.local_path.len()..] {
             let next_index = if let Some(next_index) = self.nodes[node_index].edges.get(segment) {
@@ -138,6 +219,15 @@ impl CompiledRoutes {
     }
 
     /// Resolves `dst_path` using the compiled longest-prefix trie.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{CompiledRoutes, RouteDecision};
+    /// let routes = CompiledRoutes::new(&["root".into()], &[vec!["root".into(), "worker".into()]], true);
+    /// assert_eq!(routes.route(&["root".into(), "worker".into()]), RouteDecision::Child(0));
+    /// assert_eq!(routes.route(&["root".into()]), RouteDecision::Local);
+    /// assert_eq!(routes.route(&["elsewhere".into()]), RouteDecision::Parent);
+    /// ```
     #[must_use]
     pub fn route(&self, dst_path: &[String]) -> RouteDecision {
         if !is_prefix(&self.local_path, dst_path) {
@@ -173,6 +263,16 @@ impl CompiledRoutes {
 }
 
 /// Returns `true` if `prefix` is a path prefix of `path`.
+///
+/// This exists as the shared path-comparison primitive for both declarative tree processing and
+/// runtime route compilation.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::is_prefix;
+/// assert!(is_prefix(&["root".into()], &["root".into(), "worker".into()]));
+/// assert!(!is_prefix(&["worker".into()], &["root".into(), "worker".into()]));
+/// ```
 pub fn is_prefix(prefix: &[String], path: &[String]) -> bool {
     prefix.len() <= path.len()
         && prefix
@@ -185,6 +285,19 @@ pub fn is_prefix(prefix: &[String], path: &[String]) -> bool {
 /// The default policy is longest-prefix routing: exact matches stay local, the deepest matching
 /// descendant wins for child forwarding, destinations outside the local subtree go to the parent
 /// when one exists, and everything else drops.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{DefaultRouteProvider, RouteProvider};
+/// let provider = DefaultRouteProvider;
+/// let route = provider.route_destination(
+///     &["root".into()],
+///     [vec!["root".into(), "worker".into()]],
+///     true,
+///     &["root".into(), "worker".into()],
+/// );
+/// assert!(matches!(route, unshell::protocol::tree::RouteDecision::Child(0)));
+/// ```
 pub trait RouteProvider {
     /// Returns the route decision for `dst_path` from the perspective of `local_path`.
     fn route_destination<I>(
@@ -200,6 +313,17 @@ pub trait RouteProvider {
 }
 
 /// Default routing implementation using the protocol's longest-prefix rule.
+///
+/// This exists as the stateless policy object behind the free [`route_destination`] helper and
+/// as a customization seam for tests or alternate routing strategies.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{DefaultRouteProvider, RouteProvider};
+/// let provider = DefaultRouteProvider;
+/// let route = provider.route_destination(&[], [vec!["worker".into()]], false, &["worker".into()]);
+/// assert!(matches!(route, unshell::protocol::tree::RouteDecision::Child(0)));
+/// ```
 pub struct DefaultRouteProvider;
 
 impl RouteProvider for DefaultRouteProvider {
@@ -226,6 +350,13 @@ impl RouteProvider for DefaultRouteProvider {
 ///
 /// Exact matches return [`RouteDecision::Local`]. Destinations outside the local subtree return
 /// [`RouteDecision::Parent`] when `has_parent` is `true`, otherwise [`RouteDecision::Drop`].
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{RouteDecision, route_destination};
+/// let route = route_destination(&[], [vec!["worker".into()]], false, &["worker".into()]);
+/// assert_eq!(route, RouteDecision::Child(0));
+/// ```
 pub fn route_destination<I>(
     local_path: &[String],
     child_paths: I,

@@ -4,6 +4,17 @@ use alloc::{string::String, vec::Vec};
 use rkyv::{Archive, Deserialize, Serialize};
 
 /// The three protocol packet types.
+///
+/// This discriminates which payload schema follows the [`PacketHeader`]. Callers normally branch
+/// on this before choosing whether to decode a [`CallMessage`], [`DataMessage`], or
+/// [`FaultMessage`].
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::PacketType;
+/// let packet_type = PacketType::Call;
+/// assert!(matches!(packet_type, PacketType::Call));
+/// ```
 #[repr(u8)]
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PacketType {
@@ -16,6 +27,22 @@ pub enum PacketType {
 }
 
 /// Header fields used for routing and hook attribution.
+///
+/// The protocol keeps routing metadata in the header so endpoints can validate source topology,
+/// choose a route, and attribute hook traffic before decoding the payload.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{PacketHeader, PacketType};
+/// let header = PacketHeader {
+///     packet_type: PacketType::Call,
+///     src_path: vec!["root".into()],
+///     dst_path: vec!["root".into(), "worker".into()],
+///     dst_leaf: Some("service".into()),
+///     hook_id: None,
+/// };
+/// assert_eq!(header.src_path[0], "root");
+/// ```
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct PacketHeader {
     /// Wire-level packet class, which determines which payload type follows.
@@ -35,6 +62,19 @@ pub struct PacketHeader {
 }
 
 /// Hook declaration embedded inside a call.
+///
+/// This reserves a response stream before the callee accepts the call so later `Data` or `Fault`
+/// traffic can be attributed back to the caller.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::HookTarget;
+/// let hook = HookTarget {
+///     hook_id: 7,
+///     return_path: vec!["root".into()],
+/// };
+/// assert_eq!(hook.hook_id, 7);
+/// ```
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct HookTarget {
     /// Hook identifier reserved by the caller for returned `Data` or `Fault` traffic.
@@ -47,6 +87,23 @@ pub struct HookTarget {
 }
 
 /// Downwards call payload.
+///
+/// This carries one procedure invocation plus the optional declaration that the callee should
+/// return hook traffic to a reserved response hook.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{CallMessage, HookTarget};
+/// let call = CallMessage {
+///     procedure_id: "example.service.v1.invoke".into(),
+///     data: vec![1, 2, 3],
+///     response_hook: Some(HookTarget {
+///         hook_id: 7,
+///         return_path: vec!["root".into()],
+///     }),
+/// };
+/// assert!(call.response_hook.is_some());
+/// ```
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct CallMessage {
     /// Canonical procedure identifier chosen by the caller.
@@ -58,6 +115,20 @@ pub struct CallMessage {
 }
 
 /// Hook data payload.
+///
+/// This carries one message on an already-established hook stream. `end_hook` closes the sender's
+/// side of that stream.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::DataMessage;
+/// let data = DataMessage {
+///     procedure_id: "example.service.v1.invoke".into(),
+///     data: vec![9, 8, 7],
+///     end_hook: true,
+/// };
+/// assert!(data.end_hook);
+/// ```
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DataMessage {
     /// Canonical procedure identifier that owns the hook stream.
@@ -69,6 +140,17 @@ pub struct DataMessage {
 }
 
 /// Protocol fault payload.
+///
+/// This carries one stable protocol error code on an existing hook path.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::{FaultMessage, ProtocolFault};
+/// let fault = FaultMessage {
+///     fault: ProtocolFault::INTERNAL_ERROR,
+/// };
+/// assert_eq!(fault.fault, ProtocolFault::INTERNAL_ERROR);
+/// ```
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct FaultMessage {
     /// Stable protocol-level reason code for the failure.
@@ -80,6 +162,13 @@ pub struct FaultMessage {
 /// The raw numeric value is public so callers can persist, compare, or forward fault codes
 /// without knowing every symbolic constant in advance. Unknown values are allowed so newer
 /// peers can extend the set without breaking older runtimes.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::ProtocolFault;
+/// let code = ProtocolFault::UNKNOWN_PROCEDURE;
+/// assert_eq!(code.0, 0x02);
+/// ```
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProtocolFault(pub u8);
 

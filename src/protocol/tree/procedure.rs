@@ -31,6 +31,20 @@ use super::{
 ///
 /// This metadata is intentionally tiny: one procedure suffix plus the derived
 /// full `procedure_id`. The leaf still owns all session storage explicitly.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{ProtocolLeaf, StatefulProcedureMetadata};
+/// struct ExampleLeaf;
+/// impl ProtocolLeaf for ExampleLeaf {
+///     fn leaf_name() -> String { "org.example.v1.shell".into() }
+/// }
+/// struct Open;
+/// impl StatefulProcedureMetadata<ExampleLeaf> for Open {
+///     fn procedure_suffix() -> &'static str { "open" }
+/// }
+/// assert_eq!(Open::procedure_id(), "org.example.v1.shell.open");
+/// ```
 pub trait StatefulProcedureMetadata<L>: Sized
 where
     L: ProtocolLeaf,
@@ -51,6 +65,19 @@ where
 ///
 /// Rationale: the leaf remains the source of truth for its active sessions. This
 /// avoids hidden generated enums or side tables and keeps debugging obvious.
+///
+/// # Example
+/// ```rust
+/// use std::collections::BTreeMap;
+/// use unshell::protocol::tree::{HookKey, ProcedureStore};
+/// struct Session;
+/// struct Leaf { sessions: BTreeMap<HookKey, Session> }
+/// impl ProcedureStore<Session> for Leaf {
+///     fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, Session> {
+///         &mut self.sessions
+///     }
+/// }
+/// ```
 pub trait ProcedureStore<P> {
     /// Returns the hook-keyed session table for one procedure type.
     fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, P>;
@@ -152,6 +179,16 @@ where
 }
 
 /// Output produced while advancing one session.
+///
+/// This exists as the normalized result of one session step: some outgoing hook packets plus an
+/// explicit decision about whether the session should stay alive.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::ProcedureEffect;
+/// let effect = ProcedureEffect::close(Vec::new());
+/// assert!(effect.close_session);
+/// ```
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ProcedureEffect {
     /// `Data` packets to emit after the session step completes.
@@ -163,6 +200,13 @@ pub struct ProcedureEffect {
 impl ProcedureEffect {
     /// Builds an effect that keeps the session alive after emitting `outgoing`.
     #[must_use]
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProcedureEffect;
+    /// let effect = ProcedureEffect::outgoing(Vec::new());
+    /// assert!(!effect.close_session);
+    /// ```
     pub fn outgoing(outgoing: Vec<OutgoingData>) -> Self {
         Self {
             outgoing,
@@ -172,6 +216,13 @@ impl ProcedureEffect {
 
     /// Builds an effect that closes the session after emitting `outgoing`.
     #[must_use]
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProcedureEffect;
+    /// let effect = ProcedureEffect::close(Vec::new());
+    /// assert!(effect.close_session);
+    /// ```
     pub fn close(outgoing: Vec<OutgoingData>) -> Self {
         Self {
             outgoing,
@@ -181,6 +232,18 @@ impl ProcedureEffect {
 }
 
 /// Error surfaced by the procedure runtime.
+///
+/// This exists so callers can tell apart transport/runtime failures from an opening call that
+/// could not establish a procedure session.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::FrameError;
+/// use unshell::protocol::tree::{DispatchError, ProcedureRuntimeError};
+/// let error: ProcedureRuntimeError<core::convert::Infallible> =
+///     ProcedureRuntimeError::Decode(DispatchError::Decode(FrameError::Truncated));
+/// assert!(matches!(error, ProcedureRuntimeError::Decode(_)));
+/// ```
 #[derive(Debug)]
 pub enum ProcedureRuntimeError<E> {
     /// Protocol endpoint routing or framing failed.
@@ -213,6 +276,16 @@ impl<E> From<EndpointError> for ProcedureRuntimeError<E> {
 }
 
 /// Frames emitted while advancing one stateful procedure runtime.
+///
+/// This exists so callers can flush emitted frames to transport while also observing whether the
+/// inbound packet was intentionally dropped.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::ProcedureRuntimeOutcome;
+/// let outcome = ProcedureRuntimeOutcome::default();
+/// assert!(outcome.frames.is_empty());
+/// ```
 #[derive(Debug, Default)]
 pub struct ProcedureRuntimeOutcome {
     /// Frames emitted while processing the current step.
@@ -226,6 +299,14 @@ pub struct ProcedureRuntimeOutcome {
 /// This runtime is deliberately narrow. It is the right tool when one leaf owns
 /// one hook-backed procedure whose session type is explicit in the leaf's state.
 /// Simpler one-shot procedures can stay on [`crate::protocol::tree::LeafRuntime`].
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::ProcedureRuntime;
+/// # struct Leaf;
+/// # struct Proc;
+/// # let _ = core::marker::PhantomData::<ProcedureRuntime<Leaf, Proc>>;
+/// ```
 #[derive(Debug)]
 pub struct ProcedureRuntime<L, P> {
     endpoint: ProtocolEndpoint,
@@ -236,6 +317,18 @@ pub struct ProcedureRuntime<L, P> {
 impl<L, P> ProcedureRuntime<L, P> {
     /// Builds a procedure runtime from one endpoint and one leaf instance.
     #[must_use]
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ProcedureRuntime, ProtocolEndpoint};
+    /// struct Leaf;
+    /// struct Proc;
+    /// let runtime = ProcedureRuntime::<Leaf, Proc>::new(
+    ///     ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new()),
+    ///     Leaf,
+    /// );
+    /// let _ = runtime;
+    /// ```
     pub fn new(endpoint: ProtocolEndpoint, leaf: L) -> Self {
         Self {
             endpoint,
@@ -246,22 +339,58 @@ impl<L, P> ProcedureRuntime<L, P> {
 
     /// Returns the underlying protocol endpoint.
     #[must_use]
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ProcedureRuntime, ProtocolEndpoint};
+    /// struct Leaf;
+    /// struct Proc;
+    /// let runtime = ProcedureRuntime::<Leaf, Proc>::new(ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new()), Leaf);
+    /// let _ = runtime.endpoint();
+    /// ```
     pub fn endpoint(&self) -> &ProtocolEndpoint {
         &self.endpoint
     }
 
     /// Returns a mutable reference to the protocol endpoint.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ProcedureRuntime, ProtocolEndpoint};
+    /// struct Leaf;
+    /// struct Proc;
+    /// let mut runtime = ProcedureRuntime::<Leaf, Proc>::new(ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new()), Leaf);
+    /// let _ = runtime.endpoint_mut();
+    /// ```
     pub fn endpoint_mut(&mut self) -> &mut ProtocolEndpoint {
         &mut self.endpoint
     }
 
     /// Returns the hosted leaf instance.
     #[must_use]
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ProcedureRuntime, ProtocolEndpoint};
+    /// struct Leaf;
+    /// struct Proc;
+    /// let runtime = ProcedureRuntime::<Leaf, Proc>::new(ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new()), Leaf);
+    /// let _ = runtime.leaf();
+    /// ```
     pub fn leaf(&self) -> &L {
         &self.leaf
     }
 
     /// Returns a mutable reference to the hosted leaf instance.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ProcedureRuntime, ProtocolEndpoint};
+    /// struct Leaf;
+    /// struct Proc;
+    /// let mut runtime = ProcedureRuntime::<Leaf, Proc>::new(ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new()), Leaf);
+    /// let _ = runtime.leaf_mut();
+    /// ```
     pub fn leaf_mut(&mut self) -> &mut L {
         &mut self.leaf
     }
@@ -278,6 +407,14 @@ where
     P::Error: fmt::Display,
 {
     /// Delivers one framed protocol packet into the runtime.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unshell::protocol::tree::ProcedureRuntime;
+    /// # struct Leaf;
+    /// # struct Proc;
+    /// # let _ = core::marker::PhantomData::<ProcedureRuntime<Leaf, Proc>>;
+    /// ```
     pub fn receive(
         &mut self,
         ingress: &Ingress,
@@ -291,6 +428,14 @@ where
     ///
     /// Rationale: many long-lived procedures, including a remote shell, need to
     /// emit output even when no new inbound protocol packet has arrived.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unshell::protocol::tree::ProcedureRuntime;
+    /// # struct Leaf;
+    /// # struct Proc;
+    /// # let _ = core::marker::PhantomData::<ProcedureRuntime<Leaf, Proc>>;
+    /// ```
     pub fn poll(&mut self) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
         let mut frames = Vec::new();
         let keys = self
@@ -304,6 +449,8 @@ where
             let Some(session) = self.leaf.procedure_sessions().remove(&key) else {
                 continue;
             };
+            // Collect keys first and temporarily remove each session so procedure callbacks can
+            // mutate the leaf without fighting the session-table borrow.
             match self.poll_session(key, session)? {
                 Some(session_frames) => frames.extend(session_frames),
                 None => continue,
@@ -351,6 +498,8 @@ where
         let outgoing = match self.emit_outgoing(effect.outgoing) {
             Ok(outgoing) => outgoing.frames,
             Err(error) => {
+                // Emit failures are transport/runtime failures, not leaf-procedure failures. Keep
+                // the session when it asked to stay open so the caller can retry later.
                 if !effect.close_session {
                     self.leaf.procedure_sessions().insert(key, session);
                 } else {
@@ -395,6 +544,8 @@ where
     ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
         let mut runtime = ProcedureRuntimeOutcome::default();
         if message.procedure_id != P::procedure_id() {
+            // Once this runtime receives a call, a wrong procedure id is a protocol mismatch.
+            // Fault the caller rather than surfacing a leaf-local error it cannot recover from.
             runtime
                 .frames
                 .extend(self.emit_internal_fault_if_possible(message.response_hook.as_ref())?);
@@ -408,6 +559,8 @@ where
         let session = match self.open_session(header, message) {
             Ok(session) => session,
             Err(error) => {
+                // Session open failures still fault the caller when a response hook exists, but do
+                // not leak leaf-local details over the wire.
                 runtime
                     .frames
                     .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
@@ -489,6 +642,8 @@ where
                 hook_key: hook_key.clone(),
             },
         );
+        // Always attempt both the fault observer and the final close hook so resource cleanup can
+        // still run even when the leaf reports an error while handling the fault.
         let close_result = P::close(&mut self.leaf, session);
         if let Err(error) = on_fault_result {
             let _ = close_result;
@@ -558,6 +713,14 @@ where
 
     /// Emits an upstream internal fault for the current procedure if the caller
     /// declared a response hook.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unshell::protocol::tree::ProcedureRuntime;
+    /// # struct Leaf;
+    /// # struct Proc;
+    /// # let _ = core::marker::PhantomData::<ProcedureRuntime<Leaf, Proc>>;
+    /// ```
     pub fn emit_internal_fault_if_possible(
         &mut self,
         hook: Option<&HookTarget>,
@@ -598,6 +761,8 @@ where
         // Once a session emits `end_hook`, later packets would violate the protocol,
         // so the runtime keeps only the prefix through that terminal packet.
         if let Some(index) = effect.outgoing.iter().position(|packet| packet.end_hook) {
+            // The protocol allows only one terminal packet per direction, so ignore anything a
+            // procedure tried to emit after the first close marker.
             effect.outgoing.truncate(index + 1);
         }
         let local_end_already_sent = self

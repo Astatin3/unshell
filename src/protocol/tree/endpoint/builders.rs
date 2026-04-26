@@ -107,6 +107,21 @@ impl ProtocolEndpoint {
     ///
     /// `parent_path` is currently used only as a presence flag. The endpoint stores its own
     /// absolute `path`, and routing only needs to know whether an upward route exists.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ChildRoute, LeafSpec, ProtocolEndpoint};
+    /// let endpoint = ProtocolEndpoint::new(
+    ///     vec!["worker".into()],
+    ///     Some(Vec::new()),
+    ///     vec![ChildRoute::registered(vec!["worker".into(), "child".into()])],
+    ///     vec![LeafSpec {
+    ///         name: "service".into(),
+    ///         procedures: vec!["example.service.v1.invoke".into()],
+    ///     }],
+    /// );
+    /// let _ = endpoint;
+    /// ```
     pub fn new(
         path: Vec<String>,
         parent_path: Option<Vec<String>>,
@@ -133,6 +148,17 @@ impl ProtocolEndpoint {
     }
 
     /// Registers a procedure that is handled directly by the endpoint.
+    ///
+    /// Endpoint-level procedures exist for protocol services that are not attached to one leaf,
+    /// such as built-in runtime behavior.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let mut endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
+    /// endpoint.add_endpoint_procedure("example.endpoint.v1.health")?;
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
     pub fn add_endpoint_procedure(
         &mut self,
         procedure_id: impl Into<String>,
@@ -145,11 +171,37 @@ impl ProtocolEndpoint {
 
     #[must_use]
     /// Allocates a hook id scoped to this endpoint path.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let mut endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
+    /// let hook_id = endpoint.allocate_hook_id();
+    /// assert_ne!(hook_id, 0);
+    /// ```
     pub fn allocate_hook_id(&mut self) -> u64 {
         self.hooks.allocate_hook_id(&self.path)
     }
 
     /// Encodes a call frame without routing it through the local endpoint.
+    ///
+    /// This exists for callers that want a fully encoded outbound frame while handling transport
+    /// themselves.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let mut endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
+    /// let frame = endpoint.make_call(
+    ///     vec!["worker".into()],
+    ///     Some("service".into()),
+    ///     "example.service.v1.invoke",
+    ///     None,
+    ///     vec![1, 2, 3],
+    /// )?;
+    /// assert!(!frame.is_empty());
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
     pub fn make_call(
         &mut self,
         dst_path: Vec<String>,
@@ -165,6 +217,26 @@ impl ProtocolEndpoint {
     }
 
     /// Builds and immediately routes a call, producing either a forward or a local event.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ChildRoute, EndpointOutcome, ProtocolEndpoint};
+    /// let mut endpoint = ProtocolEndpoint::new(
+    ///     Vec::new(),
+    ///     None,
+    ///     vec![ChildRoute::registered(vec!["worker".into()])],
+    ///     Vec::new(),
+    /// );
+    /// let outcome = endpoint.send_call(
+    ///     vec!["worker".into()],
+    ///     Some("service".into()),
+    ///     "example.service.v1.invoke",
+    ///     None,
+    ///     vec![],
+    /// )?;
+    /// assert!(matches!(outcome, EndpointOutcome::Forward { .. } | EndpointOutcome::Dropped | EndpointOutcome::Local(_)));
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
     pub fn send_call(
         &mut self,
         dst_path: Vec<String>,
@@ -191,6 +263,15 @@ impl ProtocolEndpoint {
     }
 
     /// Encodes a data frame without routing it through the local endpoint.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
+    /// let frame = endpoint.make_data(vec!["root".into()], 7, "example.service.v1.invoke", vec![1], false)?;
+    /// assert!(!frame.is_empty());
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
     pub fn make_data(
         &self,
         dst_path: Vec<String>,
@@ -205,6 +286,14 @@ impl ProtocolEndpoint {
     }
 
     /// Builds and immediately routes a data packet, updating local hook state for end-of-stream.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let mut endpoint = ProtocolEndpoint::new(Vec::new(), None, Vec::new(), Vec::new());
+    /// let _ = endpoint.send_data(vec!["root".into()], 7, "example.service.v1.invoke", vec![], false);
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
     pub fn send_data(
         &mut self,
         dst_path: Vec<String>,

@@ -9,20 +9,90 @@ use alloc::{string::String, vec::Vec};
 use super::LeafSpec;
 
 /// Static metadata for one application-defined protocol leaf.
+///
+/// This exists so runtime code can ask one type for its canonical dotted leaf id without knowing
+/// any of that leaf's call-dispatch details.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::ProtocolLeaf;
+/// struct ExampleLeaf;
+/// impl ProtocolLeaf for ExampleLeaf {
+///     fn leaf_name() -> String { "org.example.v1.echo".into() }
+/// }
+/// assert_eq!(ExampleLeaf::leaf_name(), "org.example.v1.echo");
+/// ```
 pub trait ProtocolLeaf {
     /// Returns the canonical dotted leaf name hosted by this type.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolLeaf;
+    /// struct ExampleLeaf;
+    /// impl ProtocolLeaf for ExampleLeaf {
+    ///     fn leaf_name() -> String { "org.example.v1.echo".into() }
+    /// }
+    /// assert!(ExampleLeaf::leaf_name().starts_with("org.example"));
+    /// ```
     fn leaf_name() -> String;
 }
 
 /// Generated call metadata and initial `Call` dispatch for one leaf.
+///
+/// This exists so one leaf type can advertise which procedure suffixes it serves and convert an
+/// opening protocol `Call` into leaf-local behavior.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{CallProcedures, DispatchError, IncomingCall, ProtocolLeaf};
+/// struct ExampleLeaf;
+/// impl ProtocolLeaf for ExampleLeaf {
+///     fn leaf_name() -> String { "org.example.v1.echo".into() }
+/// }
+/// impl CallProcedures for ExampleLeaf {
+///     type Error = core::convert::Infallible;
+///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+///     fn dispatch_call(&mut self, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
+///         Ok(unshell::protocol::tree::CallReply::NoReply)
+///     }
+/// }
+/// assert_eq!(ExampleLeaf::procedure_id("invoke").unwrap(), "org.example.v1.echo.invoke");
+/// ```
 pub trait CallProcedures: ProtocolLeaf {
     /// Leaf-specific error surfaced when generated call dispatch fails.
     type Error;
 
     /// Returns the local procedure suffixes supported by this leaf.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
+    /// struct ExampleLeaf;
+    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
+    /// impl CallProcedures for ExampleLeaf {
+    ///     type Error = core::convert::Infallible;
+    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke", "stream"] }
+    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
+    /// }
+    /// assert_eq!(ExampleLeaf::procedure_suffixes(), &["invoke", "stream"]);
+    /// ```
     fn procedure_suffixes() -> &'static [&'static str];
 
     /// Resolves one local procedure suffix to its full canonical `procedure_id`.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
+    /// struct ExampleLeaf;
+    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
+    /// impl CallProcedures for ExampleLeaf {
+    ///     type Error = core::convert::Infallible;
+    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
+    /// }
+    /// assert!(ExampleLeaf::procedure_id("invoke").is_some());
+    /// assert!(ExampleLeaf::procedure_id("missing").is_none());
+    /// ```
     fn procedure_id(suffix: &str) -> Option<String> {
         if !Self::procedure_suffixes().contains(&suffix) {
             return None;
@@ -35,6 +105,19 @@ pub trait CallProcedures: ProtocolLeaf {
     }
 
     /// Returns the full canonical `procedure_id` values supported by this leaf.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
+    /// struct ExampleLeaf;
+    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
+    /// impl CallProcedures for ExampleLeaf {
+    ///     type Error = core::convert::Infallible;
+    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
+    /// }
+    /// assert_eq!(ExampleLeaf::procedure_ids(), vec![String::from("org.example.v1.echo.invoke")]);
+    /// ```
     fn procedure_ids() -> Vec<String> {
         Self::procedure_suffixes()
             .iter()
@@ -43,6 +126,20 @@ pub trait CallProcedures: ProtocolLeaf {
     }
 
     /// Materializes the runtime leaf metadata consumed by `ProtocolEndpoint`.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
+    /// struct ExampleLeaf;
+    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
+    /// impl CallProcedures for ExampleLeaf {
+    ///     type Error = core::convert::Infallible;
+    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
+    /// }
+    /// let spec = ExampleLeaf::leaf_spec();
+    /// assert_eq!(spec.name, "org.example.v1.echo");
+    /// ```
     fn leaf_spec() -> LeafSpec {
         LeafSpec {
             name: Self::leaf_name(),
@@ -55,6 +152,21 @@ pub trait CallProcedures: ProtocolLeaf {
     /// Implementations may assume the endpoint already proved the call targets this leaf.
     /// They are still responsible for decoding the typed input payload and deciding which local
     /// procedure suffix should run.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{CallProcedures, DispatchError, IncomingCall, ProtocolLeaf};
+    /// struct ExampleLeaf;
+    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
+    /// impl CallProcedures for ExampleLeaf {
+    ///     type Error = core::convert::Infallible;
+    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+    ///     fn dispatch_call(&mut self, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
+    ///         Ok(unshell::protocol::tree::CallReply::NoReply)
+    ///     }
+    /// }
+    /// # let _ = ExampleLeaf;
+    /// ```
     fn dispatch_call(
         &mut self,
         call: crate::protocol::tree::IncomingCall,
@@ -122,6 +234,8 @@ pub fn derive_leaf_name(
     if let Some(leaf_name) = leaf_name.filter(|value| !value.is_empty()) {
         segments.extend(split_leaf_path(leaf_name));
     } else {
+        // The package-derived prefix already names the crate/product portion of the identifier, so
+        // strip the same leading segment from `module_path` when it would otherwise duplicate it.
         let mut module_segments = module_path
             .split("::")
             .map(normalize_leaf_segment)
