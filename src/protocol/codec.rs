@@ -93,16 +93,15 @@ where
     let payload_start = align_up(header_start + header_bytes.len(), SECTION_ALIGN);
     let total_len = payload_start + payload_bytes.len();
 
-    let mut frame = FrameBytes::with_capacity(total_len);
-    frame.extend_from_slice(&header_len.to_be_bytes());
-    frame.extend_from_slice(&payload_len.to_be_bytes());
-    append_padding(&mut frame, header_start - 8usize);
-    frame.extend_from_slice(&header_bytes);
-    append_padding(
-        &mut frame,
-        payload_start - (header_start + header_bytes.len()),
-    );
-    frame.extend_from_slice(&payload_bytes);
+    let header_end = header_start + header_bytes.len();
+    let payload_end = payload_start + payload_bytes.len();
+
+    let mut frame = FrameBytes::new();
+    frame.resize(total_len, 0);
+    frame[0..4].copy_from_slice(&header_len.to_be_bytes());
+    frame[4..8].copy_from_slice(&payload_len.to_be_bytes());
+    frame[header_start..header_end].copy_from_slice(&header_bytes);
+    frame[payload_start..payload_end].copy_from_slice(&payload_bytes);
     Ok(frame)
 }
 
@@ -161,12 +160,6 @@ fn read_u32(bytes: &[u8], start: usize) -> Result<u32, FrameError> {
             .try_into()
             .expect("slice width checked"),
     ))
-}
-
-fn append_padding(frame: &mut AlignedVec, padding: usize) {
-    if padding > 0 {
-        frame.resize(frame.len() + padding, 0);
-    }
 }
 
 fn align_up(offset: usize, alignment: usize) -> usize {
