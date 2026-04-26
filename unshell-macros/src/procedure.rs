@@ -88,11 +88,13 @@ pub(crate) fn expand_procedure(input: DeriveInput) -> Result<proc_macro2::TokenS
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     Ok(quote! {
-        impl #impl_generics ::unshell::protocol::tree::StatefulProcedureMetadata<#leaf_ty>
+        impl #impl_generics ::unshell::protocol::tree::ProcedureMetadata
             for #procedure_name #ty_generics #where_clause
         where
             #leaf_ty: ::unshell::protocol::tree::ProtocolLeaf,
         {
+            type Leaf = #leaf_ty;
+
             fn procedure_suffix() -> &'static str {
                 #suffix
             }
@@ -101,7 +103,7 @@ pub(crate) fn expand_procedure(input: DeriveInput) -> Result<proc_macro2::TokenS
         impl #impl_generics #procedure_name #ty_generics #where_clause {
             /// Returns the full canonical `procedure_id` for this stateful procedure.
             pub fn protocol_procedure_id() -> ::unshell::alloc::string::String {
-                <Self as ::unshell::protocol::tree::StatefulProcedureMetadata<#leaf_ty>>::procedure_id()
+                <Self as ::unshell::protocol::tree::ProcedureMetadata>::procedure_id()
             }
         }
     })

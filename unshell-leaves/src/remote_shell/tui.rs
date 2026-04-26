@@ -7,14 +7,12 @@
 use std::string::String;
 use std::vec::Vec;
 
-use unshell::Leaf;
 use unshell::protocol::DataMessage;
 
 use crate::{LeafTui, TuiError};
 
 /// Stub TUI surface for the remote shell leaf.
-#[derive(Default, Leaf)]
-#[leaf(leaf_name = "remote_shell")]
+#[derive(Default)]
 pub struct RemoteShellTui {
     transcript: Vec<u8>,
 }

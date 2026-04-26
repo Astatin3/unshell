@@ -114,19 +114,21 @@ pub(crate) fn expand_procedures(
         .collect::<Vec<_>>();
     let procedure_matches = dispatch_arms.iter().map(|arm| {
         let suffix = &arm.suffix_literal;
-        quote! { #suffix => <Self as ::unshell::protocol::tree::CallProcedures>::procedure_id(#suffix), }
+        quote! { #suffix => <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(#suffix), }
     });
     let dispatch_checks = dispatch_arms.iter().map(|arm| arm.dispatch_tokens.clone());
 
     Ok(quote! {
         #item
 
-        impl #impl_generics_tokens ::unshell::protocol::tree::CallProcedures for #self_ty #where_clause {
-            type Error = #error_ty;
-
+        impl #impl_generics_tokens ::unshell::protocol::tree::LeafDeclaration for #self_ty #where_clause {
             fn procedure_suffixes() -> &'static [&'static str] {
                 &[#(#suffix_literals),*]
             }
+        }
+
+        impl #impl_generics_tokens ::unshell::protocol::tree::CallProcedures for #self_ty #where_clause {
+            type Error = #error_ty;
 
             fn dispatch_call(
                 &mut self,
@@ -143,7 +145,7 @@ pub(crate) fn expand_procedures(
         impl #impl_generics_tokens #self_ty #where_clause {
             /// Returns the canonical protocol leaf metadata for this type.
             pub fn protocol_leaf_spec() -> ::unshell::protocol::tree::LeafSpec {
-                <Self as ::unshell::protocol::tree::CallProcedures>::leaf_spec()
+                <Self as ::unshell::protocol::tree::LeafDeclaration>::leaf_spec()
             }
 
             /// Resolves one local procedure suffix to its full canonical `procedure_id`.
@@ -163,7 +165,7 @@ fn expand_call_arm(method: &ImplItemFn) -> Result<CallArm> {
     let method_name = &method.sig.ident;
     let suffix_literal = call_suffix_literal(method)?;
     let call_id_expr = quote! {
-        <Self as ::unshell::protocol::tree::CallProcedures>::procedure_id(#suffix_literal)
+        <Self as ::unshell::protocol::tree::LeafDeclaration>::procedure_id(#suffix_literal)
             .expect("generated procedure id must exist")
     };
 

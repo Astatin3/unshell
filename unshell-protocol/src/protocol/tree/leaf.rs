@@ -1,8 +1,9 @@
 //! Application-facing leaf metadata helpers.
 //!
 //! The protocol runtime itself only knows about `LeafSpec` metadata and validated
-//! `LocalEvent` delivery. `ProtocolLeaf` owns the canonical dotted leaf id, while
-//! `CallProcedures` owns generated procedure ids and initial call dispatch.
+//! `LocalEvent` delivery. `ProtocolLeaf` owns canonical identity, `LeafDeclaration`
+//! owns the compile-time procedure inventory for one leaf surface, and
+//! `CallProcedures` adds local call dispatch on top of that inventory.
 
 use alloc::{string::String, vec::Vec};
 
@@ -37,6 +38,92 @@ pub trait ProtocolLeaf {
     fn leaf_name() -> String;
 }
 
+/// Compile-time declaration metadata for one leaf surface.
+///
+/// What it is: a trait for types that can describe the complete protocol-visible
+/// surface of one leaf at compile time.
+///
+/// Why it exists: endpoint construction should not need handwritten procedure
+/// lists. A leaf declaration can generate the canonical suffix inventory once and
+/// let both endpoint and TUI host types reuse it.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{LeafDeclaration, ProtocolLeaf};
+/// struct ExampleLeaf;
+/// impl ProtocolLeaf for ExampleLeaf {
+///     fn leaf_name() -> String { "org.example.v1.echo".into() }
+/// }
+/// impl LeafDeclaration for ExampleLeaf {
+///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+/// }
+/// assert_eq!(ExampleLeaf::leaf_spec().procedures, vec![String::from("org.example.v1.echo.invoke")]);
+/// ```
+pub trait LeafDeclaration: ProtocolLeaf {
+    /// Returns the local procedure suffixes supported by this leaf.
+    fn procedure_suffixes() -> &'static [&'static str];
+
+    /// Resolves one local procedure suffix to its full canonical `procedure_id`.
+    fn procedure_id(suffix: &str) -> Option<String> {
+        if !Self::procedure_suffixes().contains(&suffix) {
+            return None;
+        }
+
+        let mut procedure_id = Self::leaf_name();
+        procedure_id.push('.');
+        procedure_id.push_str(suffix);
+        Some(procedure_id)
+    }
+
+    /// Returns the full canonical `procedure_id` values supported by this leaf.
+    fn procedure_ids() -> Vec<String> {
+        Self::procedure_suffixes()
+            .iter()
+            .filter_map(|suffix| Self::procedure_id(suffix))
+            .collect()
+    }
+
+    /// Materializes the runtime leaf metadata consumed by `ProtocolEndpoint`.
+    fn leaf_spec() -> LeafSpec {
+        LeafSpec {
+            name: Self::leaf_name(),
+            procedures: Self::procedure_ids(),
+        }
+    }
+}
+
+/// Declares that one host struct is bound to one compile-time leaf declaration.
+///
+/// What it is: a trait that links a concrete host type, such as an endpoint or
+/// TUI struct, back to the declaration that owns its shared protocol metadata.
+///
+/// Why it exists: endpoint and TUI hosts often need different state and behavior,
+/// but they should still share one canonical leaf identity and procedure list.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{LeafBinding, LeafDeclaration, ProtocolLeaf};
+/// struct ExampleDecl;
+/// impl ProtocolLeaf for ExampleDecl {
+///     fn leaf_name() -> String { "org.example.v1.echo".into() }
+/// }
+/// impl LeafDeclaration for ExampleDecl {
+///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+/// }
+/// struct ExampleHost;
+/// impl ProtocolLeaf for ExampleHost {
+///     fn leaf_name() -> String { ExampleDecl::leaf_name() }
+/// }
+/// impl LeafBinding for ExampleHost {
+///     type Declaration = ExampleDecl;
+/// }
+/// assert_eq!(<ExampleHost as LeafBinding>::Declaration::leaf_name(), "org.example.v1.echo");
+/// ```
+pub trait LeafBinding: ProtocolLeaf {
+    /// Shared declaration that owns the canonical metadata for this host type.
+    type Declaration: ProtocolLeaf;
+}
+
 /// Generated call metadata and initial `Call` dispatch for one leaf.
 ///
 /// This exists so one leaf type can advertise which procedure suffixes it serves and convert an
@@ -58,94 +145,9 @@ pub trait ProtocolLeaf {
 /// }
 /// assert_eq!(ExampleLeaf::procedure_id("invoke").unwrap(), "org.example.v1.echo.invoke");
 /// ```
-pub trait CallProcedures: ProtocolLeaf {
+pub trait CallProcedures: LeafDeclaration {
     /// Leaf-specific error surfaced when generated call dispatch fails.
     type Error;
-
-    /// Returns the local procedure suffixes supported by this leaf.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
-    /// struct ExampleLeaf;
-    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
-    /// impl CallProcedures for ExampleLeaf {
-    ///     type Error = core::convert::Infallible;
-    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke", "stream"] }
-    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
-    /// }
-    /// assert_eq!(ExampleLeaf::procedure_suffixes(), &["invoke", "stream"]);
-    /// ```
-    fn procedure_suffixes() -> &'static [&'static str];
-
-    /// Resolves one local procedure suffix to its full canonical `procedure_id`.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
-    /// struct ExampleLeaf;
-    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
-    /// impl CallProcedures for ExampleLeaf {
-    ///     type Error = core::convert::Infallible;
-    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
-    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
-    /// }
-    /// assert!(ExampleLeaf::procedure_id("invoke").is_some());
-    /// assert!(ExampleLeaf::procedure_id("missing").is_none());
-    /// ```
-    fn procedure_id(suffix: &str) -> Option<String> {
-        if !Self::procedure_suffixes().contains(&suffix) {
-            return None;
-        }
-
-        let mut procedure_id = Self::leaf_name();
-        procedure_id.push('.');
-        procedure_id.push_str(suffix);
-        Some(procedure_id)
-    }
-
-    /// Returns the full canonical `procedure_id` values supported by this leaf.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
-    /// struct ExampleLeaf;
-    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
-    /// impl CallProcedures for ExampleLeaf {
-    ///     type Error = core::convert::Infallible;
-    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
-    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
-    /// }
-    /// assert_eq!(ExampleLeaf::procedure_ids(), vec![String::from("org.example.v1.echo.invoke")]);
-    /// ```
-    fn procedure_ids() -> Vec<String> {
-        Self::procedure_suffixes()
-            .iter()
-            .filter_map(|suffix| Self::procedure_id(suffix))
-            .collect()
-    }
-
-    /// Materializes the runtime leaf metadata consumed by `ProtocolEndpoint`.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unshell::protocol::tree::{CallProcedures, ProtocolLeaf};
-    /// struct ExampleLeaf;
-    /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
-    /// impl CallProcedures for ExampleLeaf {
-    ///     type Error = core::convert::Infallible;
-    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
-    ///     fn dispatch_call(&mut self, _call: unshell::protocol::tree::IncomingCall) -> Result<unshell::protocol::tree::CallReply, unshell::protocol::tree::DispatchError<Self::Error>> { Ok(unshell::protocol::tree::CallReply::NoReply) }
-    /// }
-    /// let spec = ExampleLeaf::leaf_spec();
-    /// assert_eq!(spec.name, "org.example.v1.echo");
-    /// ```
-    fn leaf_spec() -> LeafSpec {
-        LeafSpec {
-            name: Self::leaf_name(),
-            procedures: Self::procedure_ids(),
-        }
-    }
 
     /// Dispatches one initial `Call` that targeted this leaf.
     ///
@@ -313,7 +315,9 @@ fn normalize_leaf_segment(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::derive_leaf_name;
+    use alloc::string::String;
+
+    use super::{LeafBinding, LeafDeclaration, ProtocolLeaf, derive_leaf_name};
 
     #[test]
     fn derive_leaf_name_normalizes_inputs_into_dotted_segments() {
@@ -372,6 +376,36 @@ mod tests {
                 Some("org.example.v1.echo.abc"),
             ),
             "org.example.v1.echo.abc"
+        );
+    }
+
+    #[test]
+    fn bound_hosts_can_share_one_declaration() {
+        struct SharedDecl;
+        impl ProtocolLeaf for SharedDecl {
+            fn leaf_name() -> String {
+                String::from("org.example.v1.echo")
+            }
+        }
+        impl LeafDeclaration for SharedDecl {
+            fn procedure_suffixes() -> &'static [&'static str] {
+                &["invoke"]
+            }
+        }
+
+        struct Host;
+        impl ProtocolLeaf for Host {
+            fn leaf_name() -> String {
+                SharedDecl::leaf_name()
+            }
+        }
+        impl LeafBinding for Host {
+            type Declaration = SharedDecl;
+        }
+
+        assert_eq!(
+            <Host as LeafBinding>::Declaration::leaf_spec().name,
+            "org.example.v1.echo"
         );
     }
 }

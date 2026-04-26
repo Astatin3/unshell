@@ -23,7 +23,7 @@ use super::errors::ShellLeafError;
 /// one opening procedure and one live hook remains direct and visible.
 #[derive(Procedure)]
 #[procedure(leaf = RemoteShellEndpoint, name = "open")]
-pub struct ProcedureOpen {
+pub struct Open {
     /// Spawned PTY child process.
     pub(super) child: Box<dyn portable_pty::Child + Send>,
     /// Process-group leader used for Unix hangup and kill signaling.
@@ -52,7 +52,7 @@ enum OutputEvent {
     ReaderClosed,
 }
 
-impl ProcedureOpen {
+impl Open {
     pub(super) fn spawn(
         return_path: Vec<String>,
         hook_id: u64,
@@ -213,7 +213,7 @@ impl ProcedureOpen {
     }
 }
 
-impl Drop for ProcedureOpen {
+impl Drop for Open {
     fn drop(&mut self) {
         let _ = self.terminate();
     }

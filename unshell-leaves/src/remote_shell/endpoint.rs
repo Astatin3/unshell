@@ -6,13 +6,10 @@ mod transport;
 
 use std::collections::BTreeMap;
 
-use unshell::Leaf;
-use unshell::protocol::tree::{
-    Call, HookKey, Procedure, ProcedureEffect, ProcedureRuntime, ProcedureStore, ProtocolEndpoint,
-};
+use unshell::protocol::tree::{Call, HookKey, Procedure, ProcedureEffect, ProcedureStore};
 
 pub use errors::ShellLeafError;
-pub use session::ProcedureOpen;
+pub use session::Open;
 pub use transport::{LISTEN_ADDR, send_forward, spawn_frame_reader, write_frames};
 
 use super::OpenRequest;
@@ -22,25 +19,24 @@ use super::OpenRequest;
 /// The endpoint keeps each live shell session in an explicit map keyed by the
 /// caller-owned hook identity. That makes ownership and cleanup of hook-backed
 /// shell processes easy to inspect during debugging.
-#[derive(Default, Leaf)]
-#[leaf(leaf_name = "remote_shell")]
+#[derive(Default)]
 pub struct RemoteShellEndpoint {
-    sessions: BTreeMap<HookKey, ProcedureOpen>,
+    sessions: BTreeMap<HookKey, Open>,
 }
 
-impl ProcedureStore<ProcedureOpen> for RemoteShellEndpoint {
-    fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, ProcedureOpen> {
+impl ProcedureStore<Open> for RemoteShellEndpoint {
+    fn procedure_sessions(&mut self) -> &mut BTreeMap<HookKey, Open> {
         &mut self.sessions
     }
 }
 
-impl Procedure<RemoteShellEndpoint> for ProcedureOpen {
+impl Procedure<RemoteShellEndpoint> for Open {
     type Error = ShellLeafError;
     type Input = OpenRequest;
 
     fn open(_leaf: &mut RemoteShellEndpoint, call: Call<Self::Input>) -> Result<Self, Self::Error> {
         let hook_key = call.response_hook.ok_or(ShellLeafError::MissingHook)?;
-        ProcedureOpen::spawn(hook_key.return_path, hook_key.hook_id, call.procedure_id)
+        Open::spawn(hook_key.return_path, hook_key.hook_id, call.procedure_id)
     }
 
     fn on_data(
@@ -69,32 +65,4 @@ impl Procedure<RemoteShellEndpoint> for ProcedureOpen {
     fn close(_leaf: &mut RemoteShellEndpoint, mut session: Self) -> Result<(), Self::Error> {
         session.terminate()
     }
-}
-
-/// Builds the controller endpoint used by the receiver example.
-pub fn build_controller_endpoint() -> ProtocolEndpoint {
-    ProtocolEndpoint::new(
-        Vec::new(),
-        None,
-        vec![unshell::protocol::tree::ChildRoute::registered(agent_path())],
-        Vec::new(),
-    )
-}
-
-/// Builds the stateful shell runtime used by the endpoint example.
-pub fn build_agent_runtime() -> ProcedureRuntime<RemoteShellEndpoint, ProcedureOpen> {
-    let endpoint = ProtocolEndpoint::new(
-        agent_path(),
-        Some(Vec::new()),
-        Vec::new(),
-        vec![unshell::protocol::tree::LeafSpec {
-            name: RemoteShellEndpoint::protocol_leaf_name(),
-            procedures: vec![ProcedureOpen::protocol_procedure_id()],
-        }],
-    );
-    ProcedureRuntime::new(endpoint, RemoteShellEndpoint::default())
-}
-
-fn agent_path() -> Vec<String> {
-    vec![String::from("agent")]
 }

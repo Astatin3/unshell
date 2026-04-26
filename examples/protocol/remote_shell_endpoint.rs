@@ -10,12 +10,24 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
 use unshell::leaves::remote_shell;
-use unshell::protocol::tree::Ingress;
+use unshell::protocol::tree::{Ingress, ProcedureRuntime, ProtocolEndpoint};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = TcpStream::connect(remote_shell::endpoint::LISTEN_ADDR)?;
     let frame_rx = remote_shell::endpoint::spawn_frame_reader(stream.try_clone()?);
-    let mut runtime = remote_shell::endpoint::build_agent_runtime();
+    let endpoint = ProtocolEndpoint::new(
+        agent_path(),
+        Some(Vec::new()),
+        Vec::new(),
+        vec![remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_spec()],
+    );
+    let mut runtime = ProcedureRuntime::<
+        remote_shell::endpoint::RemoteShellEndpoint,
+        remote_shell::endpoint::Open,
+    >::new(
+        endpoint,
+        remote_shell::endpoint::RemoteShellEndpoint::default(),
+    );
 
     println!(
         "connected to controller at {}",
@@ -38,4 +50,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn agent_path() -> Vec<String> {
+    vec![String::from("agent")]
 }

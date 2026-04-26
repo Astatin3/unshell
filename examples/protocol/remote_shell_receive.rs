@@ -9,7 +9,9 @@ use std::net::TcpListener;
 use unshell::leaves::remote_shell;
 use unshell::leaves::remote_shell::OpenRequest;
 use unshell::protocol::tree::encode_call_reply;
-use unshell::protocol::tree::{Endpoint, EndpointOutcome, Ingress, LocalEvent};
+use unshell::protocol::tree::{
+    ChildRoute, Endpoint, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint,
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(remote_shell::endpoint::LISTEN_ADDR)?;
@@ -19,10 +21,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("accepted endpoint connection from {peer_addr}");
 
     let frame_rx = remote_shell::endpoint::spawn_frame_reader(stream.try_clone()?);
-    let mut endpoint = remote_shell::endpoint::build_controller_endpoint();
+    let mut endpoint = ProtocolEndpoint::new(
+        Vec::new(),
+        None,
+        vec![ChildRoute::registered(agent_path())],
+        Vec::new(),
+    );
     let hook_id = endpoint.allocate_hook_id();
     let shell_leaf_name = remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_name();
-    let open_procedure = remote_shell::endpoint::ProcedureOpen::protocol_procedure_id();
+    let open_procedure = remote_shell::endpoint::Open::protocol_procedure_id();
 
     remote_shell::endpoint::send_forward(
         &mut stream,

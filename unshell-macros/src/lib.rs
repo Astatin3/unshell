@@ -1,12 +1,42 @@
 //! Proc macros for `unshell` application-layer leaf declarations.
 
 mod leaf;
+mod leaf_decl;
 mod procedure;
 mod procedures;
 mod utils;
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
+
+/// Declares one compile-time leaf surface and binds it to endpoint and/or TUI
+/// host structs.
+///
+/// What it is: a function-like macro that generates the shared protocol-visible
+/// metadata for one leaf and applies that metadata to the listed host structs.
+///
+/// Why it exists: endpoint and TUI hosts should not each have to repeat the leaf
+/// name and procedure inventory, and endpoint construction should not need a
+/// handwritten list of procedure ids.
+///
+/// # Example
+/// ```ignore
+/// unshell::leaf! {
+///     name = "remote_shell",
+///     procedures = [Open, Reset, whoami],
+///     endpoint_struct = RemoteShellEndpoint,
+///     tui_struct = RemoteShellTui,
+/// }
+/// ```
+#[proc_macro]
+pub fn leaf(input: TokenStream) -> TokenStream {
+    match leaf_decl::expand_leaf_declaration(parse_macro_input!(
+        input as leaf_decl::LeafDeclarationInput
+    )) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
 
 /// Derives canonical protocol-leaf identity helpers for one host type.
 ///

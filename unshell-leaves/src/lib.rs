@@ -12,7 +12,7 @@ pub extern crate alloc;
 
 use unshell_protocol::DataMessage;
 
-pub use unshell_macros::{Leaf, Procedure, procedures};
+pub use unshell_macros::{Leaf, Procedure, leaf, procedures};
 pub use unshell_protocol as protocol;
 
 /// Re-exports one role-specific type behind a stable public alias.

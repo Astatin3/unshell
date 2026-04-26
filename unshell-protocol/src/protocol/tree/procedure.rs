@@ -27,6 +27,45 @@ use super::{
     LocalEvent, OutgoingData, ProtocolEndpoint, ProtocolLeaf, decode_call_input,
 };
 
+/// Canonical compile-time metadata for one procedure surface.
+///
+/// What it is: a trait that defines the leaf type and local suffix used to derive
+/// one stable protocol `procedure_id`.
+///
+/// Why it exists: compile-time leaf declarations and future typed remote methods
+/// need to talk about procedures without hand-assembling identifiers at each use
+/// site.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::{ProcedureMetadata, ProtocolLeaf};
+/// struct ExampleLeaf;
+/// impl ProtocolLeaf for ExampleLeaf {
+///     fn leaf_name() -> String { "org.example.v1.shell".into() }
+/// }
+/// struct Open;
+/// impl ProcedureMetadata for Open {
+///     type Leaf = ExampleLeaf;
+///     fn procedure_suffix() -> &'static str { "open" }
+/// }
+/// assert_eq!(Open::procedure_id(), "org.example.v1.shell.open");
+/// ```
+pub trait ProcedureMetadata: Sized {
+    /// Leaf surface this procedure belongs to.
+    type Leaf: ProtocolLeaf;
+
+    /// Returns the local suffix used to derive the full canonical `procedure_id`.
+    fn procedure_suffix() -> &'static str;
+
+    /// Returns the canonical `procedure_id` for this procedure.
+    fn procedure_id() -> String {
+        let mut procedure_id = <Self::Leaf as ProtocolLeaf>::leaf_name();
+        procedure_id.push('.');
+        procedure_id.push_str(Self::procedure_suffix());
+        procedure_id
+    }
+}
+
 /// Generated metadata for one stateful procedure bound to one leaf type.
 ///
 /// This metadata is intentionally tiny: one procedure suffix plus the derived
@@ -34,31 +73,32 @@ use super::{
 ///
 /// # Example
 /// ```rust
-/// use unshell::protocol::tree::{ProtocolLeaf, StatefulProcedureMetadata};
+/// use unshell::protocol::tree::{ProcedureMetadata, ProtocolLeaf, StatefulProcedureMetadata};
 /// struct ExampleLeaf;
 /// impl ProtocolLeaf for ExampleLeaf {
 ///     fn leaf_name() -> String { "org.example.v1.shell".into() }
 /// }
 /// struct Open;
-/// impl StatefulProcedureMetadata<ExampleLeaf> for Open {
+/// impl ProcedureMetadata for Open {
+///     type Leaf = ExampleLeaf;
+///
 ///     fn procedure_suffix() -> &'static str { "open" }
 /// }
+/// fn _compat<T: StatefulProcedureMetadata<ExampleLeaf>>() {}
+/// _compat::<Open>();
 /// assert_eq!(Open::procedure_id(), "org.example.v1.shell.open");
 /// ```
-pub trait StatefulProcedureMetadata<L>: Sized
+pub trait StatefulProcedureMetadata<L>: ProcedureMetadata<Leaf = L> + Sized
 where
     L: ProtocolLeaf,
 {
-    /// Returns the local suffix used to derive the full canonical `procedure_id`.
-    fn procedure_suffix() -> &'static str;
+}
 
-    /// Returns the canonical `procedure_id` for this procedure.
-    fn procedure_id() -> String {
-        let mut procedure_id = L::leaf_name();
-        procedure_id.push('.');
-        procedure_id.push_str(Self::procedure_suffix());
-        procedure_id
-    }
+impl<T, L> StatefulProcedureMetadata<L> for T
+where
+    T: ProcedureMetadata<Leaf = L>,
+    L: ProtocolLeaf,
+{
 }
 
 /// Explicit storage access for one procedure session map inside the leaf.
@@ -133,7 +173,7 @@ pub trait ProcedureStore<P> {
 ///     }
 /// }
 /// ```
-pub trait Procedure<L>: StatefulProcedureMetadata<L> + Sized
+pub trait Procedure<L>: ProcedureMetadata<Leaf = L> + Sized
 where
     L: ProtocolLeaf,
 {

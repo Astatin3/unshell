@@ -26,6 +26,6 @@ pub use unshell_protocol as protocol;
 /// Re-export the leaf library crate behind the historical `unshell::leaves` path
 pub use unshell_leaves as leaves;
 
-pub use unshell_macros::{Leaf, Procedure, procedures};
+pub use unshell_macros::{Leaf, Procedure, leaf, procedures};
 
 // pub use ush_obfuscate as obfuscate;

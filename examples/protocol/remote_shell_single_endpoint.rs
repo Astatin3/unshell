@@ -16,10 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         agent_path(),
         Some(Vec::new()),
         Vec::new(),
-        vec![unshell::protocol::tree::LeafSpec {
-            name: remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_name(),
-            procedures: vec![remote_shell::endpoint::ProcedureOpen::protocol_procedure_id()],
-        }],
+        vec![remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_spec()],
     );
 
     let hook_id = endpoint.allocate_hook_id();

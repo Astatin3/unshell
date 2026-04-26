@@ -146,6 +146,10 @@ pub(crate) fn expand_leaf(input: DeriveInput) -> Result<proc_macro2::TokenStream
             }
         }
 
+        impl #impl_generics ::unshell::protocol::tree::LeafBinding for #struct_name #ty_generics #where_clause {
+            type Declaration = Self;
+        }
+
         impl #impl_generics #struct_name #ty_generics #where_clause {
             /// Returns the canonical dotted leaf name declared for this type.
             #leaf_name_warning_attr
