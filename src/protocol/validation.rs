@@ -8,10 +8,15 @@ use core::fmt;
 /// Validation failures for protocol structures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
+    /// One header field combination is invalid for the chosen packet type.
     HeaderInvariant(&'static str),
+    /// The procedure identifier violates the protocol's minimal reserved-id rules.
     ProcedureId(&'static str),
+    /// The call payload contradicts the surrounding packet header.
     CallInvariant(&'static str),
+    /// A hook lifecycle transition would break protocol state invariants.
     HookInvariant(&'static str),
+    /// A hook id collided with existing endpoint-local state.
     InvalidHookId,
 }
 
@@ -29,7 +34,10 @@ impl fmt::Display for ValidationError {
 
 impl core::error::Error for ValidationError {}
 
-/// Validates packet header invariants from the protocol.
+/// Validates stateless packet-header invariants.
+///
+/// This checks wire-shape rules only. It does not verify route existence, leaf existence,
+/// hook ownership, or whether the destination actually supports the requested procedure.
 pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
     match header.packet_type {
         PacketType::Call => {
@@ -56,6 +64,9 @@ pub fn validate_header(header: &PacketHeader) -> Result<(), ValidationError> {
 }
 
 /// Validates the protocol-level `procedure_id` invariant.
+///
+/// This is intentionally permissive. The protocol reserves only the empty string for
+/// introspection; every other non-empty identifier is treated as opaque application data.
 pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> {
     if procedure_id == INTROSPECTION_PROCEDURE_ID {
         return Ok(());
@@ -69,6 +80,9 @@ pub fn validate_procedure_id(procedure_id: &str) -> Result<(), ValidationError> 
 }
 
 /// Validates call-specific invariants that depend on both header and payload.
+///
+/// This complements [`validate_header`]. It does not verify destination reachability or leaf
+/// support, only consistency between the opening `Call` header and payload.
 pub fn validate_call(header: &PacketHeader, call: &CallMessage) -> Result<(), ValidationError> {
     validate_procedure_id(&call.procedure_id)?;
 
@@ -81,6 +95,7 @@ pub fn validate_call(header: &PacketHeader, call: &CallMessage) -> Result<(), Va
     }
 
     if call.procedure_id == INTROSPECTION_PROCEDURE_ID && call.response_hook.is_none() {
+        // Introspection is defined as a request/response exchange, never a fire-and-forget call.
         return Err(ValidationError::CallInvariant(
             "introspection requires a response hook",
         ));

@@ -73,6 +73,10 @@ impl HookTable {
     ///
     /// Hook ids are scoped by host path, so this only needs to guarantee uniqueness within the
     /// local table. The wrapped increment keeps allocation infallible for long-lived runtimes.
+    ///
+    /// The table currently uses one counter shared across all host paths. The `return_path`
+    /// parameter remains in the API because hook ids are still interpreted as host-scoped by the
+    /// rest of the protocol surface.
     #[must_use]
     pub fn allocate_hook_id(&mut self, _return_path: &[String]) -> u64 {
         let id = self.next_id.max(1);
@@ -197,6 +201,9 @@ impl HookTable {
     }
 
     /// Marks the local side finished and returns `true` once both sides are finished.
+    ///
+    /// This does not remove the hook. Callers use the boolean to decide whether cleanup should
+    /// happen immediately or whether the peer side is still expected to send more traffic.
     pub fn mark_local_end(&mut self, key: &HookKey) -> bool {
         let Some(active) = self.active_mut(key) else {
             return false;
@@ -206,6 +213,9 @@ impl HookTable {
     }
 
     /// Marks the peer side finished and returns `true` once both sides are finished.
+    ///
+    /// This mirrors [`mark_local_end`](Self::mark_local_end): it only reports completion, leaving
+    /// final removal to the caller so higher layers can decide when to tear down hook state.
     pub fn mark_peer_end(&mut self, key: &HookKey) -> bool {
         let Some(active) = self.active_mut(key) else {
             return false;

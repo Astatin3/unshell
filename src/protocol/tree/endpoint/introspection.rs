@@ -1,6 +1,6 @@
 //! Introspection response generation.
 
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use rkyv::{rancor::Error as RkyvError, to_bytes};
 
 use crate::protocol::{
@@ -25,20 +25,13 @@ impl ProtocolEndpoint {
             let Some(leaf) = self.leaves.get(leaf_name) else {
                 return self.emit_fault_if_possible(Some(key), ProtocolFault::UNKNOWN_LEAF);
             };
-            to_bytes::<RkyvError>(&LeafIntrospection {
+            self.serialize_introspection(&LeafIntrospection {
                 leaf_name: leaf_name.clone(),
                 procedures: leaf.procedures.clone(),
-            })
-            .map_err(|error| EndpointError::Frame(FrameError::Serialize(error)))?
-            .to_vec()
+            })?
         } else {
-            to_bytes::<RkyvError>(&EndpointIntrospection {
-                sub_endpoints: self
-                    .children
-                    .iter()
-                    .filter(|child| child.registered)
-                    .filter_map(|child| child.path.get(self.path.len()).cloned())
-                    .collect(),
+            self.serialize_introspection(&EndpointIntrospection {
+                sub_endpoints: self.direct_registered_child_names(),
                 leaves: self
                     .leaves
                     .values()
@@ -47,9 +40,7 @@ impl ProtocolEndpoint {
                         procedures: leaf.procedures.clone(),
                     })
                     .collect(),
-            })
-            .map_err(|error| EndpointError::Frame(FrameError::Serialize(error)))?
-            .to_vec()
+            })?
         };
 
         let response_header = PacketHeader {
@@ -83,5 +74,30 @@ impl ProtocolEndpoint {
                 frame: encode_packet(&response_header, &response)?,
             }),
         }
+    }
+
+    fn direct_registered_child_names(&self) -> Vec<String> {
+        self.children
+            .iter()
+            .filter(|child| child.registered)
+            // Child routes store absolute endpoint paths. Index the first segment below the
+            // current endpoint so discovery only reports direct descendants.
+            .filter_map(|child| child.path.get(self.path.len()).cloned())
+            .collect()
+    }
+
+    fn serialize_introspection<T>(&self, value: &T) -> Result<Vec<u8>, EndpointError>
+    where
+        T: for<'a> rkyv::Serialize<
+                rkyv::api::high::HighSerializer<
+                    rkyv::util::AlignedVec,
+                    rkyv::ser::allocator::ArenaHandle<'a>,
+                    RkyvError,
+                >,
+            >,
+    {
+        to_bytes::<RkyvError>(value)
+            .map_err(|error| EndpointError::Frame(FrameError::Serialize(error)))
+            .map(|bytes| bytes.to_vec())
     }
 }

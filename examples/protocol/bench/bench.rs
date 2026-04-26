@@ -9,7 +9,7 @@ use unshell::protocol::tree::{
 use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
 
 const SAMPLES: usize = 500;
-const ITERS: usize = 1_000;
+const ITERS: usize = 10_000;
 const TOOL_ITERS: usize = 10_000;
 
 fn main() {

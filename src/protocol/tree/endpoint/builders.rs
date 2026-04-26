@@ -104,6 +104,9 @@ impl ProtocolEndpoint {
 
     #[must_use]
     /// Creates an endpoint with compiled routing tables for its current topology.
+    ///
+    /// `parent_path` is currently used only as a presence flag. The endpoint stores its own
+    /// absolute `path`, and routing only needs to know whether an upward route exists.
     pub fn new(
         path: Vec<String>,
         parent_path: Option<Vec<String>>,
@@ -177,10 +180,7 @@ impl ProtocolEndpoint {
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_call(header, call),
             RouteDecision::Drop => {
-                if let Some(hook) = &call.response_hook {
-                    self.hooks
-                        .remove_pending(&HookKey::new(hook.return_path.clone(), hook.hook_id));
-                }
+                self.rollback_pending_call_hook(&call);
                 Ok(EndpointOutcome::Dropped)
             }
             route => Ok(EndpointOutcome::Forward {
@@ -232,17 +232,7 @@ impl ProtocolEndpoint {
             self.prepare_data(dst_path, hook_id, procedure_id, data, end_hook)?;
 
         if end_hook {
-            // Locally-originated streams may not have been resolved against a peer yet,
-            // so fall back to the endpoint's own hook key shape when closing them.
-            let local_hook_key = self
-                .hooks
-                .resolve_active_key(&local_end_dst_path, hook_id, &self.path)
-                .unwrap_or_else(|| host_key.clone());
-            if self.hooks.pending(&host_key).is_some() {
-                self.hooks.mark_pending_local_end(&host_key);
-            } else if self.hooks.mark_local_end(&local_hook_key) {
-                self.hooks.remove_active(&local_hook_key);
-            }
+            self.mark_local_stream_end(&local_end_dst_path, hook_id, &host_key);
         }
 
         match self.decide_route(&header.dst_path) {
@@ -252,6 +242,27 @@ impl ProtocolEndpoint {
                 route,
                 frame: encode_packet(&header, &message)?,
             }),
+        }
+    }
+
+    fn rollback_pending_call_hook(&mut self, call: &CallMessage) {
+        if let Some(hook) = &call.response_hook {
+            self.hooks
+                .remove_pending(&HookKey::new(hook.return_path.clone(), hook.hook_id));
+        }
+    }
+
+    fn mark_local_stream_end(&mut self, dst_path: &[String], hook_id: u64, host_key: &HookKey) {
+        // Locally-originated streams may not have been resolved against a peer yet, so fall
+        // back to the endpoint's own hook key shape when closing them.
+        let local_hook_key = self
+            .hooks
+            .resolve_active_key(dst_path, hook_id, &self.path)
+            .unwrap_or_else(|| host_key.clone());
+        if self.hooks.pending(host_key).is_some() {
+            self.hooks.mark_pending_local_end(host_key);
+        } else if self.hooks.mark_local_end(&local_hook_key) {
+            self.hooks.remove_active(&local_hook_key);
         }
     }
 }

@@ -24,6 +24,7 @@ pub struct ChildRoute {
 
 impl ChildRoute {
     #[must_use]
+    /// Builds one child route that is immediately eligible for routing decisions.
     pub fn registered(path: Vec<String>) -> Self {
         Self {
             path,
@@ -44,26 +45,40 @@ pub struct LeafSpec {
 /// Where an inbound frame entered this endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ingress {
+    /// The frame arrived from the parent side of the tree.
     Parent,
+    /// The frame arrived from one direct child, identified by that child's absolute path.
     Child(Vec<String>),
+    /// The frame originated locally at this endpoint.
     Local,
 }
 
 /// Event produced when the endpoint handles a packet locally.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocalEvent {
+    /// One opening `Call` packet validated and delivered to local code.
     Call {
+        /// Validated protocol header for the packet.
         header: PacketHeader,
+        /// Deserialized call payload.
         message: CallMessage,
     },
+    /// One hook-associated `Data` packet validated and delivered locally.
     Data {
+        /// Validated protocol header for the packet.
         header: PacketHeader,
+        /// Deserialized data payload.
         message: DataMessage,
+        /// Canonical host-scoped hook key resolved for this hook stream.
         hook_key: HookKey,
     },
+    /// One hook-associated `Fault` packet validated and delivered locally.
     Fault {
+        /// Validated protocol header for the packet.
         header: PacketHeader,
+        /// Deserialized fault payload.
         message: FaultMessage,
+        /// Canonical host-scoped hook key resolved for this hook stream.
         hook_key: HookKey,
     },
 }
@@ -72,7 +87,10 @@ pub enum LocalEvent {
 #[derive(Debug)]
 pub enum EndpointOutcome {
     /// Frame to forward, together with the next routing decision.
-    Forward { route: RouteDecision, frame: FrameBytes },
+    Forward {
+        route: RouteDecision,
+        frame: FrameBytes,
+    },
     /// Locally-delivered protocol event.
     Local(LocalEvent),
     /// Packet intentionally discarded.
@@ -82,7 +100,9 @@ pub enum EndpointOutcome {
 /// Error surfaced while validating or encoding protocol frames.
 #[derive(Debug)]
 pub enum EndpointError {
+    /// Framing, archive decode, or archive encode failed.
     Frame(FrameError),
+    /// One protocol invariant failed validation.
     Validation(ValidationError),
 }
 

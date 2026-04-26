@@ -5,15 +5,21 @@
 
 use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 
-/// Explicit test tree declaration used for configuration.
+/// Explicit tree declaration used for configuration and tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeNode {
     /// The protocol root. Its path is always empty.
-    Root { children: Vec<Self> },
+    Root {
+        /// Direct child endpoints hosted below the root.
+        children: Vec<Self>,
+    },
     /// An addressable endpoint segment in the tree.
     Endpoint {
+        /// Path segment contributed by this endpoint.
         segment: String,
+        /// Leaves hosted directly at this endpoint.
         leaves: Vec<LeafNode>,
+        /// Direct child endpoints hosted below this endpoint.
         children: Vec<Self>,
     },
 }
@@ -29,6 +35,8 @@ pub struct LeafNode {
 
 impl TreeNode {
     /// Flattens the explicit tree into the set of endpoint paths it declares.
+    ///
+    /// The returned list always includes the protocol root as `[]`.
     pub fn paths(&self) -> Vec<Vec<String>> {
         let mut paths = Vec::new();
         self.collect_paths(&[], &mut paths);
@@ -88,6 +96,9 @@ struct RouteTrieNode {
 
 impl CompiledRoutes {
     /// Compiles child endpoint paths into a trie rooted at `local_path`.
+    ///
+    /// Only strict descendants of `local_path` participate in the compiled trie. Paths outside
+    /// the local subtree, or equal to `local_path` itself, are ignored.
     #[must_use]
     pub fn new(local_path: &[String], child_paths: &[Vec<String>], has_parent: bool) -> Self {
         let mut routes = Self {
@@ -169,8 +180,11 @@ pub fn is_prefix(prefix: &[String], path: &[String]) -> bool {
             .zip(path.iter())
             .all(|(left, right)| left == right)
 }
-
 /// Trait for resolving a destination path to a routing decision.
+///
+/// The default policy is longest-prefix routing: exact matches stay local, the deepest matching
+/// descendant wins for child forwarding, destinations outside the local subtree go to the parent
+/// when one exists, and everything else drops.
 pub trait RouteProvider {
     /// Returns the route decision for `dst_path` from the perspective of `local_path`.
     fn route_destination<I>(
@@ -209,6 +223,9 @@ impl RouteProvider for DefaultRouteProvider {
 }
 
 /// Resolves `dst_path` with the default longest-prefix route provider.
+///
+/// Exact matches return [`RouteDecision::Local`]. Destinations outside the local subtree return
+/// [`RouteDecision::Parent`] when `has_parent` is `true`, otherwise [`RouteDecision::Drop`].
 pub fn route_destination<I>(
     local_path: &[String],
     child_paths: I,

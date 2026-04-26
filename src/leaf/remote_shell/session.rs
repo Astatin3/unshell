@@ -1,3 +1,14 @@
+//! Per-hook remote shell session lifecycle.
+//!
+//! A session opens one PTY-backed shell process and then translates protocol hook
+//! traffic into stdin writes and stdout/stderr chunks. The close model is
+//! intentionally two-sided:
+//! - peer end: the caller sets `end_hook`, so no more stdin is accepted
+//! - local end: the shell process exits and the PTY reader drains completely
+//!
+//! Only after both conditions are observed does the session emit its final empty
+//! `end_hook` packet back through the protocol runtime.
+
 use std::io::{self, Read, Write};
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
@@ -17,18 +28,29 @@ use super::errors::ShellLeafError;
 #[derive(Procedure)]
 #[procedure(leaf = RemoteShellLeaf, name = "open")]
 pub struct ProcedureOpen {
+    /// Spawned PTY child process.
     pub(super) child: Box<dyn portable_pty::Child + Send>,
+    /// Process-group leader used for Unix hangup and kill signaling.
     process_group_leader: Option<u32>,
+    /// Buffered stdin bridge into the shell process.
     stdin_tx: Option<SyncSender<Vec<u8>>>,
+    /// Buffered output stream read from the PTY.
     output_rx: Receiver<OutputEvent>,
+    /// Hook return path for packets emitted by this session.
     return_path: Vec<String>,
+    /// Hook identifier allocated by the caller.
     hook_id: u64,
+    /// Procedure id bound to this shell hook.
     procedure_id: String,
+    /// Whether the PTY reader has closed and drained.
     output_closed: bool,
+    /// Observed child exit status, once known.
     pub(super) exit_status: Option<ExitStatus>,
+    /// Whether this session already emitted its terminal local packet.
     pub(super) local_end_sent: bool,
 }
 
+/// One event forwarded from the PTY reader thread.
 enum OutputEvent {
     Chunk(Vec<u8>),
     ReaderClosed,
@@ -42,6 +64,7 @@ impl ProcedureOpen {
         hook_id: u64,
         procedure_id: String,
     ) -> Result<Self, ShellLeafError> {
+        let command = build_shell_command();
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -51,16 +74,6 @@ impl ProcedureOpen {
                 pixel_height: 0,
             })
             .map_err(|error| io::Error::other(error.to_string()))?;
-
-        let command = if cfg!(windows) {
-            let mut command = CommandBuilder::new("cmd.exe");
-            command.arg("/Q");
-            command
-        } else {
-            let mut command = CommandBuilder::new("/bin/sh");
-            command.arg("-i");
-            command
-        };
 
         let child = pair
             .slave
@@ -76,10 +89,7 @@ impl ProcedureOpen {
             .try_clone_reader()
             .map_err(|error| io::Error::other(error.to_string()))?;
 
-        let (stdin_tx, stdin_rx) = mpsc::sync_channel(64);
-        let (tx, rx) = mpsc::sync_channel(64);
-        spawn_pipe_writer(stdin, stdin_rx);
-        spawn_pipe_reader(stdout, tx);
+        let (stdin_tx, rx) = spawn_io_threads(stdin, stdout);
 
         Ok(Self {
             child,
@@ -95,6 +105,7 @@ impl ProcedureOpen {
         })
     }
 
+    /// Builds one outgoing hook packet owned by this session.
     pub(super) fn packet(&self, data: Vec<u8>, end_hook: bool) -> OutgoingData {
         OutgoingData {
             dst_path: self.return_path.clone(),
@@ -105,6 +116,7 @@ impl ProcedureOpen {
         }
     }
 
+    /// Forces the underlying shell process to stop and records its exit status.
     pub(super) fn terminate(&mut self) -> Result<(), ShellLeafError> {
         self.stdin_tx.take();
         match self.child.try_wait()? {
@@ -113,7 +125,7 @@ impl ProcedureOpen {
                 Ok(())
             }
             None => {
-                self.kill_process_group();
+                self.signal_process_group("-KILL");
                 self.child
                     .kill()
                     .map_err(|error| io::Error::other(error.to_string()))?;
@@ -127,6 +139,7 @@ impl ProcedureOpen {
         }
     }
 
+    /// Drains any currently buffered PTY output into protocol packets.
     pub(super) fn drain_output(&mut self, outgoing: &mut Vec<OutgoingData>) {
         loop {
             match self.output_rx.try_recv() {
@@ -164,7 +177,7 @@ impl ProcedureOpen {
         // we also send SIGHUP so an interactive shell treats this like terminal
         // hangup instead of waiting forever on the still-open PTY master.
         self.stdin_tx.take();
-        self.signal_peer_end();
+        self.signal_process_group("-HUP");
         Ok(ProcedureEffect::default())
     }
 
@@ -185,7 +198,7 @@ impl ProcedureOpen {
         }
 
         if self.exit_status.is_some() && !self.output_closed {
-            self.kill_process_group();
+            self.signal_process_group("-KILL");
         }
 
         if self.exit_status.is_some() && self.output_closed {
@@ -197,21 +210,11 @@ impl ProcedureOpen {
         Ok(ProcedureEffect::outgoing(outgoing))
     }
 
-    fn kill_process_group(&self) {
+    fn signal_process_group(&self, signal: &str) {
         #[cfg(unix)]
         if let Some(process_group_leader) = self.process_group_leader {
             let _ = Command::new("kill")
-                .arg("-KILL")
-                .arg(format!("-{}", process_group_leader))
-                .status();
-        }
-    }
-
-    fn signal_peer_end(&self) {
-        #[cfg(unix)]
-        if let Some(process_group_leader) = self.process_group_leader {
-            let _ = Command::new("kill")
-                .arg("-HUP")
+                .arg(signal)
                 .arg(format!("-{}", process_group_leader))
                 .status();
         }
@@ -235,6 +238,29 @@ fn spawn_pipe_writer(mut stdin: Box<dyn Write + Send>, rx: Receiver<Vec<u8>>) {
             }
         }
     });
+}
+
+fn build_shell_command() -> CommandBuilder {
+    if cfg!(windows) {
+        let mut command = CommandBuilder::new("cmd.exe");
+        command.arg("/Q");
+        command
+    } else {
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.arg("-i");
+        command
+    }
+}
+
+fn spawn_io_threads(
+    stdin: Box<dyn Write + Send>,
+    stdout: Box<dyn Read + Send>,
+) -> (SyncSender<Vec<u8>>, Receiver<OutputEvent>) {
+    let (stdin_tx, stdin_rx) = mpsc::sync_channel(64);
+    let (tx, rx) = mpsc::sync_channel(64);
+    spawn_pipe_writer(stdin, stdin_rx);
+    spawn_pipe_reader(stdout, tx);
+    (stdin_tx, rx)
 }
 
 fn spawn_pipe_reader<R>(mut reader: R, tx: mpsc::SyncSender<OutputEvent>)

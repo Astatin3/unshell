@@ -221,6 +221,7 @@ impl<L> LeafRuntime<L>
 where
     L: CallLeaf + super::CallProcedures<Error = <L as CallLeaf>::Error>,
 {
+    /// Delivers one inbound frame into the stateful leaf runtime.
     pub fn receive(
         &mut self,
         ingress: &Ingress,
@@ -230,6 +231,7 @@ where
         self.process_endpoint_outcome(outcome)
     }
 
+    /// Polls the leaf for locally-generated hook traffic and routes any emitted frames.
     pub fn poll(&mut self) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         let outgoing = self.leaf.poll().map_err(LeafRuntimeError::Leaf)?;
         self.emit_outgoing(outgoing)
@@ -248,78 +250,103 @@ where
                 frames: Vec::new(),
                 dropped: true,
             }),
-            crate::protocol::tree::EndpointOutcome::Local(event) => {
-                let mut runtime = RuntimeOutcome::default();
+            crate::protocol::tree::EndpointOutcome::Local(event) => self.process_local_event(event),
+        }
+    }
 
-                match event {
-                    LocalEvent::Call { header, message } => {
-                        let CallMessage {
-                            procedure_id,
-                            data,
-                            response_hook,
-                        } = message;
-                        let fault_hook = response_hook.as_ref();
-                        let incoming = IncomingCall {
-                            header,
-                            message: CallMessage {
-                                procedure_id: procedure_id.clone(),
-                                data,
-                                response_hook: response_hook.clone(),
-                            },
-                        };
-                        match self.leaf.dispatch_call(incoming) {
-                            Ok(CallReply::Reply(bytes)) => {
-                                if let Some(hook) = response_hook {
-                                    runtime.frames.extend(self.send_reply_data(
-                                        hook,
-                                        procedure_id,
-                                        bytes,
-                                        true,
-                                    )?);
-                                }
-                            }
-                            Ok(CallReply::NoReply) => {}
-                            Err(error) => {
-                                runtime
-                                    .frames
-                                    .extend(self.emit_internal_fault_if_possible(fault_hook)?);
-                                return Err(LeafRuntimeError::Dispatch(error));
-                            }
-                        }
-                    }
-                    LocalEvent::Data {
-                        header,
-                        message,
-                        hook_key,
-                    } => {
-                        let outgoing = self
-                            .leaf
-                            .on_data(IncomingData {
-                                header,
-                                message,
-                                hook_key,
-                            })
-                            .map_err(LeafRuntimeError::Leaf)?;
-                        runtime.frames.extend(self.emit_outgoing(outgoing)?.frames);
-                    }
-                    LocalEvent::Fault {
-                        header,
-                        message,
-                        hook_key,
-                    } => {
-                        self.leaf
-                            .on_fault(IncomingFault {
-                                header,
-                                fault: message,
-                                hook_key,
-                            })
-                            .map_err(LeafRuntimeError::Leaf)?;
-                    }
-                }
+    fn process_local_event(
+        &mut self,
+        event: LocalEvent,
+    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        match event {
+            LocalEvent::Call { header, message } => self.process_local_call(header, message),
+            LocalEvent::Data {
+                header,
+                message,
+                hook_key,
+            } => self.process_local_data(header, message, hook_key),
+            LocalEvent::Fault {
+                header,
+                message,
+                hook_key,
+            } => self.process_local_fault(header, message, hook_key),
+        }
+    }
 
-                Ok(runtime)
+    fn process_local_call(
+        &mut self,
+        header: PacketHeader,
+        message: CallMessage,
+    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        let CallMessage {
+            procedure_id,
+            data,
+            response_hook,
+        } = message;
+        let fault_hook = response_hook.as_ref();
+        let incoming = IncomingCall {
+            header,
+            // Split the payload apart so the reply path can reuse the owned procedure id and
+            // response hook without re-decoding the incoming bytes.
+            message: CallMessage {
+                procedure_id: procedure_id.clone(),
+                data,
+                response_hook: response_hook.clone(),
+            },
+        };
+
+        match self.leaf.dispatch_call(incoming) {
+            Ok(CallReply::Reply(bytes)) => {
+                let frames = if let Some(hook) = response_hook {
+                    self.send_reply_data(hook, procedure_id, bytes, true)?
+                } else {
+                    Vec::new()
+                };
+                Ok(RuntimeOutcome {
+                    frames,
+                    dropped: false,
+                })
+            }
+            Ok(CallReply::NoReply) => Ok(RuntimeOutcome::default()),
+            Err(error) => {
+                let frames = self.emit_internal_fault_if_possible(fault_hook)?;
+                let _ = frames;
+                Err(LeafRuntimeError::Dispatch(error))
             }
         }
+    }
+
+    fn process_local_data(
+        &mut self,
+        header: PacketHeader,
+        message: DataMessage,
+        hook_key: HookKey,
+    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        let outgoing = self
+            .leaf
+            .on_data(IncomingData {
+                header,
+                message,
+                hook_key,
+            })
+            .map_err(LeafRuntimeError::Leaf)?;
+        self.emit_outgoing(outgoing)
+    }
+
+    fn process_local_fault(
+        &mut self,
+        header: PacketHeader,
+        message: crate::protocol::FaultMessage,
+        hook_key: HookKey,
+    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        self.leaf
+            .on_fault(IncomingFault {
+                header,
+                fault: message,
+                hook_key,
+            })
+            .map_err(LeafRuntimeError::Leaf)?;
+        Ok(RuntimeOutcome::default())
     }
 
     fn emit_outgoing(

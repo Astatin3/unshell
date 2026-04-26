@@ -18,10 +18,15 @@ pub type FrameBytes = AlignedVec<SECTION_ALIGN>;
 /// Framing or archive failure.
 #[derive(Debug)]
 pub enum FrameError {
+    /// The byte slice ended before a full frame could be decoded.
     Truncated,
+    /// The archived header bytes failed validation or deserialization.
     InvalidHeader(Error),
+    /// The archived payload bytes failed validation or deserialization.
     InvalidPayload(Error),
+    /// Serializing one header or payload section failed.
     Serialize(Error),
+    /// One archived section grew beyond the `u32` length prefix supported by the format.
     LengthOverflow,
 }
 
@@ -40,6 +45,9 @@ impl fmt::Display for FrameError {
 impl core::error::Error for FrameError {}
 
 /// Parsed frame with one owned header and a borrowed payload section.
+///
+/// The frame decoder eagerly materializes the routing header into owned Rust values, but keeps
+/// the payload section borrowed so callers can choose which concrete payload type to decode.
 pub struct ParsedFrame<'a> {
     header: PacketHeader,
     payload_bytes: &'a [u8],
@@ -47,39 +55,60 @@ pub struct ParsedFrame<'a> {
 
 impl<'a> ParsedFrame<'a> {
     #[must_use]
+    /// Returns the decoded packet header.
     pub fn header(&self) -> &PacketHeader {
         &self.header
     }
 
     #[must_use]
+    /// Returns the packet class from the decoded header.
     pub fn packet_type(&self) -> PacketType {
         self.header.packet_type
     }
 
     #[must_use]
+    /// Returns the borrowed payload section bytes.
     pub fn payload_bytes(&self) -> &'a [u8] {
         self.payload_bytes
     }
 
     #[must_use]
+    /// Splits the parsed frame into its owned header and borrowed payload bytes.
     pub fn into_parts(self) -> (PacketHeader, &'a [u8]) {
         (self.header, self.payload_bytes)
     }
 
+    /// Deserializes the payload section as a [`CallMessage`].
     pub fn deserialize_call(&self) -> Result<CallMessage, FrameError> {
-        deserialize_archived_bytes::<ArchivedCallMessage, CallMessage>(self.payload_bytes)
+        self.deserialize_payload::<ArchivedCallMessage, CallMessage>()
     }
 
+    /// Deserializes the payload section as a [`DataMessage`].
     pub fn deserialize_data(&self) -> Result<DataMessage, FrameError> {
-        deserialize_archived_bytes::<ArchivedDataMessage, DataMessage>(self.payload_bytes)
+        self.deserialize_payload::<ArchivedDataMessage, DataMessage>()
     }
 
+    /// Deserializes the payload section as a [`FaultMessage`].
     pub fn deserialize_fault(&self) -> Result<FaultMessage, FrameError> {
-        deserialize_archived_bytes::<ArchivedFaultMessage, FaultMessage>(self.payload_bytes)
+        self.deserialize_payload::<ArchivedFaultMessage, FaultMessage>()
+    }
+
+    fn deserialize_payload<A, T>(&self) -> Result<T, FrameError>
+    where
+        A: rkyv::Portable
+            + for<'b> rkyv::bytecheck::CheckBytes<rkyv::api::high::HighValidator<'b, Error>>,
+        T: rkyv::Archive,
+        A: rkyv::Deserialize<T, rkyv::api::high::HighDeserializer<Error>>,
+    {
+        deserialize_archived_bytes::<A, T>(self.payload_bytes)
     }
 }
 
 /// Encodes a packet header and payload using the aligned two-section frame format.
+///
+/// The frame starts with two big-endian `u32` lengths, followed by an aligned archived header
+/// section and an aligned archived payload section. Both sections use [`SECTION_ALIGN`] so the
+/// archived bytes can usually be accessed without a fallback copy on decode.
 pub fn encode_packet<P>(header: &PacketHeader, payload: &P) -> Result<FrameBytes, FrameError>
 where
     P: for<'a> Serialize<
@@ -107,6 +136,9 @@ where
 }
 
 /// Decodes one aligned two-section frame.
+///
+/// This rejects trailing bytes instead of silently ignoring them, so callers can treat one byte
+/// slice as exactly one protocol frame.
 pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
     let (header_bytes, payload_bytes) = split_frame_sections(bytes)?;
     let header = deserialize_section::<ArchivedPacketHeader, PacketHeader>(
@@ -121,6 +153,10 @@ pub fn decode_frame(bytes: &[u8]) -> Result<ParsedFrame<'_>, FrameError> {
 }
 
 /// Deserializes one archived byte section.
+///
+/// Payload bytes normally come from [`decode_frame`] or one of [`ParsedFrame`]`'s`
+/// `deserialize_*` helpers. This function remains public for callers that archive nested
+/// application payloads inside protocol `data` fields.
 pub fn deserialize_archived_bytes<A, T>(bytes: &[u8]) -> Result<T, FrameError>
 where
     A: rkyv::Portable
@@ -158,6 +194,8 @@ fn split_frame_sections(bytes: &[u8]) -> Result<(&[u8], &[u8]), FrameError> {
     let payload_start = align_up(header_end, SECTION_ALIGN);
     let payload_end = payload_start + payload_len;
     if payload_end != bytes.len() {
+        // Framed packets do not permit trailing bytes. Treating the slice as exactly one frame
+        // keeps stream framing bugs visible instead of silently accepting concatenated payloads.
         return Err(FrameError::Truncated);
     }
 
@@ -191,6 +229,9 @@ where
         return deserialize::<T, Error>(archived).map_err(invalid);
     }
 
+    // Archived types may require stronger alignment than a borrowed byte slice can guarantee.
+    // Copy into an aligned buffer so callers can still decode valid frames from arbitrary input
+    // sources instead of rejecting them purely for allocation layout reasons.
     let mut aligned: FrameBytes = FrameBytes::with_capacity(bytes.len());
     aligned.extend_from_slice(bytes);
     let archived = access::<A, Error>(&aligned).map_err(invalid)?;

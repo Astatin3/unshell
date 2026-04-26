@@ -244,7 +244,8 @@ fn procedure_runtime_keeps_session_after_local_end_until_explicit_close() {
         )
         .expect("local end trigger should encode");
     let EndpointOutcome::Forward {
-        frame: local_end_frame, ..
+        frame: local_end_frame,
+        ..
     } = local_end
     else {
         panic!("controller should forward local end trigger");

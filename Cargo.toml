@@ -57,10 +57,6 @@ name = "leaf_derive"
 path = "examples/protocol/leaf_derive.rs"
 
 [[example]]
-name = "protocol_leaf_derive"
-path = "examples/protocol_leaf_derive.rs"
-
-[[example]]
 name = "remote_shell_endpoint"
 path = "examples/protocol/remote_shell_endpoint.rs"
 

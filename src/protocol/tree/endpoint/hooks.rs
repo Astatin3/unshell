@@ -81,6 +81,9 @@ impl ProtocolEndpoint {
 
         if active.procedure_id != message.procedure_id {
             // Data frames stay bound to the procedure chosen by the original call.
+            // A procedure mismatch is dropped rather than faulted because the wrong peer may be
+            // replaying stale traffic, and converting that into a terminal hook fault would let a
+            // stray packet tear down an otherwise valid stream.
             return Ok(EndpointOutcome::Dropped);
         }
 
@@ -134,6 +137,12 @@ impl ProtocolEndpoint {
         self.routing.route(dst_path)
     }
 
+    /// Returns whether one `src_path` is topologically valid for the ingress side that delivered
+    /// the frame.
+    ///
+    /// Parent ingress may carry packets from ancestors, siblings, or the endpoint itself, but not
+    /// from descendants pretending to be upstream. Child ingress may only carry packets from that
+    /// child subtree, and local ingress must exactly match the endpoint path.
     pub(crate) fn valid_source_for_ingress(&self, ingress: &Ingress, src_path: &[String]) -> bool {
         match ingress {
             Ingress::Parent => {

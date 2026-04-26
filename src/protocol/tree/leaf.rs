@@ -16,6 +16,7 @@ pub trait ProtocolLeaf {
 
 /// Generated call metadata and initial `Call` dispatch for one leaf.
 pub trait CallProcedures: ProtocolLeaf {
+    /// Leaf-specific error surfaced when generated call dispatch fails.
     type Error;
 
     /// Returns the local procedure suffixes supported by this leaf.
@@ -50,6 +51,10 @@ pub trait CallProcedures: ProtocolLeaf {
     }
 
     /// Dispatches one initial `Call` that targeted this leaf.
+    ///
+    /// Implementations may assume the endpoint already proved the call targets this leaf.
+    /// They are still responsible for decoding the typed input payload and deciding which local
+    /// procedure suffix should run.
     fn dispatch_call(
         &mut self,
         call: crate::protocol::tree::IncomingCall,
@@ -66,6 +71,26 @@ pub trait CallProcedures: ProtocolLeaf {
 /// casing into protocol-visible names. Deterministic is not the same as stable
 /// across refactors, so shipped protocol surfaces should prefer explicit `id`
 /// overrides.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::derive_leaf_name;
+///
+/// let leaf = derive_leaf_name(
+///     "unshell-core",
+///     "0",
+///     "1",
+///     "0",
+///     "unshell_core::examples::demo_shell",
+///     "ShellLeaf",
+///     None,
+///     None,
+///     None,
+///     None,
+///     None,
+/// );
+/// assert_eq!(leaf, "unshell_core.unshell_core.v0_1_0.examples.demo_shell.shell_leaf");
+/// ```
 #[allow(clippy::too_many_arguments)]
 // This helper mirrors derive-macro inputs directly so callers do not have to allocate an
 // intermediate metadata struct just to compute one deterministic protocol identifier.
@@ -138,6 +163,7 @@ fn normalize_leaf_segment(value: &str) -> String {
 
     for character in value.chars() {
         if character.is_ascii_uppercase() {
+            // Preserve CamelCase word boundaries in a snake_case protocol identifier.
             if !normalized.is_empty() && !previous_was_separator {
                 normalized.push('_');
             }
@@ -163,6 +189,8 @@ fn normalize_leaf_segment(value: &str) -> String {
     }
 
     if normalized.is_empty() {
+        // Protocol identifiers still need a stable non-empty placeholder when user input is all
+        // punctuation or whitespace.
         String::from("leaf")
     } else {
         normalized

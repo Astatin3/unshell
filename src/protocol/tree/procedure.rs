@@ -185,7 +185,10 @@ impl ProcedureEffect {
 pub enum ProcedureRuntimeError<E> {
     /// Protocol endpoint routing or framing failed.
     Endpoint(EndpointError),
-    /// The opening call failed to decode or open cleanly.
+    /// The opening call failed to decode or open cleanly before a session existed.
+    ///
+    /// Once a session is already live, runtime failures prefer emitting protocol faults and
+    /// tearing down that session rather than surfacing leaf errors directly.
     Decode(super::DispatchError<E>),
 }
 
@@ -298,35 +301,12 @@ where
             .collect::<Vec<_>>();
 
         for key in keys {
-            let Some(mut session) = self.leaf.procedure_sessions().remove(&key) else {
+            let Some(session) = self.leaf.procedure_sessions().remove(&key) else {
                 continue;
             };
-            let effect = match P::poll(&mut self.leaf, &mut session) {
-                Ok(effect) => self.ensure_terminal_packet(&key, effect),
-                Err(error) => {
-                    let _ = P::close(&mut self.leaf, session);
-                    frames.extend(self.emit_internal_fault(Some(key.clone()))?);
-                    let _ = error;
-                    continue;
-                }
-            };
-
-            match self.emit_outgoing(effect.outgoing) {
-                Ok(outgoing) => frames.extend(outgoing.frames),
-                Err(error) => {
-                    if !effect.close_session {
-                        self.leaf.procedure_sessions().insert(key, session);
-                    } else {
-                        let _ = P::close(&mut self.leaf, session);
-                    }
-                    return Err(error);
-                }
-            }
-
-            if !effect.close_session {
-                self.leaf.procedure_sessions().insert(key, session);
-            } else {
-                let _ = P::close(&mut self.leaf, session);
+            match self.poll_session(key, session)? {
+                Some(session_frames) => frames.extend(session_frames),
+                None => continue,
             }
         }
 
@@ -349,122 +329,185 @@ where
                 frames: Vec::new(),
                 dropped: true,
             }),
-            super::EndpointOutcome::Local(event) => {
-                let mut runtime = ProcedureRuntimeOutcome::default();
-
-                match event {
-                    LocalEvent::Call { header, message } => {
-                        if message.procedure_id != P::procedure_id() {
-                            runtime.frames.extend(
-                                self.emit_internal_fault_if_possible(
-                                    message.response_hook.as_ref(),
-                                )?,
-                            );
-                            return Ok(runtime);
-                        }
-                        let Some(hook) = message.response_hook.as_ref() else {
-                            return Ok(runtime);
-                        };
-                        let hook_key = HookKey::new(hook.return_path.clone(), hook.hook_id);
-
-                        let session = match self.open_session(header, message) {
-                            Ok(session) => session,
-                            Err(error) => {
-                                runtime
-                                    .frames
-                                    .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
-                                let _ = error;
-                                return Ok(runtime);
-                            }
-                        };
-
-                        self.leaf.procedure_sessions().insert(hook_key, session);
-                    }
-                    LocalEvent::Data {
-                        header,
-                        message,
-                        hook_key,
-                    } => {
-                        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key)
-                        else {
-                            return Ok(runtime);
-                        };
-                        let effect = match P::on_data(
-                            &mut self.leaf,
-                            &mut session,
-                            IncomingData {
-                                header,
-                                message,
-                                hook_key: hook_key.clone(),
-                            },
-                        ) {
-                            Ok(effect) => self.ensure_terminal_packet(&hook_key, effect),
-                            Err(error) => {
-                                let _ = P::close(&mut self.leaf, session);
-                                runtime
-                                    .frames
-                                    .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
-                                let _ = error;
-                                return Ok(runtime);
-                            }
-                        };
-                        match self.emit_outgoing(effect.outgoing) {
-                            Ok(outgoing) => runtime.frames.extend(outgoing.frames),
-                            Err(error) => {
-                                if !effect.close_session {
-                                    self.leaf.procedure_sessions().insert(hook_key, session);
-                                } else {
-                                    let _ = P::close(&mut self.leaf, session);
-                                }
-                                return Err(error);
-                            }
-                        }
-                        if !effect.close_session {
-                            self.leaf.procedure_sessions().insert(hook_key, session);
-                        } else {
-                            let _ = P::close(&mut self.leaf, session);
-                        }
-                    }
-                    LocalEvent::Fault {
-                        header,
-                        message,
-                        hook_key,
-                    } => {
-                        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key)
-                        else {
-                            return Ok(runtime);
-                        };
-                        let on_fault_result = P::on_fault(
-                            &mut self.leaf,
-                            &mut session,
-                            IncomingFault {
-                                header,
-                                fault: message,
-                                hook_key: hook_key.clone(),
-                            },
-                        );
-                        let close_result = P::close(&mut self.leaf, session);
-                        if let Err(error) = on_fault_result {
-                            let _ = close_result;
-                            runtime
-                                .frames
-                                .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
-                            let _ = error;
-                            return Ok(runtime);
-                        }
-                        if let Err(error) = close_result {
-                            runtime
-                                .frames
-                                .extend(self.emit_internal_fault(Some(hook_key))?);
-                            let _ = error;
-                            return Ok(runtime);
-                        }
-                    }
-                }
-
-                Ok(runtime)
-            }
+            super::EndpointOutcome::Local(event) => self.process_local_event(event),
         }
+    }
+
+    fn poll_session(
+        &mut self,
+        key: HookKey,
+        mut session: P,
+    ) -> Result<Option<Vec<FrameBytes>>, ProcedureRuntimeError<P::Error>> {
+        let effect = match P::poll(&mut self.leaf, &mut session) {
+            Ok(effect) => self.ensure_terminal_packet(&key, effect),
+            Err(error) => {
+                let _ = P::close(&mut self.leaf, session);
+                let frames = self.emit_internal_fault(Some(key.clone()))?;
+                let _ = error;
+                return Ok(Some(frames));
+            }
+        };
+
+        let outgoing = match self.emit_outgoing(effect.outgoing) {
+            Ok(outgoing) => outgoing.frames,
+            Err(error) => {
+                if !effect.close_session {
+                    self.leaf.procedure_sessions().insert(key, session);
+                } else {
+                    let _ = P::close(&mut self.leaf, session);
+                }
+                return Err(error);
+            }
+        };
+
+        if !effect.close_session {
+            self.leaf.procedure_sessions().insert(key, session);
+        } else {
+            let _ = P::close(&mut self.leaf, session);
+        }
+
+        Ok(Some(outgoing))
+    }
+
+    fn process_local_event(
+        &mut self,
+        event: LocalEvent,
+    ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
+        match event {
+            LocalEvent::Call { header, message } => self.process_local_call(header, message),
+            LocalEvent::Data {
+                header,
+                message,
+                hook_key,
+            } => self.process_local_data(header, message, hook_key),
+            LocalEvent::Fault {
+                header,
+                message,
+                hook_key,
+            } => self.process_local_fault(header, message, hook_key),
+        }
+    }
+
+    fn process_local_call(
+        &mut self,
+        header: crate::protocol::PacketHeader,
+        message: CallMessage,
+    ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
+        let mut runtime = ProcedureRuntimeOutcome::default();
+        if message.procedure_id != P::procedure_id() {
+            runtime
+                .frames
+                .extend(self.emit_internal_fault_if_possible(message.response_hook.as_ref())?);
+            return Ok(runtime);
+        }
+        let Some(hook) = message.response_hook.as_ref() else {
+            return Ok(runtime);
+        };
+        let hook_key = HookKey::new(hook.return_path.clone(), hook.hook_id);
+
+        let session = match self.open_session(header, message) {
+            Ok(session) => session,
+            Err(error) => {
+                runtime
+                    .frames
+                    .extend(self.emit_internal_fault(Some(hook_key.clone()))?);
+                let _ = error;
+                return Ok(runtime);
+            }
+        };
+
+        self.leaf.procedure_sessions().insert(hook_key, session);
+        Ok(runtime)
+    }
+
+    fn process_local_data(
+        &mut self,
+        header: crate::protocol::PacketHeader,
+        message: crate::protocol::DataMessage,
+        hook_key: HookKey,
+    ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
+        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key) else {
+            return Ok(ProcedureRuntimeOutcome::default());
+        };
+        let effect = match P::on_data(
+            &mut self.leaf,
+            &mut session,
+            IncomingData {
+                header,
+                message,
+                hook_key: hook_key.clone(),
+            },
+        ) {
+            Ok(effect) => self.ensure_terminal_packet(&hook_key, effect),
+            Err(error) => {
+                let _ = P::close(&mut self.leaf, session);
+                let frames = self.emit_internal_fault(Some(hook_key.clone()))?;
+                let _ = error;
+                return Ok(ProcedureRuntimeOutcome {
+                    frames,
+                    dropped: false,
+                });
+            }
+        };
+        let outgoing = match self.emit_outgoing(effect.outgoing) {
+            Ok(outgoing) => outgoing.frames,
+            Err(error) => {
+                if !effect.close_session {
+                    self.leaf.procedure_sessions().insert(hook_key, session);
+                } else {
+                    let _ = P::close(&mut self.leaf, session);
+                }
+                return Err(error);
+            }
+        };
+        if !effect.close_session {
+            self.leaf.procedure_sessions().insert(hook_key, session);
+        } else {
+            let _ = P::close(&mut self.leaf, session);
+        }
+        Ok(ProcedureRuntimeOutcome {
+            frames: outgoing,
+            dropped: false,
+        })
+    }
+
+    fn process_local_fault(
+        &mut self,
+        header: crate::protocol::PacketHeader,
+        message: crate::protocol::FaultMessage,
+        hook_key: HookKey,
+    ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
+        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key) else {
+            return Ok(ProcedureRuntimeOutcome::default());
+        };
+        let on_fault_result = P::on_fault(
+            &mut self.leaf,
+            &mut session,
+            IncomingFault {
+                header,
+                fault: message,
+                hook_key: hook_key.clone(),
+            },
+        );
+        let close_result = P::close(&mut self.leaf, session);
+        if let Err(error) = on_fault_result {
+            let _ = close_result;
+            let frames = self.emit_internal_fault(Some(hook_key.clone()))?;
+            let _ = error;
+            return Ok(ProcedureRuntimeOutcome {
+                frames,
+                dropped: false,
+            });
+        }
+        if let Err(error) = close_result {
+            let frames = self.emit_internal_fault(Some(hook_key))?;
+            let _ = error;
+            return Ok(ProcedureRuntimeOutcome {
+                frames,
+                dropped: false,
+            });
+        }
+        Ok(ProcedureRuntimeOutcome::default())
     }
 
     fn open_session(
@@ -543,6 +586,10 @@ where
         Ok(self.process_endpoint_outcome(outcome)?.frames)
     }
 
+    /// Ensures a closing session leaves the protocol hook in a fully terminated state.
+    ///
+    /// If leaf code requests `close_session` without emitting an explicit terminal packet, the
+    /// runtime synthesizes an empty final `Data` frame so the hook closes cleanly on the wire.
     fn ensure_terminal_packet(
         &self,
         hook_key: &HookKey,

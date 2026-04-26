@@ -4,6 +4,8 @@
 //! - `routing` contains static path declarations and longest-prefix routing helpers.
 //! - `hook` contains the pending/active hook lifecycle tables used by endpoint runtime code.
 //! - `endpoint` ties those pieces together into the runtime-facing protocol endpoint API.
+//! - `leaf` defines application-facing metadata and generated call-dispatch traits.
+//! - `call` and `procedure` layer higher-level runtimes on top of validated endpoint events.
 
 mod call;
 mod endpoint;
