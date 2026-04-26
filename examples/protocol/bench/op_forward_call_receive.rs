@@ -1,3 +1,5 @@
+//! Standalone benchmark binary for `forward_call_receive`.
+
 #[path = "support/bench_common.rs"]
 mod common;
 

@@ -166,7 +166,9 @@ pub enum LocalEvent {
 pub enum EndpointOutcome {
     /// Frame to forward, together with the next routing decision.
     Forward {
+        /// The next routing decision chosen for the forwarded frame.
         route: RouteDecision,
+        /// The encoded frame bytes to send along that route.
         frame: FrameBytes,
     },
     /// Locally-delivered protocol event.

@@ -1,3 +1,8 @@
+//! Shared helpers for the standalone benchmark operation binaries.
+//!
+//! These helpers keep each operation binary tiny while still exposing the same setup and checksum
+//! logic to strace, perf, and heaptrack.
+
 #![allow(dead_code)]
 
 use std::hint::black_box;

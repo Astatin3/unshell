@@ -1,3 +1,5 @@
+//! Standalone benchmark binary for `hook_data_receive`.
+
 #[path = "support/bench_common.rs"]
 mod common;
 

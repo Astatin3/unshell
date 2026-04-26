@@ -1,3 +1,8 @@
+//! Small end-to-end example for the `Leaf` and `procedures` derive macros.
+//!
+//! This stays entirely local. A controller endpoint opens one call against a single in-process
+//! leaf runtime, and the example decodes the returned reply payload.
+
 use std::error::Error;
 use std::{convert::Infallible, string::String};
 

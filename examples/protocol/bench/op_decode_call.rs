@@ -1,3 +1,5 @@
+//! Standalone benchmark binary for `decode_call`.
+
 #[path = "support/bench_common.rs"]
 mod common;
 

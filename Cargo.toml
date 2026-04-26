@@ -65,6 +65,10 @@ name = "remote_shell_receive"
 path = "examples/protocol/remote_shell_receive.rs"
 
 [[example]]
+name = "remote_shell_single_endpoint"
+path = "examples/protocol/remote_shell_single_endpoint.rs"
+
+[[example]]
 name = "bench"
 path = "examples/protocol/bench/bench.rs"
 
@@ -109,3 +113,4 @@ unsafe_op_in_unsafe_fn             = "warn"
 unused_import_braces               = "warn"
 unused_lifetimes                   = "warn"
 trivial_casts                      = "allow"
+missing_docs                       = "warn"

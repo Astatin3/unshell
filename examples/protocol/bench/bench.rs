@@ -1,3 +1,8 @@
+//! Protocol benchmark driver.
+//!
+//! Running the example normally prints the in-process benchmark table. Running it with `tools`
+//! builds the standalone operation binaries and feeds them to external profiling tools.
+
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::process::Command;

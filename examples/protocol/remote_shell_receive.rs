@@ -1,3 +1,8 @@
+//! Remote shell controller example.
+//!
+//! This binary listens for the endpoint example, opens one remote shell session, sends a few
+//! commands, and prints returned hook data until the shell closes.
+
 #[path = "../../src/leaf/remote_shell/mod.rs"]
 mod remote_shell;
 

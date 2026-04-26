@@ -1,3 +1,9 @@
+//! Remote shell endpoint example.
+//!
+//! This binary acts as the single remote-shell endpoint process. It connects to the controller
+//! example over TCP, feeds inbound frames into the `ProcedureRuntime`, and flushes any resulting
+//! protocol frames back to the controller.
+
 #[path = "../../src/leaf/remote_shell/mod.rs"]
 mod remote_shell;
 
