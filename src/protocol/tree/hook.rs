@@ -98,29 +98,18 @@ impl HookTable {
     /// Activation intentionally reuses the original hook id and host path, but swaps the
     /// pending caller attribution into the active peer path used for data routing.
     pub fn activate_pending(&mut self, key: &HookKey) -> Option<()> {
-        self.activate_pending_with_peer_end(key, false).map(|_| ())
-    }
-
-    /// Promotes a pending hook into the active table and returns whether the local side had
-    /// already ended before the peer accepted the hook.
-    pub fn activate_pending_with_peer_end(
-        &mut self,
-        key: &HookKey,
-        peer_ended: bool,
-    ) -> Option<bool> {
         let pending = self.pending.remove(key)?;
-        let local_ended = pending.local_ended;
         self.insert_active(
             key.clone(),
             ActiveHook {
                 peer_path: pending.caller_src_path,
                 procedure_id: pending.procedure_id,
-                local_ended,
-                peer_ended,
+                local_ended: pending.local_ended,
+                peer_ended: false,
             },
         )
         .ok()?;
-        Some(local_ended)
+        Some(())
     }
 
     /// Inserts a live hook and its peer-path lookup entry.
@@ -195,25 +184,16 @@ impl HookTable {
         hook_id: u64,
         peer_path: &[String],
     ) -> Option<HookKey> {
-        let host_key = HookKey::new(return_path.to_vec(), hook_id);
-        self.resolve_active_key_for_host(&host_key, peer_path)
-    }
-
-    #[must_use]
-    pub fn resolve_active_key_for_host(
-        &self,
-        host_key: &HookKey,
-        peer_path: &[String],
-    ) -> Option<HookKey> {
         if let Some(key) = self
             .active_by_peer
-            .get(&host_key.hook_id)
+            .get(&hook_id)
             .and_then(|peer_paths| peer_paths.get(peer_path))
         {
             return Some(key.clone());
         }
 
-        self.active.contains_key(host_key).then(|| host_key.clone())
+        let host_key = HookKey::new(return_path.to_vec(), hook_id);
+        self.active.contains_key(&host_key).then_some(host_key)
     }
 
     /// Marks the local side finished and returns `true` once both sides are finished.

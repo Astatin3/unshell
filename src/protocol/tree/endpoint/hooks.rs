@@ -50,30 +50,22 @@ impl ProtocolEndpoint {
         message: DataMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
         let hook_id = header.hook_id.expect("validated");
-        let host_key = HookKey::new(self.path.clone(), hook_id);
-        let key = if let Some(key) = self
-            .hooks
-            .resolve_active_key_for_host(&host_key, &header.src_path)
+        let key = if let Some(key) =
+            self.hooks
+                .resolve_active_key(&self.path, hook_id, &header.src_path)
         {
             key
-        } else if self.hooks.pending(&host_key).is_some_and(|pending| {
-            pending.caller_src_path == header.src_path
-                && pending.procedure_id == message.procedure_id
-        }) {
-            let local_ended = self
-                .hooks
-                .activate_pending_with_peer_end(&host_key, message.end_hook)
-                .expect("pending hook was checked above");
-            if message.end_hook && local_ended {
-                self.hooks.remove_active(&host_key);
-            }
-            return Ok(EndpointOutcome::Local(LocalEvent::Data {
-                header,
-                message,
-                hook_key: host_key,
-            }));
         } else {
-            return Ok(EndpointOutcome::Dropped);
+            let pending_key = HookKey::new(self.path.clone(), hook_id);
+            if self.hooks.pending(&pending_key).is_some_and(|pending| {
+                pending.caller_src_path == header.src_path
+                    && pending.procedure_id == message.procedure_id
+            }) {
+                self.hooks.activate_pending(&pending_key);
+                pending_key
+            } else {
+                return Ok(EndpointOutcome::Dropped);
+            }
         };
 
         let Some(active) = self.hooks.active(&key) else {
@@ -109,10 +101,9 @@ impl ProtocolEndpoint {
         message: FaultMessage,
     ) -> Result<EndpointOutcome, EndpointError> {
         let hook_id = header.hook_id.expect("validated");
-        let pending_key = HookKey::new(self.path.clone(), hook_id);
         if let Some(key) = self
             .hooks
-            .resolve_active_key_for_host(&pending_key, &header.src_path)
+            .resolve_active_key(&self.path, hook_id, &header.src_path)
         {
             self.hooks.remove_active(&key);
             return Ok(EndpointOutcome::Local(LocalEvent::Fault {
@@ -122,6 +113,7 @@ impl ProtocolEndpoint {
             }));
         }
 
+        let pending_key = HookKey::new(self.path.clone(), hook_id);
         if self
             .hooks
             .pending(&pending_key)
