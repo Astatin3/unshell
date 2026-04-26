@@ -12,18 +12,22 @@ use super::core::{
 };
 
 impl ProtocolEndpoint {
-    fn supports_local_procedure(&self, dst_leaf: Option<&str>, procedure_id: &str) -> bool {
+    fn local_procedure_fault(
+        &self,
+        dst_leaf: Option<&str>,
+        procedure_id: &str,
+    ) -> Option<ProtocolFault> {
         match dst_leaf {
-            Some(leaf_name) => self
-                .leaves
-                .get(leaf_name)
-                .map(|leaf| {
-                    leaf.procedures
-                        .iter()
-                        .any(|procedure| procedure == procedure_id)
-                })
-                .unwrap_or(false),
-            None => self.endpoint_procedures.contains(procedure_id),
+            Some(leaf_name) => match self.leaves.get(leaf_name) {
+                Some(leaf) => (!leaf
+                    .procedures
+                    .iter()
+                    .any(|procedure| procedure == procedure_id))
+                .then_some(ProtocolFault::UNKNOWN_PROCEDURE),
+                None => Some(ProtocolFault::UNKNOWN_LEAF),
+            },
+            None => (!self.endpoint_procedures.contains(procedure_id))
+                .then_some(ProtocolFault::UNKNOWN_PROCEDURE),
         }
     }
 
@@ -41,26 +45,19 @@ impl ProtocolEndpoint {
             return self.handle_introspection(&header, key);
         }
 
-        let procedure_is_supported =
-            self.supports_local_procedure(header.dst_leaf.as_deref(), &message.procedure_id);
-
-        if !procedure_is_supported {
-            let fault = if header
-                .dst_leaf
-                .as_ref()
-                .is_some_and(|name| !self.leaves.contains_key(name))
-            {
-                ProtocolFault::UNKNOWN_LEAF
-            } else {
-                ProtocolFault::UNKNOWN_PROCEDURE
-            };
+        if let Some(fault) =
+            self.local_procedure_fault(header.dst_leaf.as_deref(), &message.procedure_id)
+        {
             return self.emit_fault_if_possible(key, fault);
         }
 
         if let Some(hook) = &message.response_hook
-            && let Some(key) = key.clone()
             && hook.return_path != self.path
-            && self
+        {
+            let Some(key) = key.clone() else {
+                unreachable!("response_hook checked above");
+            };
+            if self
                 .hooks
                 .insert_active(
                     key.clone(),
@@ -72,8 +69,9 @@ impl ProtocolEndpoint {
                     },
                 )
                 .is_err()
-        {
-            return self.emit_fault_if_possible(Some(key), ProtocolFault::INTERNAL_ERROR);
+            {
+                return self.emit_fault_if_possible(Some(key), ProtocolFault::INTERNAL_ERROR);
+            }
         }
 
         Ok(EndpointOutcome::Local(LocalEvent::Call { header, message }))
