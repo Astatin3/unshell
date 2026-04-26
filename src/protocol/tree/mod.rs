@@ -26,8 +26,8 @@ pub use endpoint::{
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
 pub use leaf::{CallProcedures, ProtocolLeaf, derive_leaf_name};
 pub use procedure::{
-    Procedure, ProcedureEffect, ProcedureRuntime, ProcedureRuntimeError, ProcedureRuntimeOutcome, ProcedureStore,
-    StatefulProcedureMetadata,
+    Procedure, ProcedureEffect, ProcedureRuntime, ProcedureRuntimeError, ProcedureRuntimeOutcome,
+    ProcedureStore, StatefulProcedureMetadata,
 };
 pub use routing::{
     CompiledRoutes, DefaultRouteProvider, LeafNode, RouteDecision, RouteProvider, TreeNode,

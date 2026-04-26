@@ -34,7 +34,7 @@ pub use transport::LISTEN_ADDR;
 /// the leaf clearly owns its live sessions instead of relying on generated hidden
 /// enums or side tables.
 #[derive(Default, Leaf)]
-#[leaf(org = "org", product = "example", version = "v1", leaf_name = "shell")]
+#[leaf(leaf_name = "remote_shell")]
 pub struct RemoteShellLeaf {
     sessions: BTreeMap<HookKey, ProcedureOpen>,
 }

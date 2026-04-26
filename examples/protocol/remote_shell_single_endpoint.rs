@@ -11,7 +11,7 @@ mod remote_shell;
 use std::error::Error;
 
 use unshell::protocol::tree::{EndpointOutcome, LocalEvent, ProtocolEndpoint};
-use unshell::protocol::{LeafIntrospection, INTROSPECTION_PROCEDURE_ID};
+use unshell::protocol::{INTROSPECTION_PROCEDURE_ID, LeafIntrospection};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut endpoint = ProtocolEndpoint::new(
@@ -38,7 +38,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let payload = unshell::protocol::tree::decode_call_input::<LeafIntrospection>(&message.data)?;
-    println!("remote-shell examples normally listen on {}", remote_shell::LISTEN_ADDR);
+    println!(
+        "remote-shell examples normally listen on {}",
+        remote_shell::LISTEN_ADDR
+    );
     println!("endpoint path: {:?}", remote_shell::agent_path());
     println!("leaf: {}", payload.leaf_name);
     println!("procedures: {:?}", payload.procedures);
