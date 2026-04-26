@@ -184,16 +184,25 @@ impl HookTable {
         hook_id: u64,
         peer_path: &[String],
     ) -> Option<HookKey> {
+        let host_key = HookKey::new(return_path.to_vec(), hook_id);
+        self.resolve_active_key_for_host(&host_key, peer_path)
+    }
+
+    #[must_use]
+    pub fn resolve_active_key_for_host(
+        &self,
+        host_key: &HookKey,
+        peer_path: &[String],
+    ) -> Option<HookKey> {
         if let Some(key) = self
             .active_by_peer
-            .get(&hook_id)
+            .get(&host_key.hook_id)
             .and_then(|peer_paths| peer_paths.get(peer_path))
         {
             return Some(key.clone());
         }
 
-        let host_key = HookKey::new(return_path.to_vec(), hook_id);
-        self.active.contains_key(&host_key).then_some(host_key)
+        self.active.contains_key(host_key).then(|| host_key.clone())
     }
 
     /// Marks the local side finished and returns `true` once both sides are finished.
