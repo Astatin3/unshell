@@ -15,7 +15,7 @@ pub use errors::ShellLeafError;
 pub use session::ProcedureOpen;
 pub use transport::{LISTEN_ADDR, send_forward, spawn_frame_reader, write_frames};
 
-use super::{OpenRequest, agent_path};
+use super::OpenRequest;
 
 /// Leaf state for the remote shell endpoint runtime.
 ///
@@ -93,4 +93,8 @@ pub fn build_agent_runtime() -> ProcedureRuntime<RemoteShellEndpoint, ProcedureO
         }],
     );
     ProcedureRuntime::new(endpoint, RemoteShellEndpoint::default())
+}
+
+fn agent_path() -> Vec<String> {
+    vec![String::from("agent")]
 }

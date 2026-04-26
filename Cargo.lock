@@ -1454,7 +1454,8 @@ version = "0.1.0"
 dependencies = [
  "portable-pty",
  "rkyv",
- "unshell",
+ "unshell-macros",
+ "unshell-protocol",
 ]
 
 [[package]]

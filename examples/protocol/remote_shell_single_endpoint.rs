@@ -7,25 +7,25 @@
 
 use std::error::Error;
 
+use unshell::leaves::remote_shell;
 use unshell::protocol::tree::{EndpointOutcome, LocalEvent, ProtocolEndpoint};
 use unshell::protocol::{INTROSPECTION_PROCEDURE_ID, LeafIntrospection};
-use unshell_leaves::remote_shell;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut endpoint = ProtocolEndpoint::new(
-        remote_shell::agent_path(),
+        agent_path(),
         Some(Vec::new()),
         Vec::new(),
         vec![unshell::protocol::tree::LeafSpec {
-            name: remote_shell::shell_leaf_name(),
-            procedures: vec![remote_shell::shell_open_procedure()],
+            name: remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_name(),
+            procedures: vec![remote_shell::endpoint::ProcedureOpen::protocol_procedure_id()],
         }],
     );
 
     let hook_id = endpoint.allocate_hook_id();
     let outcome = endpoint.send_call(
-        remote_shell::agent_path(),
-        Some(remote_shell::shell_leaf_name()),
+        agent_path(),
+        Some(remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_name()),
         INTROSPECTION_PROCEDURE_ID,
         Some(hook_id),
         Vec::new(),
@@ -38,10 +38,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let payload = unshell::protocol::tree::decode_call_input::<LeafIntrospection>(&message.data)?;
     println!(
         "remote-shell examples normally listen on {}",
-        remote_shell::LISTEN_ADDR
+        remote_shell::endpoint::LISTEN_ADDR
     );
-    println!("endpoint path: {:?}", remote_shell::agent_path());
+    println!("endpoint path: {:?}", agent_path());
     println!("leaf: {}", payload.leaf_name);
     println!("procedures: {:?}", payload.procedures);
     Ok(())
+}
+
+fn agent_path() -> Vec<String> {
+    vec![String::from("agent")]
 }

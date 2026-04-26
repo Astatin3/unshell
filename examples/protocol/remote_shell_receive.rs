@@ -6,38 +6,40 @@
 use std::error::Error;
 use std::net::TcpListener;
 
+use unshell::leaves::remote_shell;
+use unshell::leaves::remote_shell::OpenRequest;
+use unshell::protocol::tree::encode_call_reply;
 use unshell::protocol::tree::{Endpoint, EndpointOutcome, Ingress, LocalEvent};
-use unshell_leaves::remote_shell;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind(remote_shell::LISTEN_ADDR)?;
-    println!("listening on {}", remote_shell::LISTEN_ADDR);
+    let listener = TcpListener::bind(remote_shell::endpoint::LISTEN_ADDR)?;
+    println!("listening on {}", remote_shell::endpoint::LISTEN_ADDR);
 
     let (mut stream, peer_addr) = listener.accept()?;
     println!("accepted endpoint connection from {peer_addr}");
 
-    let frame_rx = remote_shell::spawn_frame_reader(stream.try_clone()?);
-    let mut endpoint = remote_shell::build_controller_endpoint();
+    let frame_rx = remote_shell::endpoint::spawn_frame_reader(stream.try_clone()?);
+    let mut endpoint = remote_shell::endpoint::build_controller_endpoint();
     let hook_id = endpoint.allocate_hook_id();
-    let shell_leaf_name = remote_shell::shell_leaf_name();
-    let open_procedure = remote_shell::shell_open_procedure();
+    let shell_leaf_name = remote_shell::endpoint::RemoteShellEndpoint::protocol_leaf_name();
+    let open_procedure = remote_shell::endpoint::ProcedureOpen::protocol_procedure_id();
 
-    remote_shell::send_forward(
+    remote_shell::endpoint::send_forward(
         &mut stream,
         endpoint.send_call(
-            remote_shell::agent_path(),
+            agent_path(),
             Some(shell_leaf_name),
             open_procedure.clone(),
             Some(hook_id),
-            remote_shell::shell_open_payload(),
+            encode_call_reply(&OpenRequest).expect("remote shell open payload should encode"),
         )?,
     )?;
 
     for (index, command) in ["pwd\n", "whoami\n", "exit\n"].iter().enumerate() {
-        remote_shell::send_forward(
+        remote_shell::endpoint::send_forward(
             &mut stream,
             endpoint.send_data(
-                remote_shell::agent_path(),
+                agent_path(),
                 hook_id,
                 open_procedure.clone(),
                 command.as_bytes().to_vec(),
@@ -48,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for result in frame_rx {
         let frame = result?;
-        let outcome = endpoint.receive(&Ingress::Child(remote_shell::agent_path()), frame)?;
+        let outcome = endpoint.receive(&Ingress::Child(agent_path()), frame)?;
         let EndpointOutcome::Local(event) = outcome else {
             continue;
         };
@@ -70,4 +72,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn agent_path() -> Vec<String> {
+    vec![String::from("agent")]
 }

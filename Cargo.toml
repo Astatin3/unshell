@@ -44,6 +44,11 @@ description = "Pure no_std implementation of the UnShell Protocol"
 default = []
 log = []
 log_debug = ["log", "dep:chrono"]
+
+# Leaf features
+leaf_endpoint = ["unshell-leaves/leaf_endpoint"]
+leaf_tui = ["unshell-leaves/leaf_tui"]
+
 # obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
 # obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
 
@@ -55,9 +60,7 @@ chrono            = { workspace = true, optional = true }
 static_init       = { workspace = true }
 unshell-macros    = { path = "./unshell-macros" }
 unshell-protocol  = { workspace = true }
-
-[dev-dependencies]
-unshell-leaves = { workspace = true, features = ["endpoint"] }
+unshell-leaves    = { workspace = true }
 
 [[example]]
 name = "leaf_derive"
@@ -66,14 +69,17 @@ path = "examples/protocol/leaf_derive.rs"
 [[example]]
 name = "remote_shell_endpoint"
 path = "examples/protocol/remote_shell_endpoint.rs"
+required-features = ["leaf_endpoint"]
 
 [[example]]
 name = "remote_shell_receive"
 path = "examples/protocol/remote_shell_receive.rs"
+required-features = ["leaf_endpoint"]
 
 [[example]]
 name = "remote_shell_single_endpoint"
 path = "examples/protocol/remote_shell_single_endpoint.rs"
+required-features = ["leaf_endpoint"]
 
 [[example]]
 name = "bench"

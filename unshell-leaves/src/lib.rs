@@ -2,10 +2,18 @@
 //! protocol runtime.
 //!
 //! Each leaf module always exports its shared protocol-facing types. Role-specific
-//! implementations are selected with the crate-wide `endpoint` and `tui`
+//! implementations are selected with the crate-wide `leaf_endpoint` and `leaf_tui`
 //! features, and can optionally be re-exported behind one stable alias.
 
-use unshell::protocol::DataMessage;
+#[allow(unused_extern_crates)]
+extern crate self as unshell;
+
+pub extern crate alloc;
+
+use unshell_protocol::DataMessage;
+
+pub use unshell_macros::{Leaf, Procedure, procedures};
+pub use unshell_protocol as protocol;
 
 /// Re-exports one role-specific type behind a stable public alias.
 ///
@@ -20,18 +28,18 @@ macro_rules! role_leaf {
             tui => $tui:path $(,)?
         }
     ) => {
-        #[cfg(all(feature = "endpoint", feature = "tui"))]
+        #[cfg(all(feature = "leaf_endpoint", feature = "leaf_tui"))]
         compile_error!(concat!(
             "`",
             stringify!($alias),
-            "` can only alias one concrete role at a time; enable either `endpoint` or `tui`, not both"
+            "` can only alias one concrete role at a time; enable either `leaf_endpoint` or `leaf_tui`, not both"
         ));
 
-        #[cfg(feature = "endpoint")]
+        #[cfg(feature = "leaf_endpoint")]
         $(#[$meta])*
         $vis type $alias = $endpoint;
 
-        #[cfg(all(not(feature = "endpoint"), feature = "tui"))]
+        #[cfg(all(not(feature = "leaf_endpoint"), feature = "leaf_tui"))]
         $(#[$meta])*
         $vis type $alias = $tui;
     };

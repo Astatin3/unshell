@@ -6,13 +6,14 @@ description = "Application-layer UnShell leaves and client surfaces"
 
 [features]
 default = []
-endpoint = ["dep:portable-pty"]
-tui = []
+leaf_endpoint = ["dep:portable-pty"]
+leaf_tui = []
 
 [dependencies]
 rkyv = { workspace = true }
 portable-pty = { workspace = true, optional = true }
-unshell = { workspace = true }
+unshell-macros = { path = "../unshell-macros" }
+unshell-protocol = { workspace = true }
 
 [lints.rust]
 elided_lifetimes_in_paths = "warn"
