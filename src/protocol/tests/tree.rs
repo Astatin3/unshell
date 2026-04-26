@@ -1,8 +1,8 @@
 use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use crate::protocol::tree::{
-    ChildRoute, DefaultRouteProvider, Endpoint, Ingress, LeafNode, LeafSpec, LocalEvent,
-    ProtocolEndpoint, RouteDecision, RouteProvider, TreeNode,
+    ChildRoute, DefaultRouteProvider, Endpoint, EndpointOutcome, Ingress, LeafNode, LeafSpec,
+    LocalEvent, ProtocolEndpoint, RouteDecision, RouteProvider, TreeNode,
 };
 use crate::protocol::{
     DataMessage, EndpointIntrospection, FaultMessage, PacketHeader, PacketType, ProtocolFault,
@@ -76,13 +76,11 @@ fn protocol_endpoint_introspection_returns_leaf_summary() {
         .receive(&Ingress::Local, frame)
         .expect("endpoint should handle introspection");
 
-    assert!(outcome.forward.is_none());
-
-    let LocalEvent::Data {
+    let EndpointOutcome::Local(LocalEvent::Data {
         header,
         message: response,
         ..
-    } = outcome.event.as_ref().expect("expected local data event")
+    }) = &outcome
     else {
         panic!("expected local data event");
     };
@@ -167,10 +165,8 @@ fn invalid_hook_peer_emits_local_fault_event() {
         .receive(&Ingress::Child(path(&["intruder"])), frame)
         .expect("invalid peer should be handled");
 
-    assert!(outcome.forward.is_none());
-    assert!(!outcome.dropped);
-
-    match outcome.event.as_ref().expect("expected local fault event") {
+    match &outcome {
+        EndpointOutcome::Local(event) => match event {
         LocalEvent::Fault {
             header, message, ..
         } => {
@@ -184,6 +180,8 @@ fn invalid_hook_peer_emits_local_fault_event() {
             );
         }
         other => panic!("expected fault event, got {other:?}"),
+        },
+        other => panic!("expected local fault event, got {other:?}"),
     }
 }
 
@@ -302,7 +300,7 @@ fn pending_hook_fault_is_delivered_before_activation() {
         )
         .expect("introspection should handle pending hook");
 
-    assert!(outcome.forward.is_some() || outcome.event.is_some());
+    assert!(!matches!(outcome, EndpointOutcome::Dropped));
 }
 
 #[test]

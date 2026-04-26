@@ -4,7 +4,7 @@ use core::convert::Infallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::protocol::tree::{
-    Call, CallLeaf, ChildRoute, ConnectionState, Ingress, LeafRuntime, ProtocolEndpoint,
+    Call, CallLeaf, ChildRoute, EndpointOutcome, Ingress, LeafRuntime, ProtocolEndpoint,
     decode_call_input, encode_call_reply,
 };
 use crate::protocol::{PacketType, decode_frame};
@@ -64,7 +64,7 @@ fn leaf_runtime_dispatches_generated_call_procedure() {
         None,
         vec![ChildRoute {
             path: path(&["agent"]),
-            state: ConnectionState::Registered,
+            registered: true,
         }],
         Vec::new(),
     );
@@ -81,7 +81,7 @@ fn leaf_runtime_dispatches_generated_call_procedure() {
             .expect("request should encode"),
         )
         .expect("call should encode");
-    let Some((_, frame)) = controller_outcome.forward else {
+    let EndpointOutcome::Forward { frame, .. } = controller_outcome else {
         panic!("controller should forward call to child");
     };
 

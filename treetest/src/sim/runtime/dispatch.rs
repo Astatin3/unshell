@@ -87,12 +87,11 @@ impl Simulation {
         node_id: NodeId,
         outcome: unshell::protocol::tree::EndpointOutcome,
     ) -> Result<(), SimError> {
-        if outcome.dropped {
-            self.record_trace(node_id, "packet dropped".to_owned());
-        }
-
-        if let Some((route, frame)) = outcome.forward {
-            match route {
+        match outcome {
+            unshell::protocol::tree::EndpointOutcome::Dropped => {
+                self.record_trace(node_id, "packet dropped".to_owned());
+            }
+            unshell::protocol::tree::EndpointOutcome::Forward { route, frame } => match route {
                 RouteDecision::Child(index) => {
                     let child_id = self.nodes[node_id.0]
                         .children
@@ -147,11 +146,10 @@ impl Simulation {
                 RouteDecision::Drop => {
                     self.record_trace(node_id, "route decision dropped frame".to_owned());
                 }
+            },
+            unshell::protocol::tree::EndpointOutcome::Local(event) => {
+                self.handle_local_event(node_id, event)?;
             }
-        }
-
-        if let Some(event) = outcome.event {
-            self.handle_local_event(node_id, event)?;
         }
 
         Ok(())

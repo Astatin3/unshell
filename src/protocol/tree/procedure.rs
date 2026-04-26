@@ -64,8 +64,8 @@ pub trait ProcedureStore<P> {
 ///
 /// # Example
 /// ```rust
-/// use alloc::collections::BTreeMap;
-/// use alloc::string::String;
+/// use std::collections::BTreeMap;
+/// use std::string::String;
 /// use unshell::{Leaf, Procedure};
 /// use unshell::protocol::tree::{Call, HookKey, Procedure, ProcedureEffect, ProcedureStore};
 ///
@@ -110,7 +110,9 @@ pub trait Procedure<L>: StatefulProcedureMetadata<L> + Sized
 where
     L: ProtocolLeaf,
 {
+    /// Leaf-specific error surfaced while opening or advancing the session.
     type Error;
+    /// Typed input payload decoded from the opening call.
     type Input;
 
     /// Creates one session from the opening `Call`.
@@ -159,6 +161,7 @@ pub struct ProcedureEffect {
 }
 
 impl ProcedureEffect {
+    /// Builds an effect that keeps the session alive after emitting `outgoing`.
     #[must_use]
     pub fn outgoing(outgoing: Vec<OutgoingData>) -> Self {
         Self {
@@ -167,6 +170,7 @@ impl ProcedureEffect {
         }
     }
 
+    /// Builds an effect that closes the session after emitting `outgoing`.
     #[must_use]
     pub fn close(outgoing: Vec<OutgoingData>) -> Self {
         Self {
@@ -179,7 +183,9 @@ impl ProcedureEffect {
 /// Error surfaced by the procedure runtime.
 #[derive(Debug)]
 pub enum ProcedureRuntimeError<E> {
+    /// Protocol endpoint routing or framing failed.
     Endpoint(EndpointError),
+    /// The opening call failed to decode or open cleanly.
     Decode(super::DispatchError<E>),
 }
 
@@ -206,7 +212,9 @@ impl<E> From<EndpointError> for ProcedureRuntimeError<E> {
 /// Frames emitted while advancing one stateful procedure runtime.
 #[derive(Debug, Default)]
 pub struct ProcedureRuntimeOutcome {
+    /// Frames emitted while processing the current step.
     pub frames: Vec<FrameBytes>,
+    /// Whether the endpoint dropped the incoming packet.
     pub dropped: bool,
 }
 
@@ -223,6 +231,7 @@ pub struct ProcedureRuntime<L, P> {
 }
 
 impl<L, P> ProcedureRuntime<L, P> {
+    /// Builds a procedure runtime from one endpoint and one leaf instance.
     #[must_use]
     pub fn new(endpoint: ProtocolEndpoint, leaf: L) -> Self {
         Self {
@@ -232,20 +241,24 @@ impl<L, P> ProcedureRuntime<L, P> {
         }
     }
 
+    /// Returns the underlying protocol endpoint.
     #[must_use]
     pub fn endpoint(&self) -> &ProtocolEndpoint {
         &self.endpoint
     }
 
+    /// Returns a mutable reference to the protocol endpoint.
     pub fn endpoint_mut(&mut self) -> &mut ProtocolEndpoint {
         &mut self.endpoint
     }
 
+    /// Returns the hosted leaf instance.
     #[must_use]
     pub fn leaf(&self) -> &L {
         &self.leaf
     }
 
+    /// Returns a mutable reference to the hosted leaf instance.
     pub fn leaf_mut(&mut self) -> &mut L {
         &mut self.leaf
     }
@@ -327,20 +340,23 @@ where
         &mut self,
         outcome: super::EndpointOutcome,
     ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
-        let mut runtime = ProcedureRuntimeOutcome {
-            frames: Vec::new(),
-            dropped: outcome.dropped,
-        };
+        match outcome {
+            super::EndpointOutcome::Forward { frame, .. } => {
+                let mut frames = Vec::with_capacity(1);
+                frames.push(frame);
+                Ok(ProcedureRuntimeOutcome {
+                    frames,
+                    dropped: false,
+                })
+            }
+            super::EndpointOutcome::Dropped => Ok(ProcedureRuntimeOutcome {
+                frames: Vec::new(),
+                dropped: true,
+            }),
+            super::EndpointOutcome::Local(event) => {
+                let mut runtime = ProcedureRuntimeOutcome::default();
 
-        if let Some((_route, frame)) = outcome.forward {
-            runtime.frames.push(frame);
-        }
-
-        let Some(event) = outcome.event else {
-            return Ok(runtime);
-        };
-
-        match event {
+                match event {
             LocalEvent::Call { header, message } => {
                 if message.procedure_id != P::procedure_id() {
                     runtime
@@ -446,7 +462,9 @@ where
             }
         }
 
-        Ok(runtime)
+                Ok(runtime)
+            }
+        }
     }
 
     fn open_session(&mut self, call: IncomingCall) -> Result<P, DispatchError<P::Error>> {
@@ -523,6 +541,8 @@ where
         hook_key: &HookKey,
         mut effect: ProcedureEffect,
     ) -> ProcedureEffect {
+        // Once a session emits `end_hook`, later packets would violate the protocol,
+        // so the runtime keeps only the prefix through that terminal packet.
         if let Some(index) = effect.outgoing.iter().position(|packet| packet.end_hook) {
             effect.outgoing.truncate(index + 1);
         }
@@ -535,6 +555,9 @@ where
             && !effect.outgoing.iter().any(|packet| packet.end_hook)
             && !local_end_already_sent
         {
+            // Closing a session without an explicit terminal packet would leave the
+            // protocol hook half-open, so emit an empty terminal frame on behalf of
+            // the procedure unless the local side already ended earlier.
             effect.outgoing.push(OutgoingData {
                 dst_path: hook_key.return_path.clone(),
                 hook_id: hook_key.hook_id,
@@ -545,4 +568,5 @@ where
         }
         effect
     }
+
 }

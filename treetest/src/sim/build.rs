@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use crossbeam_channel::unbounded;
-use unshell::protocol::tree::{ChildRoute, ConnectionState, ProtocolEndpoint};
+use unshell::protocol::tree::{ChildRoute, ProtocolEndpoint};
 
 use crate::model::{DemoTree, NodeId, ScenarioDefinition, Selection};
 
@@ -42,7 +42,7 @@ impl Simulation {
                 .iter()
                 .map(|child_id| ChildRoute {
                     path: tree.node(*child_id).path.clone(),
-                    state: ConnectionState::Registered,
+                    registered: true,
                 })
                 .collect::<Vec<_>>();
 

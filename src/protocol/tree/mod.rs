@@ -18,8 +18,8 @@ pub use call::{
     encode_call_reply,
 };
 pub use endpoint::{
-    ChildRoute, ConnectionState, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafSpec,
-    LocalEvent, ProtocolEndpoint,
+    ChildRoute, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafSpec, LocalEvent,
+    ProtocolEndpoint,
 };
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
 pub use leaf::{CallProcedures, ProtocolLeaf, derive_leaf_name};

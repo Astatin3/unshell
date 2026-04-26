@@ -11,14 +11,10 @@ const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[allow(dead_code)]
 pub fn send_forward(stream: &mut TcpStream, outcome: EndpointOutcome) -> io::Result<()> {
-    write_frames(
-        stream,
-        &outcome
-            .forward
-            .into_iter()
-            .map(|(_, frame)| frame)
-            .collect::<Vec<_>>(),
-    )
+    match outcome {
+        EndpointOutcome::Forward { frame, .. } => write_frames(stream, &[frame]),
+        EndpointOutcome::Local(_) | EndpointOutcome::Dropped => write_frames(stream, &[]),
+    }
 }
 
 pub fn write_frames(stream: &mut TcpStream, frames: &[FrameBytes]) -> io::Result<()> {

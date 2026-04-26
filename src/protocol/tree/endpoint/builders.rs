@@ -111,7 +111,7 @@ impl ProtocolEndpoint {
     ) -> Self {
         let registered_child_paths = children
             .iter()
-            .filter(|child| child.state == super::core::ConnectionState::Registered)
+            .filter(|child| child.registered)
             .map(|child| child.path.clone())
             .collect::<Vec<_>>();
 
@@ -180,12 +180,12 @@ impl ProtocolEndpoint {
                     self.hooks
                         .remove_pending(&HookKey::new(hook.return_path.clone(), hook.hook_id));
                 }
-                Ok(EndpointOutcome::dropped())
+                Ok(EndpointOutcome::Dropped)
             }
-            route => Ok(EndpointOutcome::forward(
+            route => Ok(EndpointOutcome::Forward {
                 route,
-                encode_packet(&header, &call)?,
-            )),
+                frame: encode_packet(&header, &call)?,
+            }),
         }
     }
 
@@ -246,11 +246,11 @@ impl ProtocolEndpoint {
 
         match self.decide_route(&header.dst_path) {
             RouteDecision::Local => self.handle_local_data(header, message),
-            RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
-            route => Ok(EndpointOutcome::forward(
+            RouteDecision::Drop => Ok(EndpointOutcome::Dropped),
+            route => Ok(EndpointOutcome::Forward {
                 route,
-                encode_packet(&header, &message)?,
-            )),
+                frame: encode_packet(&header, &message)?,
+            }),
         }
     }
 }

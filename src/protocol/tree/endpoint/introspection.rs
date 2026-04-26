@@ -18,7 +18,7 @@ impl ProtocolEndpoint {
         key: Option<HookKey>,
     ) -> Result<EndpointOutcome, EndpointError> {
         let Some(key) = key else {
-            return Ok(EndpointOutcome::dropped());
+            return Ok(EndpointOutcome::Dropped);
         };
 
         let response_payload = if let Some(leaf_name) = &header.dst_leaf {
@@ -36,7 +36,7 @@ impl ProtocolEndpoint {
                 sub_endpoints: self
                     .children
                     .iter()
-                    .filter(|child| child.state == super::core::ConnectionState::Registered)
+                    .filter(|child| child.registered)
                     .filter_map(|child| child.path.get(self.path.len()).cloned())
                     .collect(),
                 leaves: self
@@ -72,16 +72,16 @@ impl ProtocolEndpoint {
 
         match self.decide_route(&key.return_path) {
             super::super::RouteDecision::Local => {
-                Ok(EndpointOutcome::event(super::core::LocalEvent::Data {
+                Ok(EndpointOutcome::Local(super::core::LocalEvent::Data {
                     header: response_header,
                     message: response,
                     hook_key: key,
                 }))
             }
-            route => Ok(EndpointOutcome::forward(
+            route => Ok(EndpointOutcome::Forward {
                 route,
-                encode_packet(&response_header, &response)?,
-            )),
+                frame: encode_packet(&response_header, &response)?,
+            }),
         }
     }
 }

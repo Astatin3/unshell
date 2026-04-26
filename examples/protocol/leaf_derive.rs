@@ -2,8 +2,9 @@ use std::error::Error;
 use std::{convert::Infallible, string::String};
 
 use rkyv::{Archive, Deserialize, Serialize};
-use unshell::protocol::tree::{Call, CallLeaf, Ingress, LeafRuntime, ProtocolEndpoint};
-use unshell::protocol::tree::{ChildRoute, ConnectionState};
+use unshell::protocol::tree::{
+    Call, CallLeaf, ChildRoute, EndpointOutcome, Ingress, LeafRuntime, ProtocolEndpoint,
+};
 use unshell::protocol::{PacketType, decode_frame};
 use unshell::{Leaf, procedures};
 
@@ -60,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         None,
         vec![ChildRoute {
             path: path(&["agent"]),
-            state: ConnectionState::Registered,
+            registered: true,
         }],
         Vec::new(),
     );
@@ -74,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             text: String::from("hello leaf"),
         })?,
     )?;
-    let Some((_, frame)) = controller_outcome.forward else {
+    let EndpointOutcome::Forward { frame, .. } = controller_outcome else {
         return Err("expected controller to forward call".into());
     };
 

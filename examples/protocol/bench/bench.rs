@@ -4,7 +4,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use unshell::protocol::tree::{
-    ChildRoute, Endpoint, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint,
+    ChildRoute, Endpoint, EndpointOutcome, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint,
 };
 use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
 
@@ -105,7 +105,7 @@ fn bench_forward_call_receive() -> BenchResult {
             let outcome = root
                 .receive(&Ingress::Local, frame)
                 .expect("forward receive should work");
-            black_box(outcome.forward.is_some());
+            black_box(matches!(outcome, EndpointOutcome::Forward { .. }));
         },
     )
 }
@@ -118,8 +118,8 @@ fn bench_local_call_receive() -> BenchResult {
             let outcome = endpoint
                 .receive(&Ingress::Parent, frame)
                 .expect("local call should work");
-            match black_box(outcome.event) {
-                Some(LocalEvent::Call { .. }) => {}
+            match black_box(outcome) {
+                EndpointOutcome::Local(LocalEvent::Call { .. }) => {}
                 other => panic!("expected local call event, got {other:?}"),
             }
         },
@@ -134,8 +134,8 @@ fn bench_hook_data_receive() -> BenchResult {
             let outcome = host
                 .receive(&Ingress::Child(path(&["worker"])), frame)
                 .expect("hook data should work");
-            match black_box(outcome.event) {
-                Some(LocalEvent::Data { .. }) => {}
+            match black_box(outcome) {
+                EndpointOutcome::Local(LocalEvent::Data { .. }) => {}
                 other => panic!("expected local data event, got {other:?}"),
             }
         },

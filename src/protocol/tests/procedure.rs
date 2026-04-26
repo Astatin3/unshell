@@ -2,7 +2,7 @@ use alloc::{borrow::ToOwned, collections::BTreeMap, format, string::String, vec,
 use core::convert::Infallible;
 
 use crate::protocol::tree::{
-    Call, ChildRoute, ConnectionState, Endpoint, HookKey, Ingress, OutgoingData, Procedure,
+    Call, ChildRoute, Endpoint, EndpointOutcome, HookKey, Ingress, OutgoingData, Procedure,
     ProcedureEffect, ProcedureRuntime, ProcedureStore, ProtocolEndpoint, encode_call_reply,
 };
 use crate::protocol::{PacketType, decode_frame};
@@ -80,7 +80,7 @@ fn procedure_runtime_routes_data_to_stored_session() {
         None,
         vec![ChildRoute {
             path: path(&["agent"]),
-            state: ConnectionState::Registered,
+            registered: true,
         }],
         Vec::new(),
     );
@@ -94,7 +94,10 @@ fn procedure_runtime_routes_data_to_stored_session() {
             encode_call_reply(&String::from("prefix:")).expect("procedure input should encode"),
         )
         .expect("open call should encode");
-    let Some((_, open_frame)) = open.forward else {
+    let EndpointOutcome::Forward {
+        frame: open_frame, ..
+    } = open
+    else {
         panic!("controller should forward opening call");
     };
     runtime
@@ -110,7 +113,10 @@ fn procedure_runtime_routes_data_to_stored_session() {
             true,
         )
         .expect("data should encode");
-    let Some((_, data_frame)) = data.forward else {
+    let EndpointOutcome::Forward {
+        frame: data_frame, ..
+    } = data
+    else {
         panic!("controller should forward data frame");
     };
     let outcome = runtime
@@ -129,7 +135,7 @@ fn procedure_runtime_routes_data_to_stored_session() {
     let forwarded = controller
         .receive(&Ingress::Child(path(&["agent"])), response_frame.clone())
         .expect("controller should receive session response");
-    assert!(forwarded.event.is_some());
+    assert!(matches!(forwarded, EndpointOutcome::Local(_)));
     assert!(runtime.leaf_mut().procedure_sessions().is_empty());
 }
 
@@ -204,7 +210,7 @@ fn procedure_runtime_keeps_session_after_local_end_until_explicit_close() {
         None,
         vec![ChildRoute {
             path: path(&["agent"]),
-            state: ConnectionState::Registered,
+            registered: true,
         }],
         Vec::new(),
     );
@@ -218,7 +224,10 @@ fn procedure_runtime_keeps_session_after_local_end_until_explicit_close() {
             encode_call_reply(&()).expect("unit call should encode"),
         )
         .expect("open call should encode");
-    let Some((_, open_frame)) = open.forward else {
+    let EndpointOutcome::Forward {
+        frame: open_frame, ..
+    } = open
+    else {
         panic!("controller should forward opening call");
     };
     runtime
@@ -234,7 +243,10 @@ fn procedure_runtime_keeps_session_after_local_end_until_explicit_close() {
             false,
         )
         .expect("local end trigger should encode");
-    let Some((_, local_end_frame)) = local_end.forward else {
+    let EndpointOutcome::Forward {
+        frame: local_end_frame, ..
+    } = local_end
+    else {
         panic!("controller should forward local end trigger");
     };
     let outcome = runtime

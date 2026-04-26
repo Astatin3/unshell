@@ -75,7 +75,7 @@ impl ProtocolEndpoint {
             return self.emit_fault_if_possible(key, ProtocolFault::INTERNAL_ERROR);
         }
 
-        Ok(EndpointOutcome::event(LocalEvent::Call { header, message }))
+        Ok(EndpointOutcome::Local(LocalEvent::Call { header, message }))
     }
 }
 
@@ -94,7 +94,7 @@ impl Endpoint for ProtocolEndpoint {
         validate_header(header)?;
 
         if !self.valid_source_for_ingress(ingress, &header.src_path) {
-            return Ok(EndpointOutcome::dropped());
+            return Ok(EndpointOutcome::Dropped);
         }
 
         match header.packet_type {
@@ -103,17 +103,19 @@ impl Endpoint for ProtocolEndpoint {
                 // itself. Children can return data/faults, but they do not initiate new
                 // calls through this node.
                 if !matches!(ingress, Ingress::Parent | Ingress::Local) {
-                    return Ok(EndpointOutcome::dropped());
+                    return Ok(EndpointOutcome::Dropped);
                 }
 
                 match self.decide_route(&header.dst_path) {
-                    RouteDecision::Child(index) => {
-                        Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
-                    }
-                    RouteDecision::Parent => {
-                        Ok(EndpointOutcome::forward(RouteDecision::Parent, frame))
-                    }
-                    RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
+                    RouteDecision::Child(index) => Ok(EndpointOutcome::Forward {
+                        route: RouteDecision::Child(index),
+                        frame,
+                    }),
+                    RouteDecision::Parent => Ok(EndpointOutcome::Forward {
+                        route: RouteDecision::Parent,
+                        frame,
+                    }),
+                    RouteDecision::Drop => Ok(EndpointOutcome::Dropped),
                     RouteDecision::Local => {
                         let (header, payload) = parsed.into_parts();
                         let message = deserialize_archived_bytes::<ArchivedCallMessage, CallMessage>(
@@ -133,11 +135,15 @@ impl Endpoint for ProtocolEndpoint {
                     >(payload)?;
                     self.handle_local_data(header, message)
                 }
-                RouteDecision::Child(index) => {
-                    Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
-                }
-                RouteDecision::Parent => Ok(EndpointOutcome::forward(RouteDecision::Parent, frame)),
-                RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
+                RouteDecision::Child(index) => Ok(EndpointOutcome::Forward {
+                    route: RouteDecision::Child(index),
+                    frame,
+                }),
+                RouteDecision::Parent => Ok(EndpointOutcome::Forward {
+                    route: RouteDecision::Parent,
+                    frame,
+                }),
+                RouteDecision::Drop => Ok(EndpointOutcome::Dropped),
             },
             PacketType::Fault => match self.decide_route(&header.dst_path) {
                 RouteDecision::Local => {
@@ -148,11 +154,15 @@ impl Endpoint for ProtocolEndpoint {
                     >(payload)?;
                     self.handle_local_fault(header, message)
                 }
-                RouteDecision::Child(index) => {
-                    Ok(EndpointOutcome::forward(RouteDecision::Child(index), frame))
-                }
-                RouteDecision::Parent => Ok(EndpointOutcome::forward(RouteDecision::Parent, frame)),
-                RouteDecision::Drop => Ok(EndpointOutcome::dropped()),
+                RouteDecision::Child(index) => Ok(EndpointOutcome::Forward {
+                    route: RouteDecision::Child(index),
+                    frame,
+                }),
+                RouteDecision::Parent => Ok(EndpointOutcome::Forward {
+                    route: RouteDecision::Parent,
+                    frame,
+                }),
+                RouteDecision::Drop => Ok(EndpointOutcome::Dropped),
             },
         }
     }

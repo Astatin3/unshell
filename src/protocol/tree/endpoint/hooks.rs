@@ -16,7 +16,7 @@ impl ProtocolEndpoint {
         fault: ProtocolFault,
     ) -> Result<EndpointOutcome, EndpointError> {
         let Some(key) = key else {
-            return Ok(EndpointOutcome::dropped());
+            return Ok(EndpointOutcome::Dropped);
         };
 
         self.hooks.remove_pending(&key);
@@ -32,15 +32,15 @@ impl ProtocolEndpoint {
         let message = FaultMessage { fault };
 
         match self.decide_route(&key.return_path) {
-            RouteDecision::Local => Ok(EndpointOutcome::event(LocalEvent::Fault {
+            RouteDecision::Local => Ok(EndpointOutcome::Local(LocalEvent::Fault {
                 header,
                 message,
                 hook_key: key,
             })),
-            route => Ok(EndpointOutcome::forward(
+            route => Ok(EndpointOutcome::Forward {
                 route,
-                encode_packet(&header, &message)?,
-            )),
+                frame: encode_packet(&header, &message)?,
+            }),
         }
     }
 
@@ -64,12 +64,12 @@ impl ProtocolEndpoint {
                 self.hooks.activate_pending(&pending_key);
                 pending_key
             } else {
-                return Ok(EndpointOutcome::dropped());
+                return Ok(EndpointOutcome::Dropped);
             }
         };
 
         let Some(active) = self.hooks.active(&key) else {
-            return Ok(EndpointOutcome::dropped());
+            return Ok(EndpointOutcome::Dropped);
         };
 
         if active.peer_path != header.src_path {
@@ -81,14 +81,14 @@ impl ProtocolEndpoint {
 
         if active.procedure_id != message.procedure_id {
             // Data frames stay bound to the procedure chosen by the original call.
-            return Ok(EndpointOutcome::dropped());
+            return Ok(EndpointOutcome::Dropped);
         }
 
         if message.end_hook && self.hooks.mark_peer_end(&key) {
             self.hooks.remove_active(&key);
         }
 
-        Ok(EndpointOutcome::event(LocalEvent::Data {
+        Ok(EndpointOutcome::Local(LocalEvent::Data {
             header,
             message,
             hook_key: key,
@@ -106,7 +106,7 @@ impl ProtocolEndpoint {
             .resolve_active_key(&self.path, hook_id, &header.src_path)
         {
             self.hooks.remove_active(&key);
-            return Ok(EndpointOutcome::event(LocalEvent::Fault {
+            return Ok(EndpointOutcome::Local(LocalEvent::Fault {
                 header,
                 message,
                 hook_key: key,
@@ -120,14 +120,14 @@ impl ProtocolEndpoint {
             .is_some_and(|pending| pending.caller_src_path == header.src_path)
         {
             self.hooks.remove_pending(&pending_key);
-            return Ok(EndpointOutcome::event(LocalEvent::Fault {
+            return Ok(EndpointOutcome::Local(LocalEvent::Fault {
                 header,
                 message,
                 hook_key: pending_key,
             }));
         }
 
-        Ok(EndpointOutcome::dropped())
+        Ok(EndpointOutcome::Dropped)
     }
 
     pub(crate) fn decide_route(&self, dst_path: &[String]) -> RouteDecision {

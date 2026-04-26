@@ -13,20 +13,13 @@ use crate::protocol::{
 
 use super::super::{CompiledRoutes, HookKey, HookTable, RouteDecision};
 
-/// Registration state for a direct child endpoint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConnectionState {
-    Unregistered,
-    Registered,
-}
-
 /// Routing metadata for one direct child endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildRoute {
     /// Absolute path for the child endpoint inside the protocol tree.
     pub path: Vec<String>,
     /// Whether this child currently participates in routing decisions.
-    pub state: ConnectionState,
+    pub registered: bool,
 }
 
 impl ChildRoute {
@@ -34,7 +27,7 @@ impl ChildRoute {
     pub fn registered(path: Vec<String>) -> Self {
         Self {
             path,
-            state: ConnectionState::Registered,
+            registered: true,
         }
     }
 }
@@ -76,43 +69,14 @@ pub enum LocalEvent {
 }
 
 /// Result of processing a frame or building a locally-sent packet.
-#[derive(Debug, Default)]
-pub struct EndpointOutcome {
+#[derive(Debug)]
+pub enum EndpointOutcome {
     /// Frame to forward, together with the next routing decision.
-    pub forward: Option<(RouteDecision, FrameBytes)>,
+    Forward { route: RouteDecision, frame: FrameBytes },
     /// Locally-delivered protocol event.
-    pub event: Option<LocalEvent>,
-    /// Whether the packet was intentionally discarded.
-    pub dropped: bool,
-}
-
-impl EndpointOutcome {
-    #[must_use]
-    pub fn forward(route: RouteDecision, frame: FrameBytes) -> Self {
-        Self {
-            forward: Some((route, frame)),
-            event: None,
-            dropped: false,
-        }
-    }
-
-    #[must_use]
-    pub fn event(event: LocalEvent) -> Self {
-        Self {
-            forward: None,
-            event: Some(event),
-            dropped: false,
-        }
-    }
-
-    #[must_use]
-    pub fn dropped() -> Self {
-        Self {
-            forward: None,
-            event: None,
-            dropped: true,
-        }
-    }
+    Local(LocalEvent),
+    /// Packet intentionally discarded.
+    Dropped,
 }
 
 /// Error surfaced while validating or encoding protocol frames.

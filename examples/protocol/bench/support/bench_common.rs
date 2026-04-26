@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use unshell::protocol::tree::{
-    ChildRoute, Endpoint, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint,
+    ChildRoute, Endpoint, EndpointOutcome, Ingress, LeafSpec, LocalEvent, ProtocolEndpoint,
 };
 use unshell::protocol::{CallMessage, PacketHeader, PacketType, decode_frame, encode_packet};
 
@@ -94,14 +94,12 @@ pub fn run_forward_call_receive(iterations: usize) -> usize {
         let outcome = root
             .receive(&Ingress::Local, frame)
             .expect("forward receive should work");
-        let forwarded = outcome
-            .forward
-            .as_ref()
-            .map(|(route, frame)| route_value(*route).wrapping_add(frame.len()))
-            .unwrap_or_default();
-        checksum = checksum
-            .wrapping_add(forwarded)
-            .wrapping_add(outcome.dropped as usize);
+        let forwarded = match outcome {
+            EndpointOutcome::Forward { route, frame } => route_value(route).wrapping_add(frame.len()),
+            EndpointOutcome::Local(_) => 0,
+            EndpointOutcome::Dropped => usize::from(true),
+        };
+        checksum = checksum.wrapping_add(forwarded);
     }
     black_box(checksum)
 }
@@ -141,8 +139,8 @@ pub fn run_local_call_receive(iterations: usize) -> usize {
         let outcome = endpoint
             .receive(&Ingress::Parent, frame)
             .expect("local call should work");
-        match outcome.event {
-            Some(LocalEvent::Call { header, message }) => {
+        match outcome {
+            EndpointOutcome::Local(LocalEvent::Call { header, message }) => {
                 checksum = checksum
                     .wrapping_add(header.dst_path.len())
                     .wrapping_add(header.src_path.len())
@@ -194,8 +192,8 @@ pub fn run_hook_data_receive(iterations: usize) -> usize {
         let outcome = host
             .receive(&Ingress::Child(path(&["worker"])), frame)
             .expect("hook data should work");
-        match outcome.event {
-            Some(LocalEvent::Data {
+        match outcome {
+            EndpointOutcome::Local(LocalEvent::Data {
                 header, message, ..
             }) => {
                 checksum = checksum

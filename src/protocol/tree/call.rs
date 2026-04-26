@@ -16,65 +16,90 @@ use super::{
 /// One typed incoming `Call` passed to a leaf procedure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Call<T> {
+    /// Decoded application input payload.
     pub input: T,
+    /// Endpoint path of the caller that opened this call.
     pub caller_path: Vec<String>,
+    /// Canonical procedure identifier chosen by the caller.
     pub procedure_id: String,
+    /// Optional destination leaf targeted by the call.
     pub dst_leaf: Option<String>,
+    /// Hook key declared by the caller when it expects a response.
     pub response_hook: Option<HookKey>,
 }
 
 /// One incoming local call event that already passed protocol validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingCall {
+    /// Validated protocol header for the call.
     pub header: PacketHeader,
+    /// Application payload for the call.
     pub message: CallMessage,
 }
 
 /// One incoming local data event tied to an active hook.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingData {
+    /// Validated protocol header for the data packet.
     pub header: PacketHeader,
+    /// Hook-associated data payload.
     pub message: DataMessage,
+    /// Resolved hook key for the active session.
     pub hook_key: HookKey,
 }
 
 /// One incoming local fault event tied to a pending or active hook.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingFault {
+    /// Validated protocol header for the fault packet.
     pub header: PacketHeader,
+    /// Fault payload emitted by the peer.
     pub fault: crate::protocol::FaultMessage,
+    /// Hook key for the pending or active session that faulted.
     pub hook_key: HookKey,
 }
 
 /// Outcome of one generated initial call procedure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallResult<T> {
+    /// Return one reply payload to the caller.
     Reply(T),
+    /// Complete the call without any response data.
     NoReply,
 }
 
 /// One hook-associated `Data` packet emitted by leaf code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutgoingData {
+    /// Destination endpoint path for the hook packet.
     pub dst_path: Vec<String>,
+    /// Hook identifier scoped to the receiving endpoint.
     pub hook_id: u64,
+    /// Procedure identifier that owns this hook stream.
     pub procedure_id: String,
+    /// Serialized application data to send.
     pub data: Vec<u8>,
+    /// Whether this packet closes the local side of the hook.
     pub end_hook: bool,
 }
 
 /// One runtime-normalized reply produced by generated call dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallReply {
+    /// Serialized reply bytes that should be returned upstream.
     Reply(Vec<u8>),
+    /// Complete without emitting any reply packet.
     NoReply,
 }
 
 /// Error surfaced while decoding one incoming call or encoding one generated reply.
 #[derive(Debug)]
 pub enum DispatchError<E> {
+    /// Failed to decode the typed call input.
     Decode(FrameError),
+    /// Failed to encode the typed call output.
     Encode(FrameError),
+    /// The leaf-specific call handler returned an error.
     Handler(E),
 }
 
@@ -96,8 +121,11 @@ impl<E> core::error::Error for DispatchError<E> where E: core::error::Error + 's
 /// Error surfaced by the stateful leaf runtime.
 #[derive(Debug)]
 pub enum LeafRuntimeError<E> {
+    /// Protocol endpoint routing or framing failed.
     Endpoint(EndpointError),
+    /// Typed call dispatch failed.
     Dispatch(DispatchError<E>),
+    /// Leaf-local data or fault handling failed.
     Leaf(E),
 }
 
@@ -124,6 +152,7 @@ impl<E> From<EndpointError> for LeafRuntimeError<E> {
 
 /// High-level leaf behavior layered on top of validated protocol events.
 pub trait CallLeaf: ProtocolLeaf {
+    /// Leaf-specific error surfaced by call, data, or fault handling.
     type Error;
 
     /// Handles hook-associated inbound `Data` after protocol validation.
@@ -152,30 +181,37 @@ pub struct LeafRuntime<L> {
 /// Frames emitted by the runtime after one receive or poll step.
 #[derive(Debug, Default)]
 pub struct RuntimeOutcome {
+    /// Frames emitted while processing the step.
     pub frames: Vec<FrameBytes>,
+    /// Whether the endpoint dropped the incoming packet.
     pub dropped: bool,
 }
 
 impl<L> LeafRuntime<L> {
+    /// Builds a runtime from one endpoint and one leaf instance.
     #[must_use]
     pub fn new(endpoint: ProtocolEndpoint, leaf: L) -> Self {
         Self { endpoint, leaf }
     }
 
+    /// Returns the underlying protocol endpoint.
     #[must_use]
     pub fn endpoint(&self) -> &ProtocolEndpoint {
         &self.endpoint
     }
 
+    /// Returns a mutable reference to the underlying endpoint.
     pub fn endpoint_mut(&mut self) -> &mut ProtocolEndpoint {
         &mut self.endpoint
     }
 
+    /// Returns the hosted leaf instance.
     #[must_use]
     pub fn leaf(&self) -> &L {
         &self.leaf
     }
 
+    /// Returns a mutable reference to the hosted leaf instance.
     pub fn leaf_mut(&mut self) -> &mut L {
         &mut self.leaf
     }
@@ -203,20 +239,23 @@ where
         &mut self,
         outcome: crate::protocol::tree::EndpointOutcome,
     ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
-        let mut runtime = RuntimeOutcome {
-            frames: Vec::new(),
-            dropped: outcome.dropped,
-        };
+        match outcome {
+            crate::protocol::tree::EndpointOutcome::Forward { frame, .. } => {
+                let mut frames = Vec::with_capacity(1);
+                frames.push(frame);
+                Ok(RuntimeOutcome {
+                    frames,
+                    dropped: false,
+                })
+            }
+            crate::protocol::tree::EndpointOutcome::Dropped => Ok(RuntimeOutcome {
+                frames: Vec::new(),
+                dropped: true,
+            }),
+            crate::protocol::tree::EndpointOutcome::Local(event) => {
+                let mut runtime = RuntimeOutcome::default();
 
-        if let Some((_route, frame)) = outcome.forward {
-            runtime.frames.push(frame);
-        }
-
-        let Some(event) = outcome.event else {
-            return Ok(runtime);
-        };
-
-        match event {
+                match event {
             LocalEvent::Call { header, message } => {
                 let incoming = IncomingCall {
                     header,
@@ -272,7 +311,9 @@ where
             }
         }
 
-        Ok(runtime)
+                Ok(runtime)
+            }
+        }
     }
 
     fn emit_outgoing(

@@ -4,7 +4,7 @@ mod remote_shell;
 use std::error::Error;
 use std::net::TcpListener;
 
-use unshell::protocol::tree::{Endpoint, Ingress, LocalEvent};
+use unshell::protocol::tree::{Endpoint, EndpointOutcome, Ingress, LocalEvent};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(remote_shell::LISTEN_ADDR)?;
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for result in frame_rx {
         let frame = result?;
         let outcome = endpoint.receive(&Ingress::Child(remote_shell::agent_path()), frame)?;
-        let Some(event) = outcome.event else {
+        let EndpointOutcome::Local(event) = outcome else {
             continue;
         };
 
