@@ -64,6 +64,12 @@ struct CallArm {
     dispatch_tokens: TokenStream,
 }
 
+#[derive(Clone, Copy)]
+enum EndpointArgKind {
+    Shared,
+    Mutable,
+}
+
 pub(crate) fn expand_procedures(
     attr: ProceduresAttributes,
     mut item: ItemImpl,
@@ -118,6 +124,7 @@ pub(crate) fn expand_procedures(
 
             fn dispatch_call(
                 &mut self,
+                endpoint: &mut ::unshell::protocol::tree::ProtocolEndpoint,
                 call: ::unshell::protocol::tree::IncomingCall,
             ) -> ::core::result::Result<
                 ::unshell::protocol::tree::CallReply,
@@ -150,7 +157,9 @@ fn expand_call_arm(method: &ImplItemFn) -> Result<CallArm> {
         .filter(|input| !matches!(input, FnArg::Receiver(_)))
         .collect::<Vec<_>>();
 
-    let invocation = expand_invocation(method_name, &inputs)?;
+    let (endpoint_arg, inputs) = split_endpoint_arg(&inputs)?;
+
+    let invocation = expand_invocation(method_name, endpoint_arg, &inputs)?;
     let return_value = expand_return_conversion(&method.sig.output, quote! { __unshell_result })?;
 
     Ok(CallArm {
@@ -164,9 +173,18 @@ fn expand_call_arm(method: &ImplItemFn) -> Result<CallArm> {
     })
 }
 
-fn expand_invocation(method_name: &Ident, inputs: &[&FnArg]) -> Result<TokenStream> {
+fn expand_invocation(
+    method_name: &Ident,
+    endpoint_arg: Option<EndpointArgKind>,
+    inputs: &[&FnArg],
+) -> Result<TokenStream> {
+    let endpoint_prefix = endpoint_arg.map(endpoint_arg_tokens);
     if inputs.is_empty() {
-        return Ok(quote! { self.#method_name() });
+        return Ok(if let Some(prefix) = endpoint_prefix {
+            quote! { self.#method_name(#prefix) }
+        } else {
+            quote! { self.#method_name() }
+        });
     }
 
     if inputs.len() == 1 {
@@ -199,7 +217,7 @@ fn expand_invocation(method_name: &Ident, inputs: &[&FnArg]) -> Result<TokenStre
                             hook.hook_id,
                         )),
                 };
-                self.#method_name(__unshell_call)
+                self.#method_name(#endpoint_prefix __unshell_call)
             }});
         }
 
@@ -208,7 +226,7 @@ fn expand_invocation(method_name: &Ident, inputs: &[&FnArg]) -> Result<TokenStre
                 call.message.data.as_slice(),
             )
             .map_err(::unshell::protocol::tree::DispatchError::Decode)?;
-            self.#method_name(__unshell_input)
+            self.#method_name(#endpoint_prefix __unshell_input)
         }});
     }
 
@@ -231,8 +249,48 @@ fn expand_invocation(method_name: &Ident, inputs: &[&FnArg]) -> Result<TokenStre
             call.message.data.as_slice(),
         )
         .map_err(::unshell::protocol::tree::DispatchError::Decode)?;
-        self.#method_name(#(#vars),*)
+        self.#method_name(#endpoint_prefix #(#vars),*)
     }})
+}
+
+fn split_endpoint_arg<'a>(inputs: &[&'a FnArg]) -> Result<(Option<EndpointArgKind>, Vec<&'a FnArg>)> {
+    let Some(first) = inputs.first() else {
+        return Ok((None, Vec::new()));
+    };
+    let Some(kind) = endpoint_arg_kind(first)? else {
+        return Ok((None, inputs.to_vec()));
+    };
+    Ok((Some(kind), inputs[1..].to_vec()))
+}
+
+fn endpoint_arg_kind(arg: &FnArg) -> Result<Option<EndpointArgKind>> {
+    let FnArg::Typed(PatType { ty, .. }) = arg else {
+        return Ok(None);
+    };
+    let Type::Reference(reference) = ty.as_ref() else {
+        return Ok(None);
+    };
+    let Type::Path(type_path) = reference.elem.as_ref() else {
+        return Ok(None);
+    };
+    let Some(segment) = type_path.path.segments.last() else {
+        return Ok(None);
+    };
+    if segment.ident != "ProtocolEndpoint" {
+        return Ok(None);
+    }
+    Ok(Some(if reference.mutability.is_some() {
+        EndpointArgKind::Mutable
+    } else {
+        EndpointArgKind::Shared
+    }))
+}
+
+fn endpoint_arg_tokens(kind: EndpointArgKind) -> TokenStream {
+    match kind {
+        EndpointArgKind::Shared => quote! { &*endpoint, },
+        EndpointArgKind::Mutable => quote! { endpoint, },
+    }
 }
 
 fn expand_return_conversion(return_type: &ReturnType, value: TokenStream) -> Result<TokenStream> {

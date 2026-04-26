@@ -32,6 +32,8 @@ pub enum ValidationError {
     CallInvariant(&'static str),
     /// A hook lifecycle transition would break protocol state invariants.
     HookInvariant(&'static str),
+    /// One endpoint-topology update would break local tree invariants.
+    TopologyInvariant(&'static str),
     /// A hook id collided with existing endpoint-local state.
     InvalidHookId,
 }
@@ -43,6 +45,7 @@ impl fmt::Display for ValidationError {
             Self::ProcedureId(message) => write!(f, "invalid procedure id: {message}"),
             Self::CallInvariant(message) => write!(f, "invalid call: {message}"),
             Self::HookInvariant(message) => write!(f, "invalid hook state: {message}"),
+            Self::TopologyInvariant(message) => write!(f, "invalid topology: {message}"),
             Self::InvalidHookId => f.write_str("invalid hook identifier"),
         }
     }

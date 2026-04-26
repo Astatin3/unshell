@@ -128,6 +128,7 @@ impl ProtocolEndpoint {
         children: Vec<ChildRoute>,
         leaves: Vec<LeafSpec>,
     ) -> Self {
+        let has_parent = parent_path.is_some();
         let registered_child_paths = children
             .iter()
             .filter(|child| child.registered)
@@ -136,7 +137,8 @@ impl ProtocolEndpoint {
 
         Self {
             local_id: None,
-            routing: CompiledRoutes::new(&path, &registered_child_paths, parent_path.is_some()),
+            parent_path,
+            routing: CompiledRoutes::new(&path, &registered_child_paths, has_parent),
             path,
             children,
             leaves: leaves
@@ -194,6 +196,129 @@ impl ProtocolEndpoint {
         self.local_id.as_deref()
     }
 
+    /// Returns the absolute path of this endpoint's direct parent, if one exists.
+    ///
+    /// What it is: the currently configured one-hop parent boundary for this
+    /// endpoint.
+    ///
+    /// Why it exists: router-style leaves need to expose and inspect the tree edge
+    /// they use for upstream traffic.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let endpoint = ProtocolEndpoint::new(vec!["worker".into()], Some(Vec::new()), Vec::new(), Vec::new());
+    /// assert_eq!(endpoint.parent_path(), Some([].as_slice()));
+    /// ```
+    pub fn parent_path(&self) -> Option<&[String]> {
+        self.parent_path.as_deref()
+    }
+
+    /// Returns the direct child routes currently known to this endpoint.
+    ///
+    /// What it is: the local routing-table inputs for direct descendants.
+    ///
+    /// Why it exists: management leaves often need to inspect or mirror the child
+    /// topology they are controlling.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ChildRoute, ProtocolEndpoint};
+    /// let endpoint = ProtocolEndpoint::new(
+    ///     vec!["root".into()],
+    ///     None,
+    ///     vec![ChildRoute::registered(vec!["root".into(), "child".into()])],
+    ///     Vec::new(),
+    /// );
+    /// assert_eq!(endpoint.child_routes().len(), 1);
+    /// ```
+    pub fn child_routes(&self) -> &[ChildRoute] {
+        &self.children
+    }
+
+    /// Replaces the configured direct parent path and recompiles local routing.
+    ///
+    /// What it is: the supported way to attach or detach this endpoint from its
+    /// upstream boundary.
+    ///
+    /// Why it exists: a router leaf should be able to promote or remove its parent
+    /// connection without rebuilding the entire endpoint.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::ProtocolEndpoint;
+    /// let mut endpoint = ProtocolEndpoint::new(vec!["root".into(), "worker".into()], Some(vec!["root".into()]), Vec::new(), Vec::new());
+    /// endpoint.set_parent_path(None)?;
+    /// assert!(endpoint.parent_path().is_none());
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
+    pub fn set_parent_path(
+        &mut self,
+        parent_path: Option<Vec<String>>,
+    ) -> Result<(), EndpointError> {
+        if let Some(path) = parent_path.as_deref() {
+            self.validate_direct_parent_path(path)?;
+        }
+        self.parent_path = parent_path;
+        self.rebuild_routing();
+        Ok(())
+    }
+
+    /// Inserts or updates one direct child route and recompiles local routing.
+    ///
+    /// What it is: the supported mutation API for the endpoint's child list.
+    ///
+    /// Why it exists: router-management leaves need one invariant-preserving way to
+    /// reflect child connection changes into path routing.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ChildRoute, ProtocolEndpoint};
+    /// let mut endpoint = ProtocolEndpoint::new(vec!["root".into()], None, Vec::new(), Vec::new());
+    /// endpoint.upsert_child_route(ChildRoute::registered(vec!["root".into(), "child".into()]))?;
+    /// assert_eq!(endpoint.child_routes().len(), 1);
+    /// # Ok::<(), unshell::protocol::tree::EndpointError>(())
+    /// ```
+    pub fn upsert_child_route(&mut self, route: ChildRoute) -> Result<(), EndpointError> {
+        self.validate_direct_child_path(&route.path)?;
+        if let Some(existing) = self.children.iter_mut().find(|child| child.path == route.path) {
+            *existing = route;
+        } else {
+            self.children.push(route);
+        }
+        self.rebuild_routing();
+        Ok(())
+    }
+
+    /// Removes one direct child route by absolute path and recompiles local routing.
+    ///
+    /// What it is: the supported mutation API for pruning a direct descendant.
+    ///
+    /// Why it exists: connection-management leaves need to tear down routes without
+    /// mutating the endpoint internals directly.
+    ///
+    /// # Example
+    /// ```rust
+    /// use unshell::protocol::tree::{ChildRoute, ProtocolEndpoint};
+    /// let mut endpoint = ProtocolEndpoint::new(
+    ///     vec!["root".into()],
+    ///     None,
+    ///     vec![ChildRoute::registered(vec!["root".into(), "child".into()])],
+    ///     Vec::new(),
+    /// );
+    /// assert!(endpoint.remove_child_route(&[String::from("root"), String::from("child")]));
+    /// assert!(endpoint.child_routes().is_empty());
+    /// ```
+    pub fn remove_child_route(&mut self, path: &[String]) -> bool {
+        let original_len = self.children.len();
+        self.children.retain(|child| child.path != path);
+        let removed = self.children.len() != original_len;
+        if removed {
+            self.rebuild_routing();
+        }
+        removed
+    }
+
     /// Registers a procedure that is handled directly by the endpoint.
     ///
     /// Endpoint-level procedures exist for protocol services that are not attached to one leaf,
@@ -228,6 +353,43 @@ impl ProtocolEndpoint {
     /// ```
     pub fn allocate_hook_id(&mut self) -> u64 {
         self.hooks.allocate_hook_id(&self.path)
+    }
+
+    fn rebuild_routing(&mut self) {
+        let registered_child_paths = self
+            .children
+            .iter()
+            .filter(|child| child.registered)
+            .map(|child| child.path.clone())
+            .collect::<Vec<_>>();
+        self.routing = CompiledRoutes::new(
+            &self.path,
+            &registered_child_paths,
+            self.parent_path.is_some(),
+        );
+    }
+
+    fn validate_direct_parent_path(&self, parent_path: &[String]) -> Result<(), EndpointError> {
+        let Some((_, expected_parent)) = self.path.split_last() else {
+            return Err(EndpointError::Validation(ValidationError::TopologyInvariant(
+                "root endpoints cannot declare a parent path",
+            )));
+        };
+        if parent_path != expected_parent {
+            return Err(EndpointError::Validation(ValidationError::TopologyInvariant(
+                "parent path must equal the direct path prefix of this endpoint",
+            )));
+        }
+        Ok(())
+    }
+
+    fn validate_direct_child_path(&self, child_path: &[String]) -> Result<(), EndpointError> {
+        if child_path.len() != self.path.len() + 1 || !child_path.starts_with(&self.path) {
+            return Err(EndpointError::Validation(ValidationError::TopologyInvariant(
+                "child path must be one direct descendant of this endpoint",
+            )));
+        }
+        Ok(())
     }
 
     /// Encodes a call frame without routing it through the local endpoint.

@@ -177,6 +177,33 @@ pub enum EndpointOutcome {
     Dropped,
 }
 
+/// One framed packet together with the next hop selected by endpoint routing.
+///
+/// What it is: a transport-ready frame paired with the resolved direction the
+/// endpoint chose for it.
+///
+/// Why it exists: high-level runtimes often flatten forwarded traffic down to raw
+/// bytes, but router-host leaves need the route decision so they can choose the
+/// correct parent or child connection.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::FrameBytes;
+/// use unshell::protocol::tree::{ForwardedFrame, RouteDecision};
+/// let forwarded = ForwardedFrame {
+///     route: RouteDecision::Parent,
+///     frame: FrameBytes::new(),
+/// };
+/// assert!(matches!(forwarded.route, RouteDecision::Parent));
+/// ```
+#[derive(Debug, Clone)]
+pub struct ForwardedFrame {
+    /// The next hop selected by the endpoint runtime.
+    pub route: RouteDecision,
+    /// The encoded protocol frame to send over that hop.
+    pub frame: FrameBytes,
+}
+
 /// Error surfaced while validating or encoding protocol frames.
 ///
 /// This exists so endpoint callers can preserve the distinction between malformed wire/archive
@@ -288,6 +315,7 @@ pub trait Endpoint {
 pub struct ProtocolEndpoint {
     pub(crate) local_id: Option<String>,
     pub(crate) path: Vec<String>,
+    pub(crate) parent_path: Option<Vec<String>>,
     pub(crate) children: Vec<ChildRoute>,
     pub(crate) routing: CompiledRoutes,
     pub(crate) leaves: BTreeMap<String, LeafSpec>,

@@ -11,7 +11,9 @@ use crate::protocol::{
 
 use super::{
     Endpoint, EndpointError, HookKey, Ingress, LocalEvent, ProtocolEndpoint, ProtocolLeaf,
+    RouteDecision, RouterLeaf,
 };
+use super::endpoint::ForwardedFrame;
 
 /// One typed incoming `Call` passed to a leaf procedure.
 ///
@@ -366,6 +368,28 @@ pub struct RuntimeOutcome {
     pub dropped: bool,
 }
 
+/// Frames emitted by the runtime together with their chosen next hops.
+///
+/// What it is: the router-oriented variant of [`RuntimeOutcome`], preserving the
+/// `RouteDecision` for every emitted frame.
+///
+/// Why it exists: transport-owning leaves need to know whether each frame should
+/// go to the parent or to a specific child, not just the encoded bytes.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::tree::RoutedRuntimeOutcome;
+/// let outcome = RoutedRuntimeOutcome::default();
+/// assert!(outcome.forwarded.is_empty());
+/// ```
+#[derive(Debug, Default, Clone)]
+pub struct RoutedRuntimeOutcome {
+    /// Forwarded frames paired with the route chosen by the endpoint runtime.
+    pub forwarded: Vec<ForwardedFrame>,
+    /// Whether the endpoint dropped the incoming packet.
+    pub dropped: bool,
+}
+
 impl<L> LeafRuntime<L> {
     /// Builds a runtime from one endpoint and one leaf instance.
     #[must_use]
@@ -453,8 +477,32 @@ where
         ingress: &Ingress,
         frame: FrameBytes,
     ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        let routed = self.receive_routed(ingress, frame)?;
+        Ok(RuntimeOutcome {
+            frames: routed
+                .forwarded
+                .into_iter()
+                .map(|forwarded| forwarded.frame)
+                .collect(),
+            dropped: routed.dropped,
+        })
+    }
+
+    /// Delivers one inbound frame while preserving route decisions for emitted traffic.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unshell::protocol::tree::{LeafRuntime, ProtocolEndpoint};
+    /// # struct ExampleLeaf;
+    /// # let _ = core::marker::PhantomData::<LeafRuntime<ExampleLeaf>>;
+    /// ```
+    pub fn receive_routed(
+        &mut self,
+        ingress: &Ingress,
+        frame: FrameBytes,
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         let outcome = self.endpoint.receive(ingress, frame)?;
-        self.process_endpoint_outcome(outcome)
+        self.process_endpoint_outcome_routed(outcome)
     }
 
     /// Polls the leaf for locally-generated hook traffic and routes any emitted frames.
@@ -466,21 +514,45 @@ where
     /// # let _ = core::marker::PhantomData::<LeafRuntime<ExampleLeaf>>;
     /// ```
     pub fn poll(&mut self) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
-        let outgoing = self.leaf.poll().map_err(LeafRuntimeError::Leaf)?;
-        self.emit_outgoing(outgoing)
+        let routed = self.poll_routed()?;
+        Ok(RuntimeOutcome {
+            frames: routed
+                .forwarded
+                .into_iter()
+                .map(|forwarded| forwarded.frame)
+                .collect(),
+            dropped: routed.dropped,
+        })
     }
 
-    fn process_endpoint_outcome(
+    /// Polls the leaf while preserving route decisions for emitted traffic.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unshell::protocol::tree::{LeafRuntime, ProtocolEndpoint};
+    /// # struct ExampleLeaf;
+    /// # let _ = core::marker::PhantomData::<LeafRuntime<ExampleLeaf>>;
+    /// ```
+    pub fn poll_routed(
+        &mut self,
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        let outgoing = self.leaf.poll().map_err(LeafRuntimeError::Leaf)?;
+        self.emit_outgoing_routed(outgoing)
+    }
+
+    fn process_endpoint_outcome_routed(
         &mut self,
         outcome: crate::protocol::tree::EndpointOutcome,
-    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         match outcome {
-            crate::protocol::tree::EndpointOutcome::Forward { frame, .. } => Ok(RuntimeOutcome {
-                frames: vec![frame],
-                dropped: false,
-            }),
-            crate::protocol::tree::EndpointOutcome::Dropped => Ok(RuntimeOutcome {
-                frames: Vec::new(),
+            crate::protocol::tree::EndpointOutcome::Forward { route, frame } => {
+                Ok(RoutedRuntimeOutcome {
+                    forwarded: vec![ForwardedFrame { route, frame }],
+                    dropped: false,
+                })
+            }
+            crate::protocol::tree::EndpointOutcome::Dropped => Ok(RoutedRuntimeOutcome {
+                forwarded: Vec::new(),
                 dropped: true,
             }),
             crate::protocol::tree::EndpointOutcome::Local(event) => self.process_local_event(event),
@@ -490,7 +562,7 @@ where
     fn process_local_event(
         &mut self,
         event: LocalEvent,
-    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         match event {
             LocalEvent::Call { header, message } => self.process_local_call(header, message),
             LocalEvent::Data {
@@ -510,7 +582,7 @@ where
         &mut self,
         header: PacketHeader,
         message: CallMessage,
-    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         let CallMessage {
             procedure_id,
             data,
@@ -528,19 +600,16 @@ where
             },
         };
 
-        match self.leaf.dispatch_call(incoming) {
+        match self.leaf.dispatch_call(&mut self.endpoint, incoming) {
             Ok(CallReply::Reply(bytes)) => {
                 let frames = if let Some(hook) = response_hook {
                     self.send_reply_data(hook, procedure_id, bytes, true)?
                 } else {
-                    Vec::new()
+                    RoutedRuntimeOutcome::default()
                 };
-                Ok(RuntimeOutcome {
-                    frames,
-                    dropped: false,
-                })
+                Ok(frames)
             }
-            Ok(CallReply::NoReply) => Ok(RuntimeOutcome::default()),
+            Ok(CallReply::NoReply) => Ok(RoutedRuntimeOutcome::default()),
             Err(error) => {
                 // Dispatch failures still emit a protocol fault for the remote caller when a
                 // response hook exists, even though the local runtime also surfaces the error.
@@ -555,7 +624,7 @@ where
         header: PacketHeader,
         message: DataMessage,
         hook_key: HookKey,
-    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         let outgoing = self
             .leaf
             .on_data(IncomingData {
@@ -564,7 +633,7 @@ where
                 hook_key,
             })
             .map_err(LeafRuntimeError::Leaf)?;
-        self.emit_outgoing(outgoing)
+        self.emit_outgoing_routed(outgoing)
     }
 
     fn process_local_fault(
@@ -572,7 +641,7 @@ where
         header: PacketHeader,
         message: crate::protocol::FaultMessage,
         hook_key: HookKey,
-    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         self.leaf
             .on_fault(IncomingFault {
                 header,
@@ -580,14 +649,14 @@ where
                 hook_key,
             })
             .map_err(LeafRuntimeError::Leaf)?;
-        Ok(RuntimeOutcome::default())
+        Ok(RoutedRuntimeOutcome::default())
     }
 
-    fn emit_outgoing(
+    fn emit_outgoing_routed(
         &mut self,
         outgoing: Vec<OutgoingData>,
-    ) -> Result<RuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
-        let mut runtime = RuntimeOutcome::default();
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
+        let mut runtime = RoutedRuntimeOutcome::default();
         for packet in outgoing {
             let endpoint_outcome = self.endpoint.send_data(
                 packet.dst_path,
@@ -597,8 +666,8 @@ where
                 packet.end_hook,
             )?;
             runtime
-                .frames
-                .extend(self.process_endpoint_outcome(endpoint_outcome)?.frames);
+                .forwarded
+                .extend(self.process_endpoint_outcome_routed(endpoint_outcome)?.forwarded);
         }
         Ok(runtime)
     }
@@ -609,7 +678,7 @@ where
         procedure_id: String,
         bytes: Vec<u8>,
         end_hook: bool,
-    ) -> Result<Vec<FrameBytes>, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         let endpoint_outcome = self.endpoint.send_data(
             hook.return_path,
             hook.hook_id,
@@ -617,21 +686,65 @@ where
             bytes,
             end_hook,
         )?;
-        Ok(self.process_endpoint_outcome(endpoint_outcome)?.frames)
+        self.process_endpoint_outcome_routed(endpoint_outcome)
     }
 
     fn emit_internal_fault_if_possible(
         &mut self,
         hook: Option<&HookTarget>,
-    ) -> Result<Vec<FrameBytes>, LeafRuntimeError<<L as CallLeaf>::Error>> {
+    ) -> Result<RoutedRuntimeOutcome, LeafRuntimeError<<L as CallLeaf>::Error>> {
         let Some(hook) = hook else {
-            return Ok(Vec::new());
+            return Ok(RoutedRuntimeOutcome::default());
         };
         let key = HookKey::new(hook.return_path.clone(), hook.hook_id);
         let outcome = self
             .endpoint
             .emit_fault_if_possible(Some(key), ProtocolFault::INTERNAL_ERROR)?;
-        Ok(self.process_endpoint_outcome(outcome)?.frames)
+        self.process_endpoint_outcome_routed(outcome)
+    }
+}
+
+impl<L> LeafRuntime<L>
+where
+    L: CallLeaf + super::CallProcedures<Error = <L as CallLeaf>::Error> + RouterLeaf,
+{
+    /// Sends previously forwarded frames through the router leaf's parent/child links.
+    ///
+    /// What it is: a small transport bridge from endpoint route decisions to the
+    /// leaf-owned connections.
+    ///
+    /// Why it exists: router leaves should be able to reuse the normal protocol
+    /// runtime and still own the concrete forwarding mechanism.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unshell::protocol::tree::{LeafRuntime, ProtocolEndpoint};
+    /// # struct ExampleLeaf;
+    /// # let _ = core::marker::PhantomData::<LeafRuntime<ExampleLeaf>>;
+    /// ```
+    pub fn route_forwarded(
+        &mut self,
+        forwarded: Vec<ForwardedFrame>,
+    ) -> Result<(), <L as RouterLeaf>::RouteError> {
+        for forwarded in forwarded {
+            match forwarded.route {
+                RouteDecision::Parent => {
+                    self.leaf
+                        .route_to_parent(self.endpoint.path(), forwarded.frame)?;
+                }
+                RouteDecision::Child(index) => {
+                    let child_path = self
+                        .endpoint
+                        .child_routes()
+                        .get(index)
+                        .map(|child| child.path.clone())
+                        .unwrap_or_default();
+                    self.leaf.route_to_child(&child_path, forwarded.frame)?;
+                }
+                RouteDecision::Local | RouteDecision::Drop => {}
+            }
+        }
+        Ok(())
     }
 }
 

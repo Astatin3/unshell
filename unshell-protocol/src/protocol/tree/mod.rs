@@ -16,8 +16,8 @@ mod routing;
 
 pub use call::{
     Call, CallLeaf, CallReply, CallResult, DispatchError, IncomingCall, IncomingData,
-    IncomingFault, LeafRuntime, LeafRuntimeError, OutgoingData, RuntimeOutcome, decode_call_input,
-    encode_call_reply,
+    IncomingFault, LeafRuntime, LeafRuntimeError, OutgoingData, RoutedRuntimeOutcome,
+    RuntimeOutcome, decode_call_input, encode_call_reply,
 };
 pub use endpoint::{
     ChildRoute, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafSpec, LocalEvent,
@@ -25,7 +25,8 @@ pub use endpoint::{
 };
 pub use hook::{ActiveHook, HookConflict, HookKey, HookTable, PendingHook};
 pub use leaf::{
-    CallProcedures, LeafBinding, LeafDeclaration, ProtocolLeaf, derive_leaf_name, leaf_spec_of,
+    CallProcedures, LeafBinding, LeafDeclaration, ProtocolLeaf, RouterLeaf, derive_leaf_name,
+    leaf_spec_of,
 };
 pub use procedure::{
     Procedure, ProcedureEffect, ProcedureMetadata, ProcedureRuntime, ProcedureRuntimeError,

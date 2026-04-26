@@ -11,6 +11,6 @@ mod introspection;
 mod receive;
 
 pub use core::{
-    ChildRoute, Endpoint, EndpointError, EndpointOutcome, Ingress, LeafSpec, LocalEvent,
+    ChildRoute, Endpoint, EndpointError, EndpointOutcome, ForwardedFrame, Ingress, LeafSpec, LocalEvent,
     ProtocolEndpoint,
 };

@@ -7,7 +7,9 @@
 
 use alloc::{string::String, vec::Vec};
 
-use super::LeafSpec;
+use crate::protocol::FrameBytes;
+
+use super::{ChildRoute, LeafSpec, ProtocolEndpoint};
 
 /// Static metadata for one application-defined protocol leaf.
 ///
@@ -167,7 +169,7 @@ pub trait LeafBinding: ProtocolLeaf {
 /// impl CallProcedures for ExampleLeaf {
 ///     type Error = core::convert::Infallible;
 ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
-///     fn dispatch_call(&mut self, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
+///     fn dispatch_call(&mut self, _endpoint: &mut unshell::protocol::tree::ProtocolEndpoint, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
 ///         Ok(unshell::protocol::tree::CallReply::NoReply)
 ///     }
 /// }
@@ -188,19 +190,75 @@ pub trait CallProcedures: LeafDeclaration {
     /// use unshell::protocol::tree::{CallProcedures, DispatchError, IncomingCall, ProtocolLeaf};
     /// struct ExampleLeaf;
     /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
-    /// impl CallProcedures for ExampleLeaf {
-    ///     type Error = core::convert::Infallible;
-    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
-    ///     fn dispatch_call(&mut self, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
-    ///         Ok(unshell::protocol::tree::CallReply::NoReply)
-    ///     }
-    /// }
+/// impl CallProcedures for ExampleLeaf {
+///     type Error = core::convert::Infallible;
+///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+///     fn dispatch_call(&mut self, _endpoint: &mut unshell::protocol::tree::ProtocolEndpoint, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
+///         Ok(unshell::protocol::tree::CallReply::NoReply)
+///     }
+/// }
     /// # let _ = ExampleLeaf;
     /// ```
     fn dispatch_call(
         &mut self,
+        endpoint: &mut ProtocolEndpoint,
         call: crate::protocol::tree::IncomingCall,
     ) -> Result<crate::protocol::tree::CallReply, crate::protocol::tree::DispatchError<Self::Error>>;
+}
+
+/// Router-facing transport hooks for leaves that own parent/child connections.
+///
+/// What it is: an opt-in trait for leaves that want to act as the transport layer
+/// for one endpoint's forwarded traffic.
+///
+/// Why it exists: ordinary leaves only need validated local events, but a router
+/// leaf also needs to know its active parent/children and where to physically send
+/// frames chosen by the endpoint's routing logic.
+///
+/// # Example
+/// ```rust
+/// use unshell::protocol::FrameBytes;
+/// use unshell::protocol::tree::{ChildRoute, RouterLeaf};
+/// #[derive(Default)]
+/// struct DemoRouter {
+///     parent: Option<Vec<String>>,
+///     children: Vec<ChildRoute>,
+/// }
+/// impl unshell::protocol::tree::ProtocolLeaf for DemoRouter {
+///     fn leaf_name() -> String { "org.example.v1.router".into() }
+/// }
+/// impl RouterLeaf for DemoRouter {
+///     type RouteError = core::convert::Infallible;
+///
+///     fn parent_path(&self) -> Option<&[String]> { self.parent.as_deref() }
+///     fn child_routes(&self) -> &[ChildRoute] { &self.children }
+///     fn route_to_parent(&mut self, _local_path: &[String], _frame: FrameBytes) -> Result<(), Self::RouteError> { Ok(()) }
+///     fn route_to_child(&mut self, _child_path: &[String], _frame: FrameBytes) -> Result<(), Self::RouteError> { Ok(()) }
+/// }
+/// ```
+pub trait RouterLeaf: ProtocolLeaf {
+    /// Transport-specific error surfaced while handing a frame to the chosen link.
+    type RouteError;
+
+    /// Returns the currently connected direct parent path, if any.
+    fn parent_path(&self) -> Option<&[String]>;
+
+    /// Returns the currently connected direct child routes.
+    fn child_routes(&self) -> &[ChildRoute];
+
+    /// Sends one routed frame toward the direct parent connection.
+    fn route_to_parent(
+        &mut self,
+        local_path: &[String],
+        frame: FrameBytes,
+    ) -> Result<(), Self::RouteError>;
+
+    /// Sends one routed frame toward the chosen direct child connection.
+    fn route_to_child(
+        &mut self,
+        child_path: &[String],
+        frame: FrameBytes,
+    ) -> Result<(), Self::RouteError>;
 }
 
 /// Builds one canonical dotted leaf id from crate-local metadata plus optional
