@@ -500,10 +500,7 @@ where
             };
             // Collect keys first and temporarily remove each session so procedure callbacks can
             // mutate the leaf without fighting the session-table borrow.
-            match self.poll_session(key, session)? {
-                Some(session_frames) => frames.extend(session_frames),
-                None => continue,
-            }
+            frames.extend(self.poll_session(key, session)?);
         }
 
         Ok(ProcedureRuntimeOutcome {
@@ -532,15 +529,27 @@ where
     fn poll_session(
         &mut self,
         key: HookKey,
+        session: P,
+    ) -> Result<Vec<FrameBytes>, ProcedureRuntimeError<P::Error>> {
+        self.advance_session(key, session, P::poll)
+    }
+
+    fn advance_session<F>(
+        &mut self,
+        key: HookKey,
         mut session: P,
-    ) -> Result<Option<Vec<FrameBytes>>, ProcedureRuntimeError<P::Error>> {
-        let effect = match P::poll(&mut self.leaf, &mut session) {
+        step: F,
+    ) -> Result<Vec<FrameBytes>, ProcedureRuntimeError<P::Error>>
+    where
+        F: FnOnce(&mut L, &mut P) -> Result<ProcedureEffect, P::Error>,
+    {
+        let effect = match step(&mut self.leaf, &mut session) {
             Ok(effect) => self.ensure_terminal_packet(&key, effect),
             Err(error) => {
                 let _ = P::close(&mut self.leaf, session);
                 let frames = self.emit_internal_fault(Some(key.clone()))?;
                 let _ = error;
-                return Ok(Some(frames));
+                return Ok(frames);
             }
         };
 
@@ -564,7 +573,7 @@ where
             let _ = P::close(&mut self.leaf, session);
         }
 
-        Ok(Some(outgoing))
+        Ok(outgoing)
     }
 
     fn process_local_event(
@@ -628,45 +637,20 @@ where
         message: crate::protocol::DataMessage,
         hook_key: HookKey,
     ) -> Result<ProcedureRuntimeOutcome, ProcedureRuntimeError<P::Error>> {
-        let Some(mut session) = self.leaf.procedure_sessions().remove(&hook_key) else {
+        let Some(session) = self.leaf.procedure_sessions().remove(&hook_key) else {
             return Ok(ProcedureRuntimeOutcome::default());
         };
-        let effect = match P::on_data(
-            &mut self.leaf,
-            &mut session,
-            IncomingData {
-                header,
-                message,
-                hook_key: hook_key.clone(),
-            },
-        ) {
-            Ok(effect) => self.ensure_terminal_packet(&hook_key, effect),
-            Err(error) => {
-                let _ = P::close(&mut self.leaf, session);
-                let frames = self.emit_internal_fault(Some(hook_key.clone()))?;
-                let _ = error;
-                return Ok(ProcedureRuntimeOutcome {
-                    frames,
-                    dropped: false,
-                });
-            }
-        };
-        let outgoing = match self.emit_outgoing(effect.outgoing) {
-            Ok(outgoing) => outgoing.frames,
-            Err(error) => {
-                if !effect.close_session {
-                    self.leaf.procedure_sessions().insert(hook_key, session);
-                } else {
-                    let _ = P::close(&mut self.leaf, session);
-                }
-                return Err(error);
-            }
-        };
-        if !effect.close_session {
-            self.leaf.procedure_sessions().insert(hook_key, session);
-        } else {
-            let _ = P::close(&mut self.leaf, session);
-        }
+        let outgoing = self.advance_session(hook_key.clone(), session, |leaf, session| {
+            P::on_data(
+                leaf,
+                session,
+                IncomingData {
+                    header,
+                    message,
+                    hook_key,
+                },
+            )
+        })?;
         Ok(ProcedureRuntimeOutcome {
             frames: outgoing,
             dropped: false,

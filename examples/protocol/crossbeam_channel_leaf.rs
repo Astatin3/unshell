@@ -18,31 +18,9 @@ use unshell::protocol::tree::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (mut agent, root_to_agent) = ChannelNode::new(path(&["agent"]));
-    let (mut child, agent_to_child) = ChannelNode::new(path(&["agent", "child"]));
-    let (agent_to_root, root_rx) = unbounded();
+    let mut network = ChannelNetwork::new()?;
 
-    let mut root = ProtocolEndpoint::new(
-        Vec::new(),
-        None,
-        vec![ChildRoute::registered(path(&["agent"]))],
-        Vec::new(),
-    );
-
-    agent.stage_connection(Vec::new(), agent_to_root);
-    agent.connect_staged(Vec::new())?;
-
-    child.stage_connection(path(&["agent"]), root_to_agent.clone());
-    child.connect_staged(path(&["agent"]))?;
-
-    agent.stage_connection(path(&["agent", "child"]), agent_to_child);
-
-    call_root(
-        &mut root,
-        &root_to_agent,
-        &mut agent,
-        &mut child,
-        &root_rx,
+    network.call_root(
         path(&["agent"]),
         CrossbeamChannelLeaf::protocol_procedure_id("add_connection").expect("procedure exists"),
         encode_call_reply(&ConnectionRequest {
@@ -50,12 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         })?,
     )?;
 
-    let reply = call_root(
-        &mut root,
-        &root_to_agent,
-        &mut agent,
-        &mut child,
-        &root_rx,
+    let reply = network.call_root(
         path(&["agent", "child"]),
         CrossbeamChannelLeaf::protocol_procedure_id("get_connections").expect("procedure exists"),
         encode_call_reply(&())?,
@@ -66,6 +39,96 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("child children: {:?}", snapshot.children);
 
     Ok(())
+}
+
+struct ChannelNetwork {
+    root: ProtocolEndpoint,
+    root_to_agent: Sender<CrossbeamEnvelope>,
+    root_rx: Receiver<CrossbeamEnvelope>,
+    agent: ChannelNode,
+    child: ChannelNode,
+}
+
+impl ChannelNetwork {
+    fn new() -> Result<Self, Box<dyn Error>> {
+        let (mut agent, root_to_agent) = ChannelNode::new(path(&["agent"]));
+        let (mut child, agent_to_child) = ChannelNode::new(path(&["agent", "child"]));
+        let (agent_to_root, root_rx) = unbounded();
+
+        let root = ProtocolEndpoint::new(
+            Vec::new(),
+            None,
+            vec![ChildRoute::registered(path(&["agent"]))],
+            Vec::new(),
+        );
+
+        agent.stage_connection(Vec::new(), agent_to_root);
+        agent.connect_staged(Vec::new())?;
+
+        child.stage_connection(path(&["agent"]), root_to_agent.clone());
+        child.connect_staged(path(&["agent"]))?;
+
+        agent.stage_connection(path(&["agent", "child"]), agent_to_child);
+
+        Ok(Self {
+            root,
+            root_to_agent,
+            root_rx,
+            agent,
+            child,
+        })
+    }
+
+    fn call_root(
+        &mut self,
+        dst_path: Vec<String>,
+        procedure_id: String,
+        data: Vec<u8>,
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        let hook_id = self.root.allocate_hook_id();
+        let outcome = self.root.send_call(
+            dst_path,
+            Some(CrossbeamChannelLeaf::protocol_leaf_name()),
+            procedure_id,
+            Some(hook_id),
+            data,
+        )?;
+        let EndpointOutcome::Forward { frame, .. } = outcome else {
+            return Err("root call did not forward".into());
+        };
+        self.root_to_agent.send(CrossbeamEnvelope {
+            ingress: Ingress::Parent,
+            frame,
+        })?;
+
+        for _ in 0..16 {
+            let mut progress = 0usize;
+            progress += self.agent.drain()?;
+            progress += self.child.drain()?;
+
+            while let Ok(envelope) = self.root_rx.try_recv() {
+                progress += 1;
+                let outcome = self.root.receive(&envelope.ingress, envelope.frame)?;
+                if let EndpointOutcome::Local(event) = outcome {
+                    match event {
+                        unshell::protocol::tree::LocalEvent::Data { message, .. } => {
+                            return Ok(message.data);
+                        }
+                        unshell::protocol::tree::LocalEvent::Fault { message, .. } => {
+                            return Err(format!("routed call faulted: {:?}", message.fault).into());
+                        }
+                        unshell::protocol::tree::LocalEvent::Call { .. } => {}
+                    }
+                }
+            }
+
+            if progress == 0 {
+                break;
+            }
+        }
+
+        Err("timed out waiting for routed reply".into())
+    }
 }
 
 struct ChannelNode {
@@ -115,61 +178,6 @@ impl ChannelNode {
         }
         Ok(processed)
     }
-}
-
-fn call_root(
-    root: &mut ProtocolEndpoint,
-    root_to_agent: &Sender<CrossbeamEnvelope>,
-    agent: &mut ChannelNode,
-    child: &mut ChannelNode,
-    root_rx: &Receiver<CrossbeamEnvelope>,
-    dst_path: Vec<String>,
-    procedure_id: String,
-    data: Vec<u8>,
-) -> Result<Vec<u8>, Box<dyn Error>> {
-    let hook_id = root.allocate_hook_id();
-    let outcome = root.send_call(
-        dst_path,
-        Some(CrossbeamChannelLeaf::protocol_leaf_name()),
-        procedure_id,
-        Some(hook_id),
-        data,
-    )?;
-    let EndpointOutcome::Forward { frame, .. } = outcome else {
-        return Err("root call did not forward".into());
-    };
-    root_to_agent.send(CrossbeamEnvelope {
-        ingress: Ingress::Parent,
-        frame,
-    })?;
-
-    for _ in 0..16 {
-        let mut progress = 0usize;
-        progress += agent.drain()?;
-        progress += child.drain()?;
-
-        while let Ok(envelope) = root_rx.try_recv() {
-            progress += 1;
-            let outcome = root.receive(&envelope.ingress, envelope.frame)?;
-            if let EndpointOutcome::Local(event) = outcome {
-                match event {
-                    unshell::protocol::tree::LocalEvent::Data { message, .. } => {
-                        return Ok(message.data);
-                    }
-                    unshell::protocol::tree::LocalEvent::Fault { message, .. } => {
-                        return Err(format!("routed call faulted: {:?}", message.fault).into());
-                    }
-                    unshell::protocol::tree::LocalEvent::Call { .. } => {}
-                }
-            }
-        }
-
-        if progress == 0 {
-            break;
-        }
-    }
-
-    Err("timed out waiting for routed reply".into())
 }
 
 fn path(parts: &[&str]) -> Vec<String> {
