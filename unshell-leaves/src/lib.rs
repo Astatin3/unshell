@@ -29,13 +29,14 @@ pub use unshell_protocol as protocol;
 /// use unshell_leaves::role_leaf;
 /// mod endpoint { pub struct DemoEndpoint; }
 /// mod tui { pub struct DemoTui; }
+/// # #[cfg(not(all(feature = "leaf_endpoint", feature = "leaf_tui")))]
 /// role_leaf! {
 ///     pub type DemoLeaf {
 ///         endpoint => endpoint::DemoEndpoint,
 ///         tui => tui::DemoTui,
 ///     }
 /// }
-/// # #[cfg(feature = "leaf_endpoint")]
+/// # #[cfg(all(feature = "leaf_endpoint", not(feature = "leaf_tui")))]
 /// # let _ = core::marker::PhantomData::<DemoLeaf>;
 /// ```
 #[macro_export]

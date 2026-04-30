@@ -365,27 +365,6 @@ impl HookTable {
         self.active.get(key)
     }
 
-    /// Returns the mutable active hook for `key`, if present.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unshell::protocol::tree::{ActiveHook, HookKey, HookTable};
-    /// let mut hooks = HookTable::default();
-    /// let key = HookKey::new(vec!["root".into()], 1);
-    /// hooks.insert_active(key.clone(), ActiveHook {
-    ///     peer_path: vec!["worker".into()],
-    ///     procedure_id: "example.service.v1.invoke".into(),
-    ///     local_ended: false,
-    ///     peer_ended: false,
-    /// })?;
-    /// hooks.active_mut(&key).unwrap().peer_ended = true;
-    /// assert!(hooks.active(&key).unwrap().peer_ended);
-    /// # Ok::<(), unshell::protocol::tree::HookConflict>(())
-    /// ```
-    pub fn active_mut(&mut self, key: &HookKey) -> Option<&mut ActiveHook> {
-        self.active.get_mut(key)
-    }
-
     /// Resolves an active hook from either side of the conversation.
     ///
     /// The host side addresses hooks directly by `(return_path, hook_id)`. Peer-originated
@@ -447,7 +426,7 @@ impl HookTable {
     /// # Ok::<(), unshell::protocol::tree::HookConflict>(())
     /// ```
     pub fn mark_local_end(&mut self, key: &HookKey) -> bool {
-        let Some(active) = self.active_mut(key) else {
+        let Some(active) = self.active.get_mut(key) else {
             return false;
         };
         active.local_ended = true;
@@ -474,7 +453,7 @@ impl HookTable {
     /// # Ok::<(), unshell::protocol::tree::HookConflict>(())
     /// ```
     pub fn mark_peer_end(&mut self, key: &HookKey) -> bool {
-        let Some(active) = self.active_mut(key) else {
+        let Some(active) = self.active.get_mut(key) else {
             return false;
         };
         active.peer_ended = true;
