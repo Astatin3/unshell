@@ -281,7 +281,11 @@ impl ProtocolEndpoint {
     /// ```
     pub fn upsert_child_route(&mut self, route: ChildRoute) -> Result<(), EndpointError> {
         self.validate_direct_child_path(&route.path)?;
-        if let Some(existing) = self.children.iter_mut().find(|child| child.path == route.path) {
+        if let Some(existing) = self
+            .children
+            .iter_mut()
+            .find(|child| child.path == route.path)
+        {
             *existing = route;
         } else {
             self.children.push(route);
@@ -371,23 +375,27 @@ impl ProtocolEndpoint {
 
     fn validate_direct_parent_path(&self, parent_path: &[String]) -> Result<(), EndpointError> {
         let Some((_, expected_parent)) = self.path.split_last() else {
-            return Err(EndpointError::Validation(ValidationError::TopologyInvariant(
-                "root endpoints cannot declare a parent path",
-            )));
+            return Err(EndpointError::Validation(
+                ValidationError::TopologyInvariant("root endpoints cannot declare a parent path"),
+            ));
         };
         if parent_path != expected_parent {
-            return Err(EndpointError::Validation(ValidationError::TopologyInvariant(
-                "parent path must equal the direct path prefix of this endpoint",
-            )));
+            return Err(EndpointError::Validation(
+                ValidationError::TopologyInvariant(
+                    "parent path must equal the direct path prefix of this endpoint",
+                ),
+            ));
         }
         Ok(())
     }
 
     fn validate_direct_child_path(&self, child_path: &[String]) -> Result<(), EndpointError> {
         if child_path.len() != self.path.len() + 1 || !child_path.starts_with(&self.path) {
-            return Err(EndpointError::Validation(ValidationError::TopologyInvariant(
-                "child path must be one direct descendant of this endpoint",
-            )));
+            return Err(EndpointError::Validation(
+                ValidationError::TopologyInvariant(
+                    "child path must be one direct descendant of this endpoint",
+                ),
+            ));
         }
         Ok(())
     }

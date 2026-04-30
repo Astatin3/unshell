@@ -17,8 +17,27 @@ pub use unshell_protocol as protocol;
 
 /// Re-exports one role-specific type behind a stable public alias.
 ///
-/// This keeps consumers on a single name such as `RemoteShell` while still
-/// compiling only the role implementation needed by the current binary.
+/// What it is: a small macro that binds one public type alias to either an
+/// endpoint-facing leaf host or a TUI-facing leaf host based on active features.
+///
+/// Why it exists: downstream code should be able to import one stable name such as
+/// `RemoteShell` without caring which concrete role implementation was compiled for
+/// the current binary.
+///
+/// # Example
+/// ```rust
+/// use unshell_leaves::role_leaf;
+/// mod endpoint { pub struct DemoEndpoint; }
+/// mod tui { pub struct DemoTui; }
+/// role_leaf! {
+///     pub type DemoLeaf {
+///         endpoint => endpoint::DemoEndpoint,
+///         tui => tui::DemoTui,
+///     }
+/// }
+/// # #[cfg(feature = "leaf_endpoint")]
+/// # let _ = core::marker::PhantomData::<DemoLeaf>;
+/// ```
 #[macro_export]
 macro_rules! role_leaf {
     (
@@ -47,9 +66,25 @@ macro_rules! role_leaf {
 
 /// Minimal leaf-specific TUI contract.
 ///
-/// The initial implementation intentionally stays transport-agnostic. A CLI can
-/// feed validated protocol `DataMessage` values into a leaf TUI and ask it for a
-/// textual frame without depending on a specific rendering crate yet.
+/// What it is: the smallest public trait a leaf-specific user interface needs in
+/// order to consume protocol `DataMessage` values and render a textual frame.
+///
+/// Why it exists: leaf UIs should remain transport-agnostic and renderer-agnostic,
+/// so callers can experiment with CLIs and TUIs without coupling the core leaf API
+/// to any one terminal framework.
+///
+/// # Example
+/// ```rust
+/// use unshell_leaves::{LeafTui, TuiError};
+/// use unshell_leaves::protocol::DataMessage;
+/// struct DemoTui;
+/// impl LeafTui for DemoTui {
+///     fn leaf_name(&self) -> String { "org.example.v1.demo".into() }
+///     fn handle_data(&mut self, _message: &DataMessage) -> Result<(), TuiError> { Ok(()) }
+///     fn render(&self) -> String { String::from("demo") }
+/// }
+/// assert_eq!(DemoTui.render(), "demo");
+/// ```
 pub trait LeafTui {
     /// Returns the canonical protocol leaf name this UI understands.
     fn leaf_name(&self) -> String;
@@ -62,6 +97,18 @@ pub trait LeafTui {
 }
 
 /// Lightweight error used by the leaf TUI surface.
+///
+/// What it is: a small owned-string error for UI adapters built on [`LeafTui`].
+///
+/// Why it exists: the TUI surface should not force downstream UIs into a heavier
+/// error dependency just to report leaf-local rendering or decoding failures.
+///
+/// # Example
+/// ```rust
+/// use unshell_leaves::TuiError;
+/// let error = TuiError::new("invalid frame");
+/// assert_eq!(error.to_string(), "invalid frame");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TuiError {
     message: String,
@@ -84,4 +131,5 @@ impl core::fmt::Display for TuiError {
 
 impl core::error::Error for TuiError {}
 
+pub mod crossbeam_channel;
 pub mod remote_shell;

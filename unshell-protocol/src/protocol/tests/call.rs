@@ -276,8 +276,7 @@ fn generated_call_procedure_can_query_and_mutate_endpoint_topology() {
         .send_call(
             path(&["agent"]),
             Some(TopologyLeaf::protocol_leaf_name()),
-            TopologyLeaf::protocol_procedure_id("remove_child")
-                .expect("suffix should resolve"),
+            TopologyLeaf::protocol_procedure_id("remove_child").expect("suffix should resolve"),
             Some(remove_hook),
             encode_call_reply(&ChildRequest {
                 child_path: path(&["agent", "child"]),

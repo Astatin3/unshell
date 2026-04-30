@@ -12,6 +12,7 @@ leaf_tui = []
 [dependencies]
 rkyv = { workspace = true }
 portable-pty = { workspace = true }
+crossbeam-channel = { workspace = true }
 unshell-macros = { workspace = true }
 unshell-protocol = { workspace = true }
 

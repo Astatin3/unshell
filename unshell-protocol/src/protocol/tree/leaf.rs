@@ -190,13 +190,13 @@ pub trait CallProcedures: LeafDeclaration {
     /// use unshell::protocol::tree::{CallProcedures, DispatchError, IncomingCall, ProtocolLeaf};
     /// struct ExampleLeaf;
     /// impl ProtocolLeaf for ExampleLeaf { fn leaf_name() -> String { "org.example.v1.echo".into() } }
-/// impl CallProcedures for ExampleLeaf {
-///     type Error = core::convert::Infallible;
-///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
-///     fn dispatch_call(&mut self, _endpoint: &mut unshell::protocol::tree::ProtocolEndpoint, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
-///         Ok(unshell::protocol::tree::CallReply::NoReply)
-///     }
-/// }
+    /// impl CallProcedures for ExampleLeaf {
+    ///     type Error = core::convert::Infallible;
+    ///     fn procedure_suffixes() -> &'static [&'static str] { &["invoke"] }
+    ///     fn dispatch_call(&mut self, _endpoint: &mut unshell::protocol::tree::ProtocolEndpoint, _call: IncomingCall) -> Result<unshell::protocol::tree::CallReply, DispatchError<Self::Error>> {
+    ///         Ok(unshell::protocol::tree::CallReply::NoReply)
+    ///     }
+    /// }
     /// # let _ = ExampleLeaf;
     /// ```
     fn dispatch_call(

@@ -253,7 +253,9 @@ fn expand_invocation(
     }})
 }
 
-fn split_endpoint_arg<'a>(inputs: &[&'a FnArg]) -> Result<(Option<EndpointArgKind>, Vec<&'a FnArg>)> {
+fn split_endpoint_arg<'a>(
+    inputs: &[&'a FnArg],
+) -> Result<(Option<EndpointArgKind>, Vec<&'a FnArg>)> {
     let Some(first) = inputs.first() else {
         return Ok((None, Vec::new()));
     };

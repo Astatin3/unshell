@@ -9,11 +9,11 @@ use crate::protocol::{
     CallMessage, DataMessage, FrameBytes, FrameError, HookTarget, PacketHeader, ProtocolFault,
 };
 
+use super::endpoint::ForwardedFrame;
 use super::{
     Endpoint, EndpointError, HookKey, Ingress, LocalEvent, ProtocolEndpoint, ProtocolLeaf,
     RouteDecision, RouterLeaf,
 };
-use super::endpoint::ForwardedFrame;
 
 /// One typed incoming `Call` passed to a leaf procedure.
 ///
@@ -665,9 +665,10 @@ where
                 packet.data,
                 packet.end_hook,
             )?;
-            runtime
-                .forwarded
-                .extend(self.process_endpoint_outcome_routed(endpoint_outcome)?.forwarded);
+            runtime.forwarded.extend(
+                self.process_endpoint_outcome_routed(endpoint_outcome)?
+                    .forwarded,
+            );
         }
         Ok(runtime)
     }

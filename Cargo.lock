@@ -1440,6 +1440,7 @@ name = "unshell"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "crossbeam-channel",
  "rkyv",
  "static_init",
  "thiserror 2.0.18",
@@ -1452,6 +1453,7 @@ dependencies = [
 name = "unshell-leaves"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
  "portable-pty",
  "rkyv",
  "unshell-macros",
