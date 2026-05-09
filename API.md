@@ -144,6 +144,8 @@ Primary operations:
 impl<T: Transport> NodeRuntime<T> {
     pub fn tick(&mut self, budget: TickBudget) -> Result<TickOutcome, NodeRuntimeError<T::Error>>;
 
+    pub fn drain_local_effects(&mut self) -> impl Iterator<Item = RuntimeEffect>;
+
     pub fn receive_frame(
         &mut self,
         connection: ConnectionId,
@@ -168,6 +170,7 @@ Rules:
 - Callers never pass `Ingress` into `NodeRuntime`.
 - Runtime counts per-tick progress, not retained backlog.
 - Local events should be dispatched to leaves, not retained forever.
+- Until leaf dispatch exists, callers may drain local/dropped effects; outbound sends remain runtime-owned.
 - Send failures must not drop unrelated queued effects.
 
 ## Leaf API

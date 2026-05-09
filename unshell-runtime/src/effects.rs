@@ -53,4 +53,63 @@ impl EffectQueue {
     pub fn drain(&mut self) -> impl Iterator<Item = RuntimeEffect> + '_ {
         self.entries.drain(..)
     }
+
+    /// Drains local-dispatch effects in FIFO order, leaving outbound sends queued.
+    pub fn drain_local(&mut self) -> impl Iterator<Item = RuntimeEffect> {
+        let mut drained = Vec::new();
+        let mut retained = Vec::with_capacity(self.entries.len());
+
+        for effect in self.entries.drain(..) {
+            match effect {
+                RuntimeEffect::Local(_) | RuntimeEffect::Dropped => drained.push(effect),
+                RuntimeEffect::SendFrame { .. } => retained.push(effect),
+            }
+        }
+
+        self.entries = retained;
+        drained.into_iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drain_local_leaves_outbound_sends_queued() {
+        let first = ConnectionId::new(1);
+        let second = ConnectionId::new(2);
+        let mut queue = EffectQueue::new();
+
+        queue.push(RuntimeEffect::SendFrame {
+            connection: first,
+            generation: ConnectionGeneration::INITIAL,
+            frame: FrameBytes::new(),
+        });
+        queue.push(RuntimeEffect::Dropped);
+        queue.push(RuntimeEffect::SendFrame {
+            connection: second,
+            generation: ConnectionGeneration::INITIAL,
+            frame: FrameBytes::new(),
+        });
+        queue.push(RuntimeEffect::Dropped);
+
+        let drained: Vec<_> = queue.drain_local().collect();
+
+        assert_eq!(drained.len(), 2);
+        assert!(
+            drained
+                .iter()
+                .all(|effect| matches!(effect, RuntimeEffect::Dropped))
+        );
+        assert_eq!(queue.entries().len(), 2);
+        assert!(matches!(
+            queue.entries()[0],
+            RuntimeEffect::SendFrame { connection, .. } if connection == first
+        ));
+        assert!(matches!(
+            queue.entries()[1],
+            RuntimeEffect::SendFrame { connection, .. } if connection == second
+        ));
+    }
 }

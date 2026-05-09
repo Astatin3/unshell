@@ -141,6 +141,13 @@ impl<T> NodeRuntime<T> {
     pub fn effects(&self) -> &[RuntimeEffect] {
         self.effects.entries()
     }
+
+    /// Drains queued local-dispatch effects in FIFO order.
+    ///
+    /// Outbound frame effects remain queued for runtime-owned transport flushing.
+    pub fn drain_local_effects(&mut self) -> impl Iterator<Item = RuntimeEffect> {
+        self.effects.drain_local()
+    }
 }
 
 impl<T> NodeRuntime<T>
@@ -650,6 +657,58 @@ mod tests {
     }
 
     #[test]
+    fn drained_local_event_is_not_peeked_or_recounted() {
+        let parent = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            parent,
+            ConnectionDirection::Parent,
+            vec![],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let mut endpoint =
+            ProtocolEndpoint::new(vec![String::from("agent")], Some(vec![]), vec![], vec![]);
+        endpoint
+            .add_endpoint_procedure("org.example.v1.echo.invoke")
+            .expect("procedure registers");
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: None,
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: None,
+            },
+        )
+        .expect("frame encodes");
+
+        let transport = RecordingTransport {
+            inbound: Some((parent, frame)),
+            sent: Vec::new(),
+            fail_send: false,
+        };
+        let mut runtime = NodeRuntime::new(EndpointState::new(endpoint), connections, transport);
+
+        let first = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(first.local_events, 1);
+
+        let drained: Vec<_> = runtime.drain_local_effects().collect();
+        assert_eq!(drained.len(), 1);
+        assert!(matches!(drained[0], RuntimeEffect::Local(_)));
+        assert!(runtime.effects().is_empty());
+
+        let second = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(second.local_events, 0);
+        assert!(runtime.effects().is_empty());
+    }
+
+    #[test]
     fn tick_counts_only_new_dropped_frames() {
         let child = ConnectionId::new(1);
         let mut connections = Connections::new();
@@ -695,5 +754,57 @@ mod tests {
         let second = runtime.tick(TickBudget::default()).expect("tick succeeds");
         assert_eq!(second.dropped_frames, 0);
         assert!(matches!(runtime.effects()[0], RuntimeEffect::Dropped));
+    }
+
+    #[test]
+    fn drained_dropped_effect_is_not_peeked_or_recounted() {
+        let child = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            child,
+            ConnectionDirection::Child,
+            vec![String::from("agent"), String::from("kid")],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let mut endpoint =
+            ProtocolEndpoint::new(vec![String::from("agent")], Some(vec![]), vec![], vec![]);
+        endpoint
+            .add_endpoint_procedure("org.example.v1.echo.invoke")
+            .expect("procedure registers");
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![String::from("agent"), String::from("kid")],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: None,
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: None,
+            },
+        )
+        .expect("frame encodes");
+
+        let transport = RecordingTransport {
+            inbound: Some((child, frame)),
+            sent: Vec::new(),
+            fail_send: false,
+        };
+        let mut runtime = NodeRuntime::new(EndpointState::new(endpoint), connections, transport);
+
+        let first = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(first.dropped_frames, 1);
+
+        let drained: Vec<_> = runtime.drain_local_effects().collect();
+        assert_eq!(drained.len(), 1);
+        assert!(matches!(drained[0], RuntimeEffect::Dropped));
+        assert!(runtime.effects().is_empty());
+
+        let second = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(second.dropped_frames, 0);
+        assert!(runtime.effects().is_empty());
     }
 }
