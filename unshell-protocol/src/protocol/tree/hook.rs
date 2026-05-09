@@ -130,7 +130,7 @@ pub struct HookConflict;
 /// }).unwrap();
 /// assert_eq!(hooks.pending_len(), 1);
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct HookTable {
     pending: BTreeMap<HookKey, PendingHook>,
     active: BTreeMap<HookKey, ActiveHook>,

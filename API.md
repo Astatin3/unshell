@@ -329,9 +329,9 @@ connection closes or unregisters
 
 ## Known Gaps In The Current Branch
 
-- `LeafAction::SendHookData` is reduced by `NodeRuntime`; other action variants
-  are still unsupported and must remain queued when encountered.
-- Local outbound calls through the runtime are not implemented.
+- `LeafAction::SendCall` and `LeafAction::SendHookData` are reduced by
+  `NodeRuntime`; hook fault and connection action variants are still unsupported
+  and must remain queued when encountered.
 - Hook fault actions through the runtime are not implemented.
 - Connection actions through the runtime are not implemented.
 - Disconnect does not yet clean hooks, sessions, route state, and queued effects.
@@ -342,11 +342,11 @@ connection closes or unregisters
 
 Implement the next narrow leaf-action path:
 
-1. Apply queued `LeafAction::SendCall` through endpoint packet state.
-2. Preserve hook reservation and routing failure semantics without dropping
-   unprocessed actions.
-3. Add tests proving a local leaf can initiate an outbound call and receive the
-   response through the existing dispatch path.
+1. Apply queued `LeafAction::FailHook` through endpoint packet state.
+2. Preserve pending/active hook cleanup semantics without dropping unprocessed
+   actions.
+3. Keep connection registration actions queued until runtime-owned disconnect
+   cleanup can update connections, routes, hooks, and queued effects atomically.
 
 That slice should continue the one-variant-at-a-time reducer approach without
-implementing hook faults or connection actions early.
+implementing connection actions early.

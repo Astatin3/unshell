@@ -311,7 +311,7 @@ pub trait Endpoint {
 /// let endpoint = ProtocolEndpoint::new(vec!["worker".into()], Some(Vec::new()), Vec::new(), Vec::new());
 /// let _ = endpoint;
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ProtocolEndpoint {
     pub(crate) local_id: Option<String>,
     pub(crate) path: Vec<String>,
