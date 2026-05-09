@@ -68,6 +68,25 @@ impl EndpointState {
         &mut self.endpoint
     }
 
+    /// Returns the endpoint's current route decision for an absolute path.
+    #[must_use]
+    pub fn route_decision(&self, dst_path: &[alloc::string::String]) -> RouteDecision {
+        self.endpoint.route_decision(dst_path)
+    }
+
+    /// Builds and routes one hook-data packet through the wrapped endpoint state.
+    pub fn send_hook_data(
+        &mut self,
+        dst_path: alloc::vec::Vec<alloc::string::String>,
+        hook_id: u64,
+        procedure_id: alloc::string::String,
+        data: alloc::vec::Vec<u8>,
+        end_hook: bool,
+    ) -> Result<EndpointOutcome, EndpointError> {
+        self.endpoint
+            .send_data(dst_path, hook_id, procedure_id, data, end_hook)
+    }
+
     /// Consumes the wrapper and returns the underlying protocol endpoint.
     #[must_use]
     pub fn into_endpoint(self) -> ProtocolEndpoint {

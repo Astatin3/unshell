@@ -133,8 +133,17 @@ impl ProtocolEndpoint {
         Ok(EndpointOutcome::Dropped)
     }
 
-    pub(crate) fn decide_route(&self, dst_path: &[String]) -> RouteDecision {
+    /// Returns the current route decision for an absolute destination path.
+    ///
+    /// Runtime owners use this to validate transport availability before invoking
+    /// endpoint operations that also mutate hook state.
+    #[must_use]
+    pub fn route_decision(&self, dst_path: &[String]) -> RouteDecision {
         self.routing.route(dst_path)
+    }
+
+    pub(crate) fn decide_route(&self, dst_path: &[String]) -> RouteDecision {
+        self.route_decision(dst_path)
     }
 
     /// Returns whether one `src_path` is topologically valid for the ingress side that delivered

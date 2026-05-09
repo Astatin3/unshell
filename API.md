@@ -168,6 +168,10 @@ impl<T, LeafError> NodeRuntime<T, LeafError> {
 
     pub fn dispatch_local_effects(&mut self) -> Result<usize, LeafDispatchError<LeafError>>;
 
+    pub fn reduce_leaf_actions(&mut self) -> Result<usize, NodeRuntimeError<T::Error>>
+    where
+        T: Transport;
+
     pub fn drain_leaf_actions(&mut self) -> impl Iterator<Item = (LeafId, LeafAction)>;
 }
 
@@ -325,21 +329,24 @@ connection closes or unregisters
 
 ## Known Gaps In The Current Branch
 
-- `LeafAction` values are queued by `LeafContext` but not yet applied by
-  `NodeRuntime`.
+- `LeafAction::SendHookData` is reduced by `NodeRuntime`; other action variants
+  are still unsupported and must remain queued when encountered.
 - Local outbound calls through the runtime are not implemented.
+- Hook fault actions through the runtime are not implemented.
+- Connection actions through the runtime are not implemented.
 - Disconnect does not yet clean hooks, sessions, route state, and queued effects.
 - Child ingress still allocates because the existing `Ingress::Child` owns a
   `Vec<String>`.
 
 ## Next Implementation Slice
 
-Implement one narrow end-to-end path:
+Implement the next narrow leaf-action path:
 
-1. Apply queued `LeafAction::SendHookData` through endpoint packet state.
-2. Route the produced frame through `Transport`.
-3. Add tests proving a leaf reply is framed and
-   sent through a registered connection.
+1. Apply queued `LeafAction::SendCall` through endpoint packet state.
+2. Preserve hook reservation and routing failure semantics without dropping
+   unprocessed actions.
+3. Add tests proving a local leaf can initiate an outbound call and receive the
+   response through the existing dispatch path.
 
-That slice forces the real architecture to work without overbuilding the rest of
-the migration.
+That slice should continue the one-variant-at-a-time reducer approach without
+implementing hook faults or connection actions early.
