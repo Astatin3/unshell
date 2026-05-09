@@ -1,5 +1,6 @@
 //! Leaf-facing runtime types.
 
+use crate::alloc::boxed::Box;
 use crate::alloc::string::String;
 use crate::alloc::vec::Vec;
 use crate::context::LeafContext;
@@ -106,5 +107,71 @@ pub trait Leaf {
     /// Gives the leaf one bounded opportunity to request local work.
     fn poll(&mut self, _ctx: &mut LeafContext<'_>) -> Result<(), Self::Error> {
         Ok(())
+    }
+}
+
+/// One leaf handler registered with a runtime-local dispatch key.
+///
+/// The id is the packet `dst_leaf` name used by [`unshell_protocol::tree::LocalEvent`]
+/// call headers. The runtime keeps this intentionally small: it only finds the
+/// target callback and records requested [`crate::context::LeafAction`] values.
+pub struct RegisteredLeaf<Error> {
+    id: LeafId,
+    capabilities: LeafCapabilities,
+    handler: Box<dyn Leaf<Error = Error>>,
+}
+
+impl<Error> RegisteredLeaf<Error> {
+    /// Creates a registered leaf from an explicit dispatch id and handler.
+    #[must_use]
+    pub fn new<L>(id: LeafId, handler: L) -> Self
+    where
+        L: Leaf<Error = Error> + 'static,
+    {
+        let capabilities = handler.capabilities().clone();
+        Self {
+            id,
+            capabilities,
+            handler: Box::new(handler),
+        }
+    }
+
+    /// Returns the dispatch id used for local packet matching.
+    #[must_use]
+    pub const fn id(&self) -> &LeafId {
+        &self.id
+    }
+
+    /// Returns the capabilities cached at registration time.
+    #[must_use]
+    pub const fn capabilities(&self) -> &LeafCapabilities {
+        &self.capabilities
+    }
+
+    /// Returns immutable access to the hosted leaf.
+    #[must_use]
+    pub fn handler(&self) -> &dyn Leaf<Error = Error> {
+        self.handler.as_ref()
+    }
+
+    /// Returns mutable access to the hosted leaf.
+    #[must_use]
+    pub fn handler_mut(&mut self) -> &mut dyn Leaf<Error = Error> {
+        self.handler.as_mut()
+    }
+
+    /// Returns all fields needed to invoke a leaf without cloning metadata.
+    pub(crate) fn dispatch_parts_mut(
+        &mut self,
+    ) -> (&LeafId, &LeafCapabilities, &mut dyn Leaf<Error = Error>) {
+        (&self.id, &self.capabilities, self.handler.as_mut())
+    }
+}
+
+impl<Error> core::fmt::Debug for RegisteredLeaf<Error> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RegisteredLeaf")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
     }
 }

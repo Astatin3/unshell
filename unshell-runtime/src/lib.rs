@@ -24,9 +24,10 @@ pub use context::{
     RuntimeCapability,
 };
 pub use effects::{EffectQueue, RuntimeEffect};
-pub use leaf::{Leaf, LeafCapabilities, LeafId, LeafPermissions};
+pub use leaf::{Leaf, LeafCapabilities, LeafId, LeafPermissions, RegisteredLeaf};
 pub use node::{
-    EndpointState, Node, NodeId, NodeRuntime, NodeRuntimeError, NodeState, TickBudget, TickOutcome,
+    EndpointState, LeafDispatchError, Node, NodeId, NodeRuntime, NodeRuntimeError, NodeState,
+    TickBudget, TickOutcome,
 };
 pub use transport::Transport;
 

@@ -118,11 +118,13 @@ Rules:
 effects.
 
 ```rust
-pub struct NodeRuntime<T> {
+pub struct NodeRuntime<T, LeafError = core::convert::Infallible> {
     endpoint: EndpointState,
     connections: Connections,
     transport: T,
     effects: EffectQueue,
+    leaves: Vec<RegisteredLeaf<LeafError>>,
+    leaf_actions: Vec<(LeafId, LeafAction)>,
 }
 
 pub struct TickBudget {
@@ -144,13 +146,29 @@ Primary operations:
 impl<T: Transport> NodeRuntime<T> {
     pub fn tick(&mut self, budget: TickBudget) -> Result<TickOutcome, NodeRuntimeError<T::Error>>;
 
-    pub fn drain_local_effects(&mut self) -> impl Iterator<Item = RuntimeEffect>;
-
     pub fn receive_frame(
         &mut self,
         connection: ConnectionId,
         frame: FrameBytes,
     ) -> Result<(), NodeRuntimeError<T::Error>>;
+}
+
+impl<T, LeafError> NodeRuntime<T, LeafError> {
+    pub fn new_with_leaf_error(
+        endpoint: EndpointState,
+        connections: Connections,
+        transport: T,
+    ) -> Self;
+
+    pub fn drain_local_effects(&mut self) -> impl Iterator<Item = RuntimeEffect>;
+
+    pub fn register_leaf<L>(&mut self, leaf: L) -> LeafId
+    where
+        L: Leaf<Error = LeafError> + 'static;
+
+    pub fn dispatch_local_effects(&mut self) -> Result<usize, LeafDispatchError<LeafError>>;
+
+    pub fn drain_leaf_actions(&mut self) -> impl Iterator<Item = (LeafId, LeafAction)>;
 }
 
 impl<T> NodeRuntime<T> {
@@ -190,7 +208,12 @@ Rules:
   unroutable or a route without a registered connection.
 - Runtime counts per-tick progress, not retained backlog.
 - Local events should be dispatched to leaves, not retained forever.
-- Until leaf dispatch exists, callers may drain local/dropped effects; outbound sends remain runtime-owned.
+- `dispatch_local_effects` attempts queued `RuntimeEffect::Local` values in FIFO
+  order, calls the matching leaf callback, records queued `LeafAction` values for
+  later reducer work, and leaves unmatched locals queued for a future attempt.
+- Dispatch does not consume `SendFrame` or `Dropped` effects. Outbound sends remain
+  runtime-owned, and drop notifications remain available to callers that drain
+  local/drop effects.
 - Send failures must not drop unrelated queued effects.
 
 ## Leaf API
@@ -275,7 +298,7 @@ parent frame for local endpoint
   -> EndpointState validates and returns Local(Call)
   -> NodeRuntime dispatches to matching Leaf::on_call
   -> leaf queues LeafAction values
-  -> runtime validates and applies actions
+  -> runtime retains actions for a later reducer pass
 ```
 
 ### Outbound Leaf Call
@@ -302,7 +325,6 @@ connection closes or unregisters
 
 ## Known Gaps In The Current Branch
 
-- `Leaf` is defined but not yet registered or dispatched by `NodeRuntime`.
 - `LeafAction` values are queued by `LeafContext` but not yet applied by
   `NodeRuntime`.
 - Local outbound calls through the runtime are not implemented.
@@ -314,11 +336,9 @@ connection closes or unregisters
 
 Implement one narrow end-to-end path:
 
-1. Add a leaf registry to `NodeRuntime`.
-2. Dispatch `RuntimeEffect::Local(Call)` into `Leaf::on_call`.
-3. Apply `LeafAction::SendHookData` through endpoint packet state.
-4. Route the produced frame through `Transport`.
-5. Add tests proving a local call reaches a leaf and the leaf reply is framed and
+1. Apply queued `LeafAction::SendHookData` through endpoint packet state.
+2. Route the produced frame through `Transport`.
+3. Add tests proving a leaf reply is framed and
    sent through a registered connection.
 
 That slice forces the real architecture to work without overbuilding the rest of

@@ -8,7 +8,7 @@ pub mod runtime;
 pub mod state;
 
 pub use packet::{EndpointState, PacketProcessor};
-pub use runtime::{NodeRuntime, NodeRuntimeError, TickBudget, TickOutcome};
+pub use runtime::{LeafDispatchError, NodeRuntime, NodeRuntimeError, TickBudget, TickOutcome};
 pub use state::NodeState;
 
 use crate::alloc::string::String;
