@@ -276,6 +276,50 @@ impl Connections {
             })
         })
     }
+
+    /// Makes every matching registered connection except `except` unroutable.
+    pub(crate) fn demote_registered_direction_except(
+        &mut self,
+        direction: ConnectionDirection,
+        except: ConnectionId,
+    ) {
+        for entry in &mut self.entries {
+            let Some(registered) = entry.state().registered() else {
+                continue;
+            };
+            if entry.id() == except || registered.direction() != direction {
+                continue;
+            }
+
+            entry.set_state(ConnectionState::Connected {
+                generation: registered.generation(),
+            });
+        }
+    }
+
+    /// Makes every matching registered peer path except `except` unroutable.
+    pub(crate) fn demote_registered_path_except(
+        &mut self,
+        direction: ConnectionDirection,
+        peer_path: &[String],
+        except: ConnectionId,
+    ) {
+        for entry in &mut self.entries {
+            let Some(registered) = entry.state().registered() else {
+                continue;
+            };
+            if entry.id() == except
+                || registered.direction() != direction
+                || registered.peer_path() != peer_path
+            {
+                continue;
+            }
+
+            entry.set_state(ConnectionState::Connected {
+                generation: registered.generation(),
+            });
+        }
+    }
 }
 
 /// Read-only connection table view exposed to leaf contexts.

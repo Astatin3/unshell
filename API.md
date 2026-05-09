@@ -152,6 +152,22 @@ impl<T: Transport> NodeRuntime<T> {
         frame: FrameBytes,
     ) -> Result<(), NodeRuntimeError<T::Error>>;
 }
+
+impl<T> NodeRuntime<T> {
+    pub fn register_parent_connection(
+        &mut self,
+        connection: ConnectionId,
+        parent_path: Vec<String>,
+        generation: ConnectionGeneration,
+    ) -> Result<(), EndpointError>;
+
+    pub fn register_child_connection(
+        &mut self,
+        connection: ConnectionId,
+        child_path: Vec<String>,
+        generation: ConnectionGeneration,
+    ) -> Result<(), EndpointError>;
+}
 ```
 
 Runtime flow:
@@ -168,6 +184,10 @@ transport poll -> (ConnectionId, FrameBytes)
 Rules:
 
 - Callers never pass `Ingress` into `NodeRuntime`.
+- Callers should register parent and child connections through `NodeRuntime` so
+  route topology and connection metadata are mutated together. Directly changing
+  only `Connections` or only `EndpointState` can leave a connected peer
+  unroutable or a route without a registered connection.
 - Runtime counts per-tick progress, not retained backlog.
 - Local events should be dispatched to leaves, not retained forever.
 - Until leaf dispatch exists, callers may drain local/dropped effects; outbound sends remain runtime-owned.
@@ -286,7 +306,6 @@ connection closes or unregisters
 - `LeafAction` values are queued by `LeafContext` but not yet applied by
   `NodeRuntime`.
 - Local outbound calls through the runtime are not implemented.
-- Connection registration does not yet atomically update endpoint routes.
 - Disconnect does not yet clean hooks, sessions, route state, and queued effects.
 - Child ingress still allocates because the existing `Ingress::Child` owns a
   `Vec<String>`.
