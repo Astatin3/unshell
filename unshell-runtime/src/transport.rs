@@ -21,7 +21,7 @@ pub trait Transport {
     fn send_frame(
         &mut self,
         connection: ConnectionId,
-        frame: FrameBytes,
+        frame: &FrameBytes,
     ) -> Result<(), Self::Error>;
 
     /// Flushes buffered outbound transport data, if the transport has any.

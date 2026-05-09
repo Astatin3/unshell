@@ -58,7 +58,7 @@ pub trait Transport {
     fn send_frame(
         &mut self,
         connection: ConnectionId,
-        frame: FrameBytes,
+        frame: &FrameBytes,
     ) -> Result<(), Self::Error>;
 
     fn flush(&mut self) -> Result<(), Self::Error> {
