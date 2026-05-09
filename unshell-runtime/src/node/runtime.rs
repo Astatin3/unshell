@@ -236,7 +236,10 @@ where
                 .endpoint
                 .endpoint()
                 .child_routes()
-                .get(index)
+                .iter()
+                // RouteDecision indexes are compiled from registered children only.
+                .filter(|child| child.registered)
+                .nth(index)
                 .and_then(|child| {
                     self.connections
                         .registered_by_path(ConnectionDirection::Child, &child.path)
@@ -391,6 +394,72 @@ mod tests {
         assert_eq!(outcome.outbound_frames, 1);
         assert!(runtime.effects().is_empty());
         assert_eq!(runtime.transport().sent[0].0, child);
+    }
+
+    #[test]
+    fn child_route_decision_uses_registered_child_order() {
+        let parent = ConnectionId::new(1);
+        let unregistered_child = ConnectionId::new(2);
+        let registered_child = ConnectionId::new(3);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            parent,
+            ConnectionDirection::Parent,
+            vec![],
+            ConnectionGeneration::INITIAL,
+        ));
+        connections.push(Connection::registered(
+            unregistered_child,
+            ConnectionDirection::Child,
+            vec![String::from("agent"), String::from("spare")],
+            ConnectionGeneration::INITIAL,
+        ));
+        connections.push(Connection::registered(
+            registered_child,
+            ConnectionDirection::Child,
+            vec![String::from("agent"), String::from("grand")],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let endpoint = ProtocolEndpoint::new(
+            vec![String::from("agent")],
+            Some(vec![]),
+            vec![
+                ChildRoute {
+                    path: vec![String::from("agent"), String::from("spare")],
+                    registered: false,
+                },
+                ChildRoute::registered(vec![String::from("agent"), String::from("grand")]),
+            ],
+            vec![],
+        );
+
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![],
+                dst_path: vec![String::from("agent"), String::from("grand")],
+                dst_leaf: None,
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: None,
+            },
+        )
+        .expect("frame encodes");
+
+        let transport = RecordingTransport {
+            inbound: Some((parent, frame)),
+            sent: Vec::new(),
+        };
+        let mut runtime = NodeRuntime::new(EndpointState::new(endpoint), connections, transport);
+
+        let outcome = runtime.tick(TickBudget::default()).expect("tick succeeds");
+
+        assert_eq!(outcome.outbound_frames, 1);
+        assert_eq!(runtime.transport().sent[0].0, registered_child);
     }
 
     #[test]

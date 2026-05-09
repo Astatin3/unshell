@@ -285,8 +285,6 @@ connection closes or unregisters
 - Local outbound calls through the runtime are not implemented.
 - Connection registration does not yet atomically update endpoint routes.
 - Disconnect does not yet clean hooks, sessions, route state, and queued effects.
-- `RouteDecision::Child(index)` still depends on index compatibility with the
-  existing `ProtocolEndpoint` route table.
 - Child ingress still allocates because the existing `Ingress::Child` owns a
   `Vec<String>`.
 
