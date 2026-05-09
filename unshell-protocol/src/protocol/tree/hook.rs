@@ -324,6 +324,25 @@ impl HookTable {
         Some(active)
     }
 
+    /// Returns a hook key matching `hook_id`, preferring active hooks over pending hooks.
+    ///
+    /// This is intentionally a narrow bridge for current leaf APIs that identify a hook only by
+    /// id. Hook ids are protocol-scoped by host path, so future APIs should pass the full
+    /// [`HookKey`] when leaf dispatch exposes it.
+    #[must_use]
+    pub fn key_for_hook_id(&self, hook_id: u64) -> Option<HookKey> {
+        self.active
+            .keys()
+            .find(|key| key.hook_id == hook_id)
+            .cloned()
+            .or_else(|| {
+                self.pending
+                    .keys()
+                    .find(|key| key.hook_id == hook_id)
+                    .cloned()
+            })
+    }
+
     /// Returns the pending hook for `key`, if present.
     ///
     /// # Example

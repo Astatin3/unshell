@@ -3,8 +3,7 @@
 //! This first slice owns transport and connection metadata, derives ingress from
 //! registered connections, delegates packet invariants to [`EndpointState`], and
 //! queues concrete runtime effects. Leaf action reduction is intentionally
-//! narrow: this slice only turns outbound calls and hook-data replies into
-//! endpoint outcomes.
+//! narrow and grows one action family at a time.
 
 use crate::alloc::{string::String, vec::Vec};
 use crate::connections::{
@@ -544,10 +543,10 @@ where
 
     /// Reduces queued leaf actions through endpoint packet state.
     ///
-    /// [`LeafAction::SendCall`] and [`LeafAction::SendHookData`] are implemented
-    /// in this slice. Unsupported actions stop reduction and remain queued with
-    /// all later actions so callers can retry after a future runtime gains
-    /// support.
+    /// [`LeafAction::SendCall`], [`LeafAction::SendHookData`], and
+    /// [`LeafAction::FailHook`] are implemented in this slice. Unsupported
+    /// actions stop reduction and remain queued with all later actions so callers
+    /// can retry after a future runtime gains support.
     pub fn reduce_leaf_actions(&mut self) -> Result<usize, NodeRuntimeError<T::Error>> {
         let mut reduced = 0usize;
         let mut retained = Vec::new();
@@ -642,6 +641,40 @@ where
                     };
 
                     if let Err(error) = self.apply_outcome(outcome) {
+                        retained.push((leaf_id, original_action));
+                        retained.extend(pending);
+                        self.leaf_actions = retained;
+                        return Err(error);
+                    }
+                    reduced += 1;
+                }
+                LeafAction::FailHook { hook_id, fault } => {
+                    let original_action = LeafAction::FailHook { hook_id, fault };
+                    if let Some(route) = self.endpoint.hook_fault_route(hook_id)
+                        && (matches!(route, RouteDecision::Drop)
+                            || (route_requires_connection(route)
+                                && self.connection_for_route(route).is_none()))
+                    {
+                        retained.push((leaf_id, original_action));
+                        retained.extend(pending);
+                        self.leaf_actions = retained;
+                        return Err(NodeRuntimeError::MissingRouteConnection);
+                    }
+
+                    let endpoint_checkpoint = self.endpoint.clone();
+                    let outcome = match self.endpoint.fail_hook(hook_id, fault) {
+                        Ok(outcome) => outcome,
+                        Err(error) => {
+                            self.endpoint = endpoint_checkpoint;
+                            retained.push((leaf_id, original_action));
+                            retained.extend(pending);
+                            self.leaf_actions = retained;
+                            return Err(NodeRuntimeError::Endpoint(error));
+                        }
+                    };
+
+                    if let Err(error) = self.apply_outcome(outcome) {
+                        self.endpoint = endpoint_checkpoint;
                         retained.push((leaf_id, original_action));
                         retained.extend(pending);
                         self.leaf_actions = retained;
@@ -825,6 +858,7 @@ mod tests {
     use crate::transport::Transport;
     use unshell_protocol::tree::{
         ChildRoute, EndpointError, IncomingCall, LeafSpec, LocalEvent, ProtocolEndpoint,
+        RouteDecision,
     };
     use unshell_protocol::{
         CallMessage, FrameBytes, HookTarget, PacketHeader, PacketType, ProtocolFault, decode_frame,
@@ -1537,6 +1571,82 @@ mod tests {
     }
 
     #[test]
+    fn leaf_fail_hook_reduces_to_parent_fault_frame() {
+        let parent = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            parent,
+            ConnectionDirection::Parent,
+            vec![],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let leaf_name = "org.example.v1.echo";
+        let endpoint = ProtocolEndpoint::new(
+            vec![String::from("agent")],
+            Some(vec![]),
+            vec![],
+            vec![LeafSpec {
+                name: String::from(leaf_name),
+                procedures: vec![String::from("org.example.v1.echo.invoke")],
+            }],
+        );
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: Some(String::from(leaf_name)),
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![9],
+                response_hook: Some(HookTarget {
+                    hook_id: 7,
+                    return_path: vec![],
+                }),
+            },
+        )
+        .expect("frame encodes");
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut runtime = NodeRuntime::new(
+            EndpointState::new(endpoint),
+            connections,
+            RecordingTransport::default(),
+        );
+        runtime.register_leaf(RecordingLeaf::new(leaf_name, Rc::clone(&calls)));
+        runtime
+            .receive_frame(parent, frame)
+            .expect("call activates hook");
+        runtime.dispatch_local_effects().expect("dispatch succeeds");
+        runtime.leaf_actions.clear();
+        runtime.leaf_actions.push((
+            crate::leaf::LeafId::new(String::from(leaf_name)),
+            LeafAction::FailHook {
+                hook_id: 7,
+                fault: ProtocolFault::INTERNAL_ERROR,
+            },
+        ));
+
+        let reduced = runtime.reduce_leaf_actions().expect("fault reduces");
+        let outcome = runtime.tick(TickBudget::default()).expect("tick flushes");
+
+        assert_eq!(reduced, 1);
+        assert!(runtime.leaf_actions().is_empty());
+        assert_eq!(outcome.outbound_frames, 1);
+        assert_eq!(runtime.transport().sent.len(), 1);
+        assert_eq!(runtime.transport().sent[0].0, parent);
+        let parsed = decode_frame(&runtime.transport().sent[0].1).expect("fault decodes");
+        assert_eq!(parsed.header().packet_type, PacketType::Fault);
+        assert_eq!(parsed.header().src_path, [String::from("agent")]);
+        assert_eq!(parsed.header().dst_path, Vec::<String>::new());
+        assert_eq!(parsed.header().hook_id, Some(7));
+        let fault = parsed.deserialize_fault().expect("payload is fault");
+        assert_eq!(fault.fault, ProtocolFault::INTERNAL_ERROR);
+    }
+
+    #[test]
     fn leaf_send_call_reduces_to_child_transport_frame() {
         let child = ConnectionId::new(1);
         let mut connections = Connections::new();
@@ -1810,7 +1920,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_leaf_action_is_reported_and_retained() {
+    fn unsupported_connection_action_is_reported_and_retained() {
         let leaf_id = crate::leaf::LeafId::new(String::from("org.example.v1.echo"));
         let mut runtime = NodeRuntime::new(
             EndpointState::new(ProtocolEndpoint::new(
@@ -1822,13 +1932,6 @@ mod tests {
             Connections::new(),
             RecordingTransport::default(),
         );
-        runtime.leaf_actions.push((
-            leaf_id.clone(),
-            LeafAction::FailHook {
-                hook_id: 7,
-                fault: ProtocolFault::INTERNAL_ERROR,
-            },
-        ));
         runtime.leaf_actions.push((
             leaf_id.clone(),
             LeafAction::Connection(ConnectionAction::Unregister {
@@ -1843,15 +1946,11 @@ mod tests {
         assert!(matches!(
             error,
             NodeRuntimeError::UnsupportedLeafAction { ref leaf_id, action }
-                if leaf_id.as_str() == "org.example.v1.echo" && action == "FailHook"
+                if leaf_id.as_str() == "org.example.v1.echo" && action == "Connection"
         ));
-        assert_eq!(runtime.leaf_actions().len(), 2);
+        assert_eq!(runtime.leaf_actions().len(), 1);
         assert!(matches!(
             runtime.leaf_actions()[0].1,
-            LeafAction::FailHook { .. }
-        ));
-        assert!(matches!(
-            runtime.leaf_actions()[1].1,
             LeafAction::Connection(_)
         ));
     }
@@ -1939,26 +2038,225 @@ mod tests {
         runtime
             .register_parent_connection(parent, vec![], ConnectionGeneration::INITIAL)
             .expect("parent route restored");
-        let retry_error = runtime
+        let reduced = runtime
             .reduce_leaf_actions()
-            .expect_err("later unsupported action is still reported");
+            .expect("remaining supported actions reduce");
+
+        assert_eq!(reduced, 2);
+        assert!(runtime.leaf_actions().is_empty());
+        assert!(matches!(
+            runtime.effects()[0],
+            RuntimeEffect::SendFrame { connection, .. } if connection == parent
+        ));
+        assert!(matches!(
+            runtime.effects()[1],
+            RuntimeEffect::SendFrame { connection, .. } if connection == parent
+        ));
+    }
+
+    #[test]
+    fn missing_fail_hook_route_preserves_action_and_hook_for_retry() {
+        let parent = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            parent,
+            ConnectionDirection::Parent,
+            vec![],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let leaf_name = "org.example.v1.echo";
+        let endpoint = ProtocolEndpoint::new(
+            vec![String::from("agent")],
+            Some(vec![]),
+            vec![],
+            vec![LeafSpec {
+                name: String::from(leaf_name),
+                procedures: vec![String::from("org.example.v1.echo.invoke")],
+            }],
+        );
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: Some(String::from(leaf_name)),
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: Some(HookTarget {
+                    hook_id: 7,
+                    return_path: vec![],
+                }),
+            },
+        )
+        .expect("frame encodes");
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut runtime = NodeRuntime::new(
+            EndpointState::new(endpoint),
+            connections,
+            RecordingTransport::default(),
+        );
+        runtime.register_leaf(RecordingLeaf::new(leaf_name, Rc::clone(&calls)));
+        runtime
+            .receive_frame(parent, frame)
+            .expect("call activates hook");
+        runtime.dispatch_local_effects().expect("dispatch succeeds");
+        runtime.leaf_actions.clear();
+        runtime.leaf_actions.push((
+            crate::leaf::LeafId::new(String::from(leaf_name)),
+            LeafAction::FailHook {
+                hook_id: 7,
+                fault: ProtocolFault::INTERNAL_ERROR,
+            },
+        ));
+        runtime.leaf_actions.push((
+            crate::leaf::LeafId::new(String::from(leaf_name)),
+            LeafAction::Connection(ConnectionAction::Unregister { connection: parent }),
+        ));
+        runtime
+            .connections
+            .get_mut(parent)
+            .expect("parent connection exists")
+            .set_state(ConnectionState::Connected {
+                generation: ConnectionGeneration::INITIAL,
+            });
+
+        let error = runtime
+            .reduce_leaf_actions()
+            .expect_err("missing route connection is reported");
+
+        assert!(matches!(error, NodeRuntimeError::MissingRouteConnection));
+        assert_eq!(runtime.leaf_actions().len(), 2);
+        assert!(matches!(
+            runtime.leaf_actions()[0].1,
+            LeafAction::FailHook { .. }
+        ));
+        assert!(matches!(
+            runtime.leaf_actions()[1].1,
+            LeafAction::Connection(_)
+        ));
+        assert!(runtime.effects().is_empty());
+
+        runtime
+            .register_parent_connection(parent, vec![], ConnectionGeneration::INITIAL)
+            .expect("parent route restored");
+        let error = runtime
+            .reduce_leaf_actions()
+            .expect_err("retry faults hook then stops at connection action");
+        let outcome = runtime.tick(TickBudget::default()).expect("tick flushes");
 
         assert!(matches!(
-            retry_error,
+            error,
             NodeRuntimeError::UnsupportedLeafAction {
-                action: "FailHook",
+                action: "Connection",
                 ..
             }
         ));
         assert_eq!(runtime.leaf_actions().len(), 1);
         assert!(matches!(
             runtime.leaf_actions()[0].1,
-            LeafAction::FailHook { .. }
+            LeafAction::Connection(_)
         ));
-        assert!(matches!(
-            runtime.effects()[0],
-            RuntimeEffect::SendFrame { connection, .. } if connection == parent
+        assert_eq!(outcome.outbound_frames, 1);
+        let parsed = decode_frame(&runtime.transport().sent[0].1).expect("fault decodes");
+        assert_eq!(parsed.header().packet_type, PacketType::Fault);
+        assert_eq!(parsed.header().hook_id, Some(7));
+    }
+
+    #[test]
+    fn dropped_fail_hook_route_preserves_action_and_hook_for_retry() {
+        let parent = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            parent,
+            ConnectionDirection::Parent,
+            vec![],
+            ConnectionGeneration::INITIAL,
         ));
+
+        let leaf_name = "org.example.v1.echo";
+        let endpoint = ProtocolEndpoint::new(
+            vec![String::from("agent")],
+            Some(vec![]),
+            vec![],
+            vec![LeafSpec {
+                name: String::from(leaf_name),
+                procedures: vec![String::from("org.example.v1.echo.invoke")],
+            }],
+        );
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: Some(String::from(leaf_name)),
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: Some(HookTarget {
+                    hook_id: 7,
+                    return_path: vec![],
+                }),
+            },
+        )
+        .expect("frame encodes");
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut runtime = NodeRuntime::new(
+            EndpointState::new(endpoint),
+            connections,
+            RecordingTransport::default(),
+        );
+        runtime.register_leaf(RecordingLeaf::new(leaf_name, Rc::clone(&calls)));
+        runtime
+            .receive_frame(parent, frame)
+            .expect("call activates hook with dropped return path");
+        assert!(matches!(runtime.effects()[0], RuntimeEffect::Local(_)));
+        runtime.dispatch_local_effects().expect("dispatch succeeds");
+        runtime
+            .endpoint
+            .endpoint_mut()
+            .set_parent_path(None)
+            .expect("parent route removes");
+        assert_eq!(
+            runtime.endpoint.hook_fault_route(7),
+            Some(RouteDecision::Drop)
+        );
+        runtime.leaf_actions.clear();
+        runtime.leaf_actions.push((
+            crate::leaf::LeafId::new(String::from(leaf_name)),
+            LeafAction::FailHook {
+                hook_id: 7,
+                fault: ProtocolFault::INTERNAL_ERROR,
+            },
+        ));
+
+        let error = runtime
+            .reduce_leaf_actions()
+            .expect_err("dropped fault route is reported before mutation");
+
+        assert!(matches!(error, NodeRuntimeError::MissingRouteConnection));
+        assert_eq!(runtime.leaf_actions().len(), 1);
+        assert!(runtime.effects().is_empty());
+
+        runtime
+            .register_parent_connection(parent, vec![], ConnectionGeneration::INITIAL)
+            .expect("parent route restored");
+        let reduced = runtime
+            .reduce_leaf_actions()
+            .expect("retained fault retries after route is restored");
+        let outcome = runtime.tick(TickBudget::default()).expect("tick flushes");
+
+        assert_eq!(reduced, 1);
+        assert_eq!(outcome.outbound_frames, 1);
+        assert_eq!(runtime.transport().sent[0].0, parent);
+        let parsed = decode_frame(&runtime.transport().sent[0].1).expect("fault decodes");
+        assert_eq!(parsed.header().packet_type, PacketType::Fault);
+        assert_eq!(parsed.header().hook_id, Some(7));
     }
 
     #[test]

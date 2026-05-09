@@ -329,10 +329,9 @@ connection closes or unregisters
 
 ## Known Gaps In The Current Branch
 
-- `LeafAction::SendCall` and `LeafAction::SendHookData` are reduced by
-  `NodeRuntime`; hook fault and connection action variants are still unsupported
+- `LeafAction::SendCall`, `LeafAction::SendHookData`, and `LeafAction::FailHook`
+  are reduced by `NodeRuntime`; connection action variants are still unsupported
   and must remain queued when encountered.
-- Hook fault actions through the runtime are not implemented.
 - Connection actions through the runtime are not implemented.
 - Disconnect does not yet clean hooks, sessions, route state, and queued effects.
 - Child ingress still allocates because the existing `Ingress::Child` owns a
@@ -340,13 +339,13 @@ connection closes or unregisters
 
 ## Next Implementation Slice
 
-Implement the next narrow leaf-action path:
+Implement the next narrow connection-action path:
 
-1. Apply queued `LeafAction::FailHook` through endpoint packet state.
-2. Preserve pending/active hook cleanup semantics without dropping unprocessed
-   actions.
-3. Keep connection registration actions queued until runtime-owned disconnect
+1. Keep connection registration actions queued until runtime-owned disconnect
    cleanup can update connections, routes, hooks, and queued effects atomically.
+2. Add connection registration reduction only when route, connection, hook, and
+   queued-effect cleanup can be updated as one runtime transaction.
+3. Preserve FIFO retry semantics for unsupported or failed connection actions.
 
 That slice should continue the one-variant-at-a-time reducer approach without
-implementing connection actions early.
+implementing disconnect cleanup early.

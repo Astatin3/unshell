@@ -6,8 +6,8 @@
 //! handles, does not dispatch leaves, and does not make admission decisions.
 
 use unshell_protocol::{
-    CallMessage, FrameBytes, PacketHeader, PacketType, tree::Endpoint as ProtocolEndpointTrait,
-    validate_call, validate_header, validate_procedure_id,
+    CallMessage, FrameBytes, PacketHeader, PacketType, ProtocolFault,
+    tree::Endpoint as ProtocolEndpointTrait, validate_call, validate_header, validate_procedure_id,
 };
 
 pub use unshell_protocol::tree::{
@@ -88,6 +88,21 @@ impl EndpointState {
     ) -> Result<EndpointOutcome, EndpointError> {
         self.endpoint
             .send_data(dst_path, hook_id, procedure_id, data, end_hook)
+    }
+
+    /// Returns the route that would carry a terminal hook fault, if the hook is known.
+    #[must_use]
+    pub fn hook_fault_route(&self, hook_id: u64) -> Option<RouteDecision> {
+        self.endpoint.hook_fault_route(hook_id)
+    }
+
+    /// Terminates a known hook with a protocol fault, or drops unknown hook ids.
+    pub fn fail_hook(
+        &mut self,
+        hook_id: u64,
+        fault: ProtocolFault,
+    ) -> Result<EndpointOutcome, EndpointError> {
+        self.endpoint.fail_hook(hook_id, fault)
     }
 
     /// Builds and routes one call packet through the wrapped endpoint state.

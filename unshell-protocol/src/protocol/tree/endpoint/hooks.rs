@@ -10,6 +10,31 @@ use super::super::{HookKey, RouteDecision};
 use super::core::{EndpointError, EndpointOutcome, Ingress, LocalEvent, ProtocolEndpoint};
 
 impl ProtocolEndpoint {
+    /// Returns the route that would carry a locally generated hook fault for `hook_id`.
+    ///
+    /// The method does not mutate hook state. Runtime owners use it to preflight transport
+    /// availability before calling [`fail_hook`](Self::fail_hook), which removes hook state when
+    /// the fault is emitted.
+    #[must_use]
+    pub fn hook_fault_route(&self, hook_id: u64) -> Option<RouteDecision> {
+        self.hooks
+            .key_for_hook_id(hook_id)
+            .map(|key| self.decide_route(&key.return_path))
+    }
+
+    /// Terminates a locally known hook with a protocol fault.
+    ///
+    /// Unknown hooks are treated as an intentional drop. Known hooks are removed before the fault
+    /// is routed so no further local data can be emitted after the terminal fault.
+    pub fn fail_hook(
+        &mut self,
+        hook_id: u64,
+        fault: ProtocolFault,
+    ) -> Result<EndpointOutcome, EndpointError> {
+        let key = self.hooks.key_for_hook_id(hook_id);
+        self.emit_fault_if_possible(key, fault)
+    }
+
     pub(crate) fn emit_fault_if_possible(
         &mut self,
         key: Option<HookKey>,
