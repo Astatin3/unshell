@@ -150,6 +150,7 @@ where
     /// Processes one nonblocking runtime step.
     pub fn tick(&mut self, budget: TickBudget) -> Result<TickOutcome, NodeRuntimeError<T::Error>> {
         let mut outcome = TickOutcome::default();
+        let effects_start = self.effects.entries().len();
 
         for _ in 0..budget.max_inbound_frames {
             let Some((connection, frame)) = self
@@ -167,12 +168,14 @@ where
             .effects
             .entries()
             .iter()
+            .skip(effects_start)
             .filter(|effect| matches!(effect, RuntimeEffect::Dropped))
             .count();
         outcome.local_events += self
             .effects
             .entries()
             .iter()
+            .skip(effects_start)
             .filter(|effect| matches!(effect, RuntimeEffect::Local(_)))
             .count();
 
@@ -504,5 +507,99 @@ mod tests {
             .receive_frame(parent, frame)
             .expect("frame processes");
         assert!(matches!(runtime.effects()[0], RuntimeEffect::Local(_)));
+    }
+
+    #[test]
+    fn tick_counts_only_new_local_events() {
+        let parent = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            parent,
+            ConnectionDirection::Parent,
+            vec![],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let mut endpoint =
+            ProtocolEndpoint::new(vec![String::from("agent")], Some(vec![]), vec![], vec![]);
+        endpoint
+            .add_endpoint_procedure("org.example.v1.echo.invoke")
+            .expect("procedure registers");
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: None,
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: None,
+            },
+        )
+        .expect("frame encodes");
+
+        let transport = RecordingTransport {
+            inbound: Some((parent, frame)),
+            sent: Vec::new(),
+        };
+        let mut runtime = NodeRuntime::new(EndpointState::new(endpoint), connections, transport);
+
+        let first = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(first.local_events, 1);
+        assert!(matches!(runtime.effects()[0], RuntimeEffect::Local(_)));
+
+        let second = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(second.local_events, 0);
+        assert!(matches!(runtime.effects()[0], RuntimeEffect::Local(_)));
+    }
+
+    #[test]
+    fn tick_counts_only_new_dropped_frames() {
+        let child = ConnectionId::new(1);
+        let mut connections = Connections::new();
+        connections.push(Connection::registered(
+            child,
+            ConnectionDirection::Child,
+            vec![String::from("agent"), String::from("kid")],
+            ConnectionGeneration::INITIAL,
+        ));
+
+        let mut endpoint =
+            ProtocolEndpoint::new(vec![String::from("agent")], Some(vec![]), vec![], vec![]);
+        endpoint
+            .add_endpoint_procedure("org.example.v1.echo.invoke")
+            .expect("procedure registers");
+        let frame = encode_packet(
+            &PacketHeader {
+                packet_type: PacketType::Call,
+                src_path: vec![String::from("agent"), String::from("kid")],
+                dst_path: vec![String::from("agent")],
+                dst_leaf: None,
+                hook_id: None,
+            },
+            &CallMessage {
+                procedure_id: String::from("org.example.v1.echo.invoke"),
+                data: vec![],
+                response_hook: None,
+            },
+        )
+        .expect("frame encodes");
+
+        let transport = RecordingTransport {
+            inbound: Some((child, frame)),
+            sent: Vec::new(),
+        };
+        let mut runtime = NodeRuntime::new(EndpointState::new(endpoint), connections, transport);
+
+        let first = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(first.dropped_frames, 1);
+        assert!(matches!(runtime.effects()[0], RuntimeEffect::Dropped));
+
+        let second = runtime.tick(TickBudget::default()).expect("tick succeeds");
+        assert_eq!(second.dropped_frames, 0);
+        assert!(matches!(runtime.effects()[0], RuntimeEffect::Dropped));
     }
 }
