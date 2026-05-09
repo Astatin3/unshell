@@ -26,6 +26,9 @@ pub use unshell_protocol as protocol;
 /// Re-export the leaf library crate behind the historical `unshell::leaves` path
 pub use unshell_leaves as leaves;
 
+/// Re-export the runtime crate behind the `unshell::runtime` path.
+pub use unshell_runtime as runtime;
+
 pub use unshell_macros::{Procedure, leaf, procedures};
 
 /// Creates a root-assumed endpoint from one local identifier plus any number of leaf hosts.

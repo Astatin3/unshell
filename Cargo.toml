@@ -6,6 +6,7 @@ members = [
     "base62",
     "unshell-macros",
     "unshell-protocol",
+    "unshell-runtime",
     "unshell-leaves",
     "treetest",
 ]
@@ -31,6 +32,7 @@ portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
 unshell          = { path = "." }
 unshell-protocol = { path = "./unshell-protocol" }
+unshell-runtime  = { path = "./unshell-runtime" }
 unshell-leaves   = { path = "./unshell-leaves" }
 unshell-macros   = { path = "./unshell-macros" }
 
@@ -63,6 +65,7 @@ chrono            = { workspace = true, optional = true }
 static_init       = { workspace = true }
 unshell-macros    = { workspace = true }
 unshell-protocol  = { workspace = true }
+unshell-runtime   = { workspace = true }
 unshell-leaves    = { workspace = true }
 
 [dev-dependencies]

@@ -1447,6 +1447,7 @@ dependencies = [
  "unshell-leaves",
  "unshell-macros",
  "unshell-protocol",
+ "unshell-runtime",
 ]
 
 [[package]]
@@ -1475,6 +1476,13 @@ version = "0.1.0"
 dependencies = [
  "rkyv",
  "unshell-macros",
+]
+
+[[package]]
+name = "unshell-runtime"
+version = "0.1.0"
+dependencies = [
+ "unshell-protocol",
 ]
 
 [[package]]
