@@ -1,0 +1,264 @@
+use super::*;
+use alloc::string::ToString;
+use alloc::vec;
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+fn make_packet() -> Packet {
+    Packet {
+        hook_id: 42,
+        is_upwards_call: true,
+        end_hook: false,
+        path: "my/service/path".to_string(),
+        procedure_id: "my.service.Method".to_string(),
+        data: vec![0xDE, 0xAD, 0xBE, 0xEF],
+    }
+}
+
+fn make_packet_flags(is_upwards_call: bool, end_hook: bool) -> Packet {
+    Packet {
+        is_upwards_call,
+        end_hook,
+        ..make_packet()
+    }
+}
+
+// ── Round-trip ────────────────────────────────────────────────────────────
+
+#[test]
+fn full_round_trip() {
+    let packet = make_packet();
+    let buf = packet.serialize().unwrap();
+    let result = Packet::deserialize(&buf).unwrap();
+
+    assert_eq!(result.hook_id, packet.hook_id);
+    assert_eq!(result.is_upwards_call, packet.is_upwards_call);
+    assert_eq!(result.end_hook, packet.end_hook);
+    assert_eq!(result.path, packet.path);
+    assert_eq!(result.procedure_id, packet.procedure_id);
+    assert_eq!(result.data, packet.data);
+}
+
+#[test]
+fn header_round_trip() {
+    let packet = make_packet();
+    let buf = packet.serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+
+    assert_eq!(header.hook_id, packet.hook_id);
+    assert_eq!(header.is_upwards_call, packet.is_upwards_call);
+    assert_eq!(header.end_hook, packet.end_hook);
+    assert_eq!(header.path, packet.path);
+}
+
+// ── Flags ─────────────────────────────────────────────────────────────────
+
+#[test]
+fn flags_both_false() {
+    let packet = make_packet_flags(false, false);
+    let buf = packet.serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+    assert!(!header.is_upwards_call);
+    assert!(!header.end_hook);
+}
+
+#[test]
+fn flags_both_true() {
+    let packet = make_packet_flags(true, true);
+    let buf = packet.serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+    assert!(header.is_upwards_call);
+    assert!(header.end_hook);
+}
+
+#[test]
+fn flags_upwards_only() {
+    let packet = make_packet_flags(true, false);
+    let buf = packet.serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+    assert!(header.is_upwards_call);
+    assert!(!header.end_hook);
+}
+
+#[test]
+fn flags_end_hook_only() {
+    let packet = make_packet_flags(false, true);
+    let buf = packet.serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+    assert!(!header.is_upwards_call);
+    assert!(header.end_hook);
+}
+
+// ── Empty fields ──────────────────────────────────────────────────────────
+
+#[test]
+fn empty_path() {
+    let packet = Packet {
+        path: "".to_string(),
+        ..make_packet()
+    };
+    let buf = packet.serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+    assert_eq!(header.path, "");
+}
+
+#[test]
+fn empty_procedure_id() {
+    let packet = Packet {
+        procedure_id: "".to_string(),
+        ..make_packet()
+    };
+    let buf = packet.serialize().unwrap();
+    let result = Packet::deserialize(&buf).unwrap();
+    assert_eq!(result.procedure_id, "");
+}
+
+#[test]
+fn empty_data() {
+    let packet = Packet {
+        data: vec![],
+        ..make_packet()
+    };
+    let buf = packet.serialize().unwrap();
+    let result = Packet::deserialize(&buf).unwrap();
+    assert_eq!(result.data, &[] as &[u8]);
+}
+
+#[test]
+fn all_fields_empty() {
+    let packet = Packet {
+        hook_id: 0,
+        is_upwards_call: false,
+        end_hook: false,
+        path: "".to_string(),
+        procedure_id: "".to_string(),
+        data: vec![],
+    };
+    let buf = packet.serialize().unwrap();
+    let result = Packet::deserialize(&buf).unwrap();
+    assert_eq!(result.hook_id, 0);
+    assert_eq!(result.path, "");
+    assert_eq!(result.procedure_id, "");
+    assert_eq!(result.data, &[] as &[u8]);
+}
+
+// ── Zero-copy: borrows point into the original buffer ─────────────────────
+
+#[test]
+fn header_path_is_borrowed_from_buffer() {
+    let buf = make_packet().serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+
+    let path_ptr = header.path.as_ptr();
+    let buf_range = buf.as_ptr_range();
+    assert!(
+        buf_range.contains(&path_ptr),
+        "path must be a subslice of the input buffer, not a new allocation"
+    );
+}
+
+#[test]
+fn body_remainder_is_borrowed_from_buffer() {
+    let buf = make_packet().serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+
+    let remainder_ptr = header.body_remainder.as_ptr();
+    let buf_range = buf.as_ptr_range();
+    assert!(
+        buf_range.contains(&remainder_ptr),
+        "body_remainder must point into the input buffer"
+    );
+}
+
+// ── Partial deserialization: body is untouched by header parse ────────────
+
+#[test]
+fn deserialize_header_does_not_read_body() {
+    let buf = make_packet().serialize().unwrap();
+    let header = Packet::deserialize_header(&buf).unwrap();
+
+    // Re-parse body from the remainder to confirm it's intact.
+    let body_buf = header.body_remainder;
+    let body_len =
+        u32::from_le_bytes([body_buf[0], body_buf[1], body_buf[2], body_buf[3]]) as usize;
+    assert!(
+        body_buf.len() >= 4 + body_len,
+        "body_remainder must contain the full body"
+    );
+}
+
+#[test]
+fn can_forward_buffer_after_header_parse() {
+    // Simulates a router: parse the header, then forward the raw buffer
+    // without touching the body.
+    let original = make_packet().serialize().unwrap();
+    let header = Packet::deserialize_header(&original).unwrap();
+
+    assert_eq!(header.path, "my/service/path");
+
+    // "Forward" by deserializing the full original buffer downstream.
+    let forwarded = Packet::deserialize(&original).unwrap();
+    assert_eq!(forwarded.procedure_id, "my.service.Method");
+    assert_eq!(forwarded.data, &[0xDE, 0xAD, 0xBE, 0xEF]);
+}
+
+// ── Truncation / corruption ───────────────────────────────────────────────
+
+#[test]
+fn truncated_in_fixed_prefix() {
+    let buf = make_packet().serialize().unwrap();
+    // Cut inside the fixed 8-byte prefix.
+    assert_eq!(
+        Packet::deserialize_header(&buf[..4]).unwrap_err(),
+        DeserializeError::BufferTooShort
+    );
+}
+
+#[test]
+fn truncated_in_path() {
+    let buf = make_packet().serialize().unwrap();
+    // Cut to just past the fixed prefix, mid-path.
+    assert_eq!(
+        Packet::deserialize_header(&buf[..9]).unwrap_err(),
+        DeserializeError::BufferTooShort
+    );
+}
+
+#[test]
+fn truncated_in_body() {
+    let buf = make_packet().serialize().unwrap();
+    // Remove last byte — well into the body.
+    assert!(Packet::deserialize(&buf[..buf.len() - 1]).is_err());
+}
+
+#[test]
+fn empty_buffer_rejected() {
+    assert_eq!(
+        Packet::deserialize_header(&[]).unwrap_err(),
+        DeserializeError::BufferTooShort
+    );
+}
+
+#[test]
+fn invalid_utf8_in_path() {
+    let mut buf = make_packet().serialize().unwrap();
+    // Overwrite the first byte of the path (offset 8) with an invalid UTF-8 byte.
+    buf[8] = 0xFF;
+    assert_eq!(
+        Packet::deserialize_header(&buf).unwrap_err(),
+        DeserializeError::InvalidUtf8
+    );
+}
+
+#[test]
+fn invalid_utf8_in_procedure_id() {
+    let mut buf = make_packet().serialize().unwrap();
+    // Find where procedure_id starts: 8 + path_len + 4 (body_len) + 4 (proc_id_len)
+    let path_len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
+    let proc_id_offset = 8 + path_len + 4 + 4;
+    buf[proc_id_offset] = 0xFF;
+    assert_eq!(
+        Packet::deserialize(&buf).unwrap_err(),
+        DeserializeError::InvalidUtf8
+    );
+}

@@ -4,11 +4,11 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 members = [
     "ush-obfuscate",
     "base62",
-    "unshell-macros",
+    # "unshell-macros",
     "unshell-protocol",
-    "unshell-runtime",
-    "unshell-leaves",
-    "treetest",
+    # "unshell-runtime",
+    # "unshell-leaves",
+    # "treetest",
 ]
 resolver = "2"
 
@@ -32,9 +32,9 @@ portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
 unshell          = { path = "." }
 unshell-protocol = { path = "./unshell-protocol" }
-unshell-runtime  = { path = "./unshell-runtime" }
-unshell-leaves   = { path = "./unshell-leaves" }
-unshell-macros   = { path = "./unshell-macros" }
+# unshell-runtime  = { path = "./unshell-runtime" }
+# unshell-leaves   = { path = "./unshell-leaves" }
+# unshell-macros   = { path = "./unshell-macros" }
 
 # ush-obfuscate = { path = "./ush-obfuscate" }
 # base62        = { path = "./base62" }
@@ -51,8 +51,8 @@ log = []
 log_debug = ["log", "dep:chrono"]
 
 # Leaf features
-leaf_endpoint = ["unshell-leaves/leaf_endpoint"]
-leaf_tui = ["unshell-leaves/leaf_tui"]
+# leaf_endpoint = ["unshell-leaves/leaf_endpoint"]
+# leaf_tui = ["unshell-leaves/leaf_tui"]
 
 # obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
 # obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
@@ -63,64 +63,10 @@ thiserror         = { workspace = true, optional = true }
 chrono            = { workspace = true, optional = true }
 # ush-obfuscate     = { workspace = true }
 static_init       = { workspace = true }
-unshell-macros    = { workspace = true }
+# unshell-macros    = { workspace = true }
 unshell-protocol  = { workspace = true }
-unshell-runtime   = { workspace = true }
-unshell-leaves    = { workspace = true }
-
-[dev-dependencies]
-crossbeam-channel = { workspace = true }
-
-[[example]]
-name = "leaf_derive"
-path = "examples/protocol/leaf_derive.rs"
-
-[[example]]
-name = "crossbeam_channel_leaf"
-path = "examples/protocol/crossbeam_channel_leaf.rs"
-
-[[example]]
-name = "runtime_leaf_actions"
-path = "examples/protocol/runtime_leaf_actions.rs"
-
-[[example]]
-name = "remote_shell_endpoint"
-path = "examples/protocol/remote_shell_endpoint.rs"
-required-features = ["leaf_endpoint"]
-
-[[example]]
-name = "remote_shell_receive"
-path = "examples/protocol/remote_shell_receive.rs"
-required-features = ["leaf_endpoint"]
-
-[[example]]
-name = "remote_shell_single_endpoint"
-path = "examples/protocol/remote_shell_single_endpoint.rs"
-required-features = ["leaf_endpoint"]
-
-[[example]]
-name = "bench"
-path = "examples/protocol/bench/bench.rs"
-
-[[example]]
-name = "op_encode_call"
-path = "examples/protocol/bench/op_encode_call.rs"
-
-[[example]]
-name = "op_decode_call"
-path = "examples/protocol/bench/op_decode_call.rs"
-
-[[example]]
-name = "op_forward_call_receive"
-path = "examples/protocol/bench/op_forward_call_receive.rs"
-
-[[example]]
-name = "op_local_call_receive"
-path = "examples/protocol/bench/op_local_call_receive.rs"
-
-[[example]]
-name = "op_hook_data_receive"
-path = "examples/protocol/bench/op_hook_data_receive.rs"
+# unshell-runtime   = { workspace = true }
+# unshell-leaves    = { workspace = true }
 
 [profile.minimize]
 inherits = "release"
@@ -143,4 +89,4 @@ unsafe_op_in_unsafe_fn             = "warn"
 unused_import_braces               = "warn"
 unused_lifetimes                   = "warn"
 trivial_casts                      = "allow"
-missing_docs                       = "warn"
+# missing_docs                       = "warn"

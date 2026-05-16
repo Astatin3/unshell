@@ -9,7 +9,7 @@ doctest = false
 
 [dependencies]
 rkyv = { workspace = true }
-unshell-macros = { path = "../unshell-macros" }
+# unshell-macros = { path = "../unshell-macros" }
 
 [lints.rust]
 elided_lifetimes_in_paths = "warn"
@@ -22,4 +22,4 @@ unsafe_op_in_unsafe_fn = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
 trivial_casts = "allow"
-missing_docs = "warn"
+# missing_docs = "warn"

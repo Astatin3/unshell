@@ -24,12 +24,12 @@ pub mod logger;
 pub use unshell_protocol as protocol;
 
 /// Re-export the leaf library crate behind the historical `unshell::leaves` path
-pub use unshell_leaves as leaves;
+// pub use unshell_leaves as leaves;
 
 /// Re-export the runtime crate behind the `unshell::runtime` path.
-pub use unshell_runtime as runtime;
+// pub use unshell_runtime as runtime;
 
-pub use unshell_macros::{Procedure, leaf, procedures};
+// pub use unshell_macros::{Procedure, leaf, procedures};
 
 /// Creates a root-assumed endpoint from one local identifier plus any number of leaf hosts.
 ///
@@ -40,21 +40,21 @@ pub use unshell_macros::{Procedure, leaf, procedures};
 /// Why it exists: the common bootstrap case should not require callers to manually construct an
 /// empty path, `Vec<ChildRoute>`, and a `Vec<LeafSpec>` when they already have leaf host values.
 ///
-/// # Example
-/// ```rust
-/// use unshell::{create_endpoint, leaf};
-/// use unshell::protocol::tree::Endpoint;
-///
-/// #[derive(Default)]
-/// struct DemoLeaf;
-///
-/// #[leaf(id = "org.example.v1.demo", procedures = ["ping"], endpoint_struct = DemoLeaf)]
-/// struct Demo;
-///
-/// let endpoint = create_endpoint!("demo", DemoLeaf::default());
-/// assert!(endpoint.path().is_empty());
-/// assert_eq!(endpoint.local_id(), Some("demo"));
-/// ```
+// # Example
+// ```rust
+// use unshell::{create_endpoint, leaf};
+// use unshell::protocol::tree::Endpoint;
+
+// #[derive(Default)]
+// struct DemoLeaf;
+
+// #[leaf(id = "org.example.v1.demo", procedures = ["ping"], endpoint_struct = DemoLeaf)]
+// struct Demo;
+
+// let endpoint = create_endpoint!("demo", DemoLeaf::default());
+// assert!(endpoint.path().is_empty());
+// assert_eq!(endpoint.local_id(), Some("demo"));
+// ```
 #[macro_export]
 macro_rules! create_endpoint {
     ($id:expr $(, $leaf:expr )* $(,)?) => {{
