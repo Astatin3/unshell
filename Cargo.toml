@@ -80,6 +80,10 @@ name = "crossbeam_channel_leaf"
 path = "examples/protocol/crossbeam_channel_leaf.rs"
 
 [[example]]
+name = "runtime_leaf_actions"
+path = "examples/protocol/runtime_leaf_actions.rs"
+
+[[example]]
 name = "remote_shell_endpoint"
 path = "examples/protocol/remote_shell_endpoint.rs"
 required-features = ["leaf_endpoint"]
