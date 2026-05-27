@@ -68,6 +68,7 @@ unshell-protocol  = { workspace = true }
 # unshell-runtime   = { workspace = true }
 # unshell-leaves    = { workspace = true }
 
+
 [profile.minimize]
 inherits = "release"
 strip = true             # Strip symbols from the binary
