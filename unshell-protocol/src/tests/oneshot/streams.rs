@@ -10,13 +10,13 @@ const STREAM_HOOK_ID: u16 = 0;
 
 /// Builds the initial downwards packet that opens the stream on the respondent.
 ///
-/// The request deliberately carries `end_hook = true` through `echo_packet`-style
-/// semantics: downward routing must not treat that flag as local hook cleanup. The
-/// respondent turns this into local stream state keyed by the caller's hook id.
+/// The request keeps `end_hook = false` because it expects a return stream. Downward
+/// routing now paves that hook automatically at every endpoint that accepts or
+/// forwards the request.
 fn stream_open_packet(hook_id: u16) -> Packet {
     Packet {
         hook_id,
-        end_hook: true,
+        end_hook: false,
         path: vec![ENDPOINT_A, ENDPOINT_B],
         procedure_id: 2,
         data: b"open".to_vec(),
@@ -107,9 +107,9 @@ impl Leaf for StreamRespondentLeaf {
 impl StreamRespondentLeaf {
     /// Opens stream state from the first locally delivered request packet.
     ///
-    /// The hook is inserted before any upward frame is routed because upward routing
-    /// is hook-gated. Additional requests are ignored while a stream is active so a
-    /// caller cannot reset ordering mid-stream in this simple one-way harness.
+    /// Downward request routing has already paved the hook before the packet reaches
+    /// this leaf. The leaf only owns stream ordering; endpoint routing owns hook
+    /// authorization and cleanup.
     fn open_stream_from_pending_request(&mut self, endpoint: &mut Endpoint) {
         if self.stream.is_some() {
             return;
@@ -125,7 +125,6 @@ impl StreamRespondentLeaf {
         });
 
         if let Some(hook_id) = opened_hook {
-            endpoint.hooks.insert(hook_id, ENDPOINT_A);
             self.stream = Some(StreamState {
                 hook_id,
                 next_index: 0,
@@ -270,7 +269,8 @@ fn one_directional_stream_returns_one_packet_per_loop() {
     deliver_stream_request(&mut endpoint_a, &mut endpoint_b);
 
     assert_received_stream(&endpoint_a, 0, false);
-    assert!(endpoint_b.hooks.is_empty());
+    assert_hook_present(&endpoint_a, STREAM_HOOK_ID);
+    assert_hook_present(&endpoint_b, STREAM_HOOK_ID);
 
     for index in 0..total_packets {
         drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
@@ -279,8 +279,10 @@ fn one_directional_stream_returns_one_packet_per_loop() {
         assert_received_stream(&endpoint_a, index + 1, final_seen);
 
         if final_seen {
+            assert_hook_removed(&endpoint_a, STREAM_HOOK_ID);
             assert_hook_removed(&endpoint_b, STREAM_HOOK_ID);
         } else {
+            assert_hook_present(&endpoint_a, STREAM_HOOK_ID);
             assert_hook_present(&endpoint_b, STREAM_HOOK_ID);
         }
     }
@@ -294,7 +296,8 @@ fn stream_does_not_emit_before_request_is_processed_by_respondent() {
 
     assert_received_stream(&endpoint_a, 0, false);
     assert!(endpoint_b.outbound.is_empty());
-    assert!(endpoint_b.hooks.is_empty());
+    assert_hook_present(&endpoint_a, STREAM_HOOK_ID);
+    assert_hook_present(&endpoint_b, STREAM_HOOK_ID);
 }
 
 #[test]

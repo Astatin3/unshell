@@ -1,4 +1,7 @@
+mod hooks;
 mod routing;
+
+pub use hooks::HookID;
 
 use alloc::{boxed::Box, vec::Vec};
 
@@ -9,9 +12,8 @@ pub struct Endpoint {
     pub id: u32,
 
     // A counter that creates unique hook IDs.
-    // TODO: Actually check if the hook ID collides with any existing hooks.
     // TODO: Randomize the hooks for more obfuscation
-    last_hook: u16,
+    pub(crate) last_hook: u16,
 
     // Absolute path for this node. Must be set by some leaf
     pub path: Path,
@@ -86,10 +88,5 @@ impl Endpoint {
 
             queue.clear();
         }
-    }
-
-    pub fn get_hook_id(&mut self) -> u16 {
-        self.last_hook = self.last_hook.wrapping_add(1);
-        self.last_hook - 1
     }
 }

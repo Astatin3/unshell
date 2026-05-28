@@ -38,7 +38,7 @@ fn merkle_sync_walks_hash_tree_and_streams_changed_blocks() {
     assert_eq!(respondent.streams_started, 6);
     assert_eq!(respondent.streams_completed, 6);
     assert_eq!(respondent.frames_sent, 12);
-    assert!(harness.endpoint_b.hooks.is_empty());
+    assert_eq!(harness.endpoint_b.hook_count(), 0);
 }
 
 #[test]
@@ -65,14 +65,14 @@ fn block_stream_hook_persists_until_final_frame() {
 
     harness.run_until_respondent_frames(8, 100);
     assert_eq!(
-        harness.endpoint_b.hooks.len(),
+        harness.endpoint_b.hook_count(),
         1,
         "first block stream should keep its hook after a non-final chunk"
     );
 
     harness.run_until_done(100);
     assert!(
-        harness.endpoint_b.hooks.is_empty(),
+        harness.endpoint_b.hook_count() == 0,
         "final block stream packet should clean respondent hook state"
     );
 }

@@ -7,8 +7,8 @@ use alloc::{boxed::Box, vec};
 
 use support::{
     CommsLeaf, ControllerLeaf, ENDPOINT_A, ENDPOINT_B, ENDPOINT_C, ResponderLeaf,
-    assert_hook_present, assert_hook_removed, echo_packet, endpoint_at, single_inbound_packet,
-    single_outbound_packet,
+    assert_hook_present, assert_hook_removed, echo_packet, echo_packet_with_end, endpoint_at,
+    single_inbound_packet, single_outbound_packet,
 };
 
 #[test]
@@ -82,26 +82,30 @@ fn test_oneshot() {
     assert!(response.end_hook);
     assert_eq!(response.data, "ABC123".as_bytes());
     assert!(
-        endpoint_b.hooks.is_empty(),
+        endpoint_b.hook_count() == 0,
         "responder hook should be cleaned after the upward response"
     );
     // assert_eq!(response.hook_id, HOOK_ECHO);
 }
 
 #[test]
-fn inbound_packet_for_local_endpoint_is_delivered_locally() {
+fn inbound_downward_packet_for_local_endpoint_opens_hook() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
+    endpoint.connections.insert((ENDPOINT_A, true));
 
     endpoint
-        .add_inbound(echo_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id))
+        .add_inbound_from(
+            ENDPOINT_A,
+            echo_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id),
+        )
         .unwrap();
 
     let packet = single_inbound_packet(&endpoint, ENDPOINT_B);
-    assert!(packet.end_hook);
+    assert!(!packet.end_hook);
     assert_eq!(packet.path, vec![ENDPOINT_A, ENDPOINT_B]);
     assert_hook_present(&endpoint, hook_id);
+    assert_eq!(endpoint.hook_peer(hook_id), Some(ENDPOINT_A));
     assert!(endpoint.outbound.is_empty());
 }
 
@@ -109,77 +113,82 @@ fn inbound_packet_for_local_endpoint_is_delivered_locally() {
 fn outbound_packet_for_local_endpoint_is_delivered_locally() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
 
     endpoint
         .add_outbound(echo_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id))
         .unwrap();
 
     let packet = single_inbound_packet(&endpoint, ENDPOINT_B);
-    assert!(packet.end_hook);
+    assert!(!packet.end_hook);
     assert_eq!(packet.data, "ABC123".as_bytes());
-    assert_hook_present(&endpoint, hook_id);
+    assert_hook_removed(&endpoint, hook_id);
     assert!(endpoint.outbound.is_empty());
 }
 
 #[test]
 fn inbound_downward_packet_routes_to_immediate_child() {
-    let mut endpoint = endpoint_at(ENDPOINT_A, vec![ENDPOINT_A]);
+    let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_B);
-    endpoint.connections.insert((ENDPOINT_B, false));
+    endpoint.connections.insert((ENDPOINT_A, true));
+    endpoint.connections.insert((ENDPOINT_C, false));
 
     endpoint
-        .add_inbound(echo_packet(
-            vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C],
-            hook_id,
-        ))
+        .add_inbound_from(
+            ENDPOINT_A,
+            echo_packet(vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C], hook_id),
+        )
         .unwrap();
 
-    let packet = single_outbound_packet(&endpoint, ENDPOINT_B);
-    assert!(packet.end_hook);
+    let packet = single_outbound_packet(&endpoint, ENDPOINT_C);
+    assert!(!packet.end_hook);
     assert_eq!(packet.path, vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C]);
     assert_hook_present(&endpoint, hook_id);
-    assert!(!endpoint.outbound.contains_key(&ENDPOINT_C));
+    assert_eq!(endpoint.hook_peer(hook_id), Some(ENDPOINT_C));
+    assert!(!endpoint.outbound.contains_key(&ENDPOINT_A));
 }
 
 #[test]
 fn outbound_downward_packet_routes_to_immediate_child() {
     let mut endpoint = endpoint_at(ENDPOINT_A, vec![ENDPOINT_A]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_B);
+    endpoint.accept_hook(hook_id, ENDPOINT_B);
     endpoint.connections.insert((ENDPOINT_B, false));
 
     endpoint
-        .add_outbound(echo_packet(
+        .add_outbound(echo_packet_with_end(
             vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C],
             hook_id,
+            true,
         ))
         .unwrap();
 
     let packet = single_outbound_packet(&endpoint, ENDPOINT_B);
     assert!(packet.end_hook);
     assert_eq!(packet.path, vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C]);
-    assert_hook_present(&endpoint, hook_id);
+    assert_hook_removed(&endpoint, hook_id);
     assert!(!endpoint.outbound.contains_key(&ENDPOINT_C));
 }
 
 #[test]
 fn inbound_upward_packet_with_hook_routes_to_parent() {
-    let mut endpoint = endpoint_at(ENDPOINT_C, vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C]);
+    let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
-    endpoint.connections.insert((ENDPOINT_B, true));
+    endpoint.accept_hook(hook_id, ENDPOINT_C);
+    endpoint.connections.insert((ENDPOINT_A, true));
+    endpoint.connections.insert((ENDPOINT_C, false));
 
     endpoint
-        .add_inbound(echo_packet(vec![ENDPOINT_A], hook_id))
+        .add_inbound_from(
+            ENDPOINT_C,
+            echo_packet_with_end(vec![ENDPOINT_A], hook_id, true),
+        )
         .unwrap();
 
-    let packet = single_outbound_packet(&endpoint, ENDPOINT_B);
+    let packet = single_outbound_packet(&endpoint, ENDPOINT_A);
     assert!(packet.end_hook);
     assert_eq!(packet.hook_id, hook_id);
     assert_hook_removed(&endpoint, hook_id);
-    assert!(!endpoint.outbound.contains_key(&ENDPOINT_A));
+    assert!(!endpoint.outbound.contains_key(&ENDPOINT_C));
 }
 
 #[test]
@@ -187,9 +196,13 @@ fn inbound_upward_packet_without_hook_is_rejected() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
     endpoint.connections.insert((ENDPOINT_A, true));
+    endpoint.connections.insert((ENDPOINT_C, false));
 
     let error = endpoint
-        .add_inbound(echo_packet(vec![ENDPOINT_A], hook_id))
+        .add_inbound_from(
+            ENDPOINT_C,
+            echo_packet_with_end(vec![ENDPOINT_A], hook_id, true),
+        )
         .unwrap_err();
 
     assert!(matches!(
@@ -202,12 +215,13 @@ fn inbound_upward_packet_without_hook_is_rejected() {
 
 #[test]
 fn forged_upward_packet_with_unknown_hook_is_rejected() {
-    let mut endpoint = endpoint_at(ENDPOINT_C, vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C]);
-    endpoint.hooks.insert(7, ENDPOINT_A);
-    endpoint.connections.insert((ENDPOINT_B, true));
+    let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
+    endpoint.accept_hook(7, ENDPOINT_C);
+    endpoint.connections.insert((ENDPOINT_A, true));
+    endpoint.connections.insert((ENDPOINT_C, false));
 
     let error = endpoint
-        .add_inbound(echo_packet(vec![ENDPOINT_A], 99))
+        .add_inbound_from(ENDPOINT_C, echo_packet_with_end(vec![ENDPOINT_A], 99, true))
         .unwrap_err();
 
     assert!(matches!(error, EndpointError::UnknownHook { hook_id: 99 }));
@@ -219,11 +233,14 @@ fn forged_upward_packet_with_unknown_hook_is_rejected() {
 fn forged_sideways_packet_is_rejected_as_incorrect_path() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
+    endpoint.accept_hook(hook_id, ENDPOINT_A);
     endpoint.connections.insert((ENDPOINT_A, true));
 
     let error = endpoint
-        .add_inbound(echo_packet(vec![ENDPOINT_A, ENDPOINT_C], hook_id))
+        .add_inbound_from(
+            ENDPOINT_A,
+            echo_packet(vec![ENDPOINT_A, ENDPOINT_C], hook_id),
+        )
         .unwrap_err();
 
     assert!(matches!(error, EndpointError::DestinationOutsideLocalTree));
@@ -283,8 +300,9 @@ fn malformed_frame_does_not_block_following_valid_packet() {
     endpoint.update();
 
     let packet = single_inbound_packet(&endpoint, ENDPOINT_B);
-    assert!(packet.end_hook);
+    assert!(!packet.end_hook);
     assert_eq!(packet.hook_id, hook_id);
+    assert_hook_present(&endpoint, hook_id);
 }
 
 #[test]
@@ -296,16 +314,21 @@ fn forged_frame_without_required_hook_is_dropped_by_comms_leaf() {
         vec![Box::new(CommsLeaf {
             tx: tx_unused,
             rx: rx_for_endpoint,
-            remote_id: ENDPOINT_A,
-            is_authority: true,
+            remote_id: ENDPOINT_C,
+            is_authority: false,
             started: false,
         })],
     );
     endpoint.path = vec![ENDPOINT_A, ENDPOINT_B];
-    endpoint.hooks.insert(7, ENDPOINT_A);
+    endpoint.accept_hook(7, ENDPOINT_C);
+    endpoint.connections.insert((ENDPOINT_A, true));
 
     tx_to_endpoint
-        .send(echo_packet(vec![ENDPOINT_A], 12).serialize().unwrap())
+        .send(
+            echo_packet_with_end(vec![ENDPOINT_A], 12, true)
+                .serialize()
+                .unwrap(),
+        )
         .unwrap();
     endpoint.update();
 
@@ -317,13 +340,13 @@ fn forged_frame_without_required_hook_is_dropped_by_comms_leaf() {
 #[test]
 fn upward_outbound_without_hook_is_rejected() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
-    endpoint.hooks.insert(7, ENDPOINT_A);
+    endpoint.accept_hook(7, ENDPOINT_A);
     endpoint.connections.insert((ENDPOINT_A, true));
 
     let new_hook = endpoint.get_hook_id();
 
     let error = endpoint
-        .add_outbound(echo_packet(vec![ENDPOINT_A], new_hook))
+        .add_outbound(echo_packet_with_end(vec![ENDPOINT_A], new_hook, true))
         .unwrap_err();
 
     assert!(matches!(
@@ -340,7 +363,6 @@ fn downward_outbound_without_hook_is_allowed() {
     endpoint.connections.insert((ENDPOINT_B, false));
 
     let new_hook = endpoint.get_hook_id();
-    endpoint.hooks.insert(new_hook, ENDPOINT_B);
 
     endpoint
         .add_outbound(echo_packet(vec![ENDPOINT_A, ENDPOINT_B], new_hook))
@@ -348,6 +370,7 @@ fn downward_outbound_without_hook_is_allowed() {
 
     assert_eq!(endpoint.outbound.get(&ENDPOINT_B).unwrap().len(), 1);
     assert_hook_present(&endpoint, new_hook);
+    assert_eq!(endpoint.hook_peer(new_hook), Some(ENDPOINT_B));
 }
 
 #[test]
@@ -355,11 +378,11 @@ fn deeper_upward_route_uses_parent_as_next_hop() {
     let mut endpoint = endpoint_at(ENDPOINT_C, vec![ENDPOINT_A, ENDPOINT_B, ENDPOINT_C]);
     let new_hook = endpoint.get_hook_id();
 
-    endpoint.hooks.insert(new_hook, ENDPOINT_A);
+    endpoint.accept_hook(new_hook, ENDPOINT_B);
     endpoint.connections.insert((ENDPOINT_B, true));
 
     endpoint
-        .add_outbound(echo_packet(vec![ENDPOINT_A], new_hook))
+        .add_outbound(echo_packet_with_end(vec![ENDPOINT_A], new_hook, true))
         .unwrap();
 
     assert!(endpoint.outbound.contains_key(&ENDPOINT_B));
@@ -371,7 +394,6 @@ fn deeper_upward_route_uses_parent_as_next_hop() {
 fn downward_route_without_connection_is_rejected() {
     let mut endpoint = endpoint_at(ENDPOINT_A, vec![ENDPOINT_A]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_B);
 
     let error = endpoint
         .add_outbound(echo_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id))
@@ -384,7 +406,7 @@ fn downward_route_without_connection_is_rejected() {
             direction: RouteDirection::Downward,
         }
     ));
-    assert_hook_present(&endpoint, hook_id);
+    assert_hook_removed(&endpoint, hook_id);
     assert!(endpoint.outbound.is_empty());
 }
 
@@ -392,10 +414,10 @@ fn downward_route_without_connection_is_rejected() {
 fn upward_route_without_connection_is_rejected_even_with_hook() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
+    endpoint.accept_hook(hook_id, ENDPOINT_A);
 
     let error = endpoint
-        .add_outbound(echo_packet(vec![ENDPOINT_A], hook_id))
+        .add_outbound(echo_packet_with_end(vec![ENDPOINT_A], hook_id, true))
         .unwrap_err();
 
     assert!(matches!(
@@ -413,11 +435,11 @@ fn upward_route_without_connection_is_rejected_even_with_hook() {
 fn end_hook_removes_hook_after_packet_is_queued() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
+    endpoint.accept_hook(hook_id, ENDPOINT_A);
     endpoint.connections.insert((ENDPOINT_A, true));
 
     endpoint
-        .add_outbound(echo_packet(vec![ENDPOINT_A], hook_id))
+        .add_outbound(echo_packet_with_end(vec![ENDPOINT_A], hook_id, true))
         .unwrap();
 
     assert_hook_removed(&endpoint, hook_id);
@@ -431,10 +453,10 @@ fn end_hook_removes_hook_after_packet_is_queued() {
 fn failed_end_hook_route_keeps_hook_state() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let hook_id = endpoint.get_hook_id();
-    endpoint.hooks.insert(hook_id, ENDPOINT_A);
+    endpoint.accept_hook(hook_id, ENDPOINT_A);
 
     let error = endpoint
-        .add_outbound(echo_packet(vec![ENDPOINT_A], hook_id))
+        .add_outbound(echo_packet_with_end(vec![ENDPOINT_A], hook_id, true))
         .unwrap_err();
 
     assert!(matches!(

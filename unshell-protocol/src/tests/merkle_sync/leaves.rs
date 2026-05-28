@@ -110,7 +110,7 @@ impl Leaf for MockConnectionLeaf {
             // Mock transports move untrusted bytes. Malformed frames are dropped so
             // the sync state machine is tested only after packet parsing succeeds.
             if let Ok(packet) = Packet::deserialize(&data) {
-                let _ = endpoint.add_inbound(packet);
+                let _ = endpoint.add_inbound_from(self.remote_id, packet);
             }
         }
 
@@ -335,7 +335,6 @@ impl MerkleRespondentLeaf {
         };
 
         let frames = self.frames_for_request(procedure_id, &data);
-        endpoint.hooks.insert(hook_id, ENDPOINT_CALLER);
 
         self.report.borrow_mut().requests_seen.push(procedure_id);
         if !frames.is_empty() {

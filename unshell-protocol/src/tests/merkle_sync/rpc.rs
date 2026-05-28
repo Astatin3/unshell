@@ -78,7 +78,7 @@ pub(super) fn block_chunk_frame(chunk: BlockChunk) -> OutgoingFrame {
 fn request_packet(procedure_id: u32, hook_id: u16, data: Vec<u8>) -> Packet {
     Packet {
         hook_id,
-        end_hook: true,
+        end_hook: false,
         path: vec![ENDPOINT_CALLER, ENDPOINT_RESPONDENT],
         procedure_id,
         data,

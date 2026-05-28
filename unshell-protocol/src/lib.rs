@@ -6,7 +6,7 @@ mod endpoint;
 mod error;
 mod packet;
 
-pub use endpoint::Endpoint;
+pub use endpoint::{Endpoint, HookID};
 pub use error::*;
 pub use packet::Packet;
 
@@ -26,7 +26,6 @@ use alloc::{
 
 type Path = Vec<u32>;
 type EndpointName = u32;
-type HookID = u16;
 type ConnectionSet = BTreeSet<(EndpointName, bool)>;
 type HookMap = BTreeMap<HookID, EndpointName>;
 type PacketQueue = VecDeque<Packet>;

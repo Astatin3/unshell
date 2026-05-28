@@ -17,9 +17,14 @@ const LEAF_RESPONDER: u32 = 102;
 /// than packet construction, which is important because forged and malformed cases
 /// should fail before any leaf-level procedure handling would matter.
 pub(super) fn echo_packet(path: Vec<u32>, hook_id: u16) -> Packet {
+    echo_packet_with_end(path, hook_id, false)
+}
+
+/// Builds a test packet with an explicit hook-lifetime marker.
+pub(super) fn echo_packet_with_end(path: Vec<u32>, hook_id: u16, end_hook: bool) -> Packet {
     Packet {
         hook_id,
-        end_hook: true,
+        end_hook,
         path,
         procedure_id: 1,
         data: "ABC123".as_bytes().to_vec(),
@@ -71,7 +76,7 @@ pub(super) fn single_inbound_packet(endpoint: &Endpoint, local_id: u32) -> &Pack
 /// explains the intended routing invariant when it fails.
 pub(super) fn assert_hook_present(endpoint: &Endpoint, hook_id: u16) {
     assert!(
-        endpoint.hooks.contains_key(&hook_id),
+        endpoint.has_hook(hook_id),
         "expected hook {hook_id} to remain registered"
     );
 }
@@ -82,7 +87,7 @@ pub(super) fn assert_hook_present(endpoint: &Endpoint, hook_id: u16) {
 /// downward and local packets with the same flag must leave hooks alone.
 pub(super) fn assert_hook_removed(endpoint: &Endpoint, hook_id: u16) {
     assert!(
-        !endpoint.hooks.contains_key(&hook_id),
+        !endpoint.has_hook(hook_id),
         "expected hook {hook_id} to be cleaned up"
     );
 }
@@ -139,7 +144,7 @@ impl Leaf for CommsLeaf {
             // the oneshot harness faithful to a router boundary: invalid wire data
             // must not panic or poison later valid packets on the same connection.
             if let Ok(packet) = Packet::deserialize(&data) {
-                let _ = endpoint.add_inbound(packet);
+                let _ = endpoint.add_inbound_from(self.remote_id, packet);
             }
         }
 
@@ -160,16 +165,13 @@ impl Leaf for ResponderLeaf {
         let mut packets = Vec::new();
 
         endpoint.take_inbound_clear(local_id, |packet| {
-            let mut response = echo_packet(vec![ENDPOINT_A], packet.hook_id);
+            let mut response = echo_packet_with_end(vec![ENDPOINT_A], packet.hook_id, true);
             response.hook_id = packet.hook_id;
             response.data = packet.data.clone();
             packets.push(response);
         });
 
         for packet in packets {
-            // Upward responses require local hook state before routing; this mirrors
-            // a callee accepting the call and authorizing the matching response hook.
-            endpoint.hooks.insert(packet.hook_id, 0);
             let _ = endpoint.add_outbound(packet);
         }
     }

@@ -50,6 +50,42 @@ pub enum EndpointError {
         direction: RouteDirection,
     },
 
+    /// Inbound transport bytes arrived from an endpoint that is not registered locally.
+    ///
+    /// Direction-aware routing needs to know whether the remote endpoint is the
+    /// parent or a child before it can decide whether local delivery is downward or
+    /// upward traffic. Unknown peers are rejected before hook state can be mutated.
+    UnknownConnection {
+        /// Adjacent endpoint that supplied the inbound packet.
+        remote_id: u32,
+    },
+
+    /// The same adjacent endpoint is registered as both parent and child.
+    ///
+    /// The legacy connection table stores direction as a boolean. Both entries being
+    /// present would make inbound hook policy ambiguous, so the endpoint refuses to
+    /// route the packet until the connection state is made unambiguous.
+    AmbiguousConnection {
+        /// Adjacent endpoint whose direction cannot be inferred.
+        remote_id: u32,
+    },
+
+    /// An inbound packet tried to move in the opposite direction from its connection.
+    ///
+    /// A parent/upstream peer may send packets downward, while a child/downstream
+    /// peer may send packets upward. This prevents a child from using its transport
+    /// link to forge downward traffic to siblings or descendants.
+    InboundDirectionMismatch {
+        /// Adjacent endpoint that supplied the inbound packet.
+        remote_id: u32,
+
+        /// Direction allowed by the registered connection.
+        expected: RouteDirection,
+
+        /// Direction implied by the packet destination path.
+        actual: RouteDirection,
+    },
+
     /// The packet is trying to move upward without known hook state.
     ///
     /// Upward hook traffic is gated by local hook state so a peer cannot forge a
@@ -57,6 +93,23 @@ pub enum EndpointError {
     UnknownHook {
         /// Hook id claimed by the upward packet.
         hook_id: u16,
+    },
+
+    /// The hook exists, but it is registered for a different adjacent peer.
+    ///
+    /// Hook state is peer-bound so one child cannot reuse another child's paved
+    /// return channel. For locally generated upward traffic, `actual_peer` is the
+    /// parent next hop; for inbound upward traffic, it is the child that supplied the
+    /// frame.
+    HookPeerMismatch {
+        /// Hook id claimed by the upward packet.
+        hook_id: u16,
+
+        /// Adjacent peer recorded when the hook was paved.
+        expected_peer: u32,
+
+        /// Adjacent peer trying to use the hook now.
+        actual_peer: u32,
     },
 
     /// A packet could not be converted into bytes for transport.
