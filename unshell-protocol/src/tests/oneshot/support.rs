@@ -1,6 +1,6 @@
 use crate::{Endpoint, Leaf, Packet};
 
-use alloc::{string::ToString, vec, vec::Vec};
+use alloc::{vec, vec::Vec};
 use crossbeam_channel::{Receiver, Sender};
 
 pub(super) const ENDPOINT_A: u32 = 0;
@@ -21,7 +21,7 @@ pub(super) fn echo_packet(path: Vec<u32>, hook_id: u16) -> Packet {
         hook_id,
         end_hook: true,
         path,
-        procedure_id: "echo".to_string(),
+        procedure_id: 1,
         data: "ABC123".as_bytes().to_vec(),
     }
 }

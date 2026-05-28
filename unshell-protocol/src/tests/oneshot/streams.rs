@@ -1,6 +1,6 @@
 use crate::{Endpoint, Leaf, Packet};
 
-use alloc::{boxed::Box, format, string::ToString, vec, vec::Vec};
+use alloc::{boxed::Box, format, vec, vec::Vec};
 
 use super::support::{CommsLeaf, ENDPOINT_A, ENDPOINT_B, assert_hook_present, assert_hook_removed};
 
@@ -18,7 +18,7 @@ fn stream_open_packet(hook_id: u16) -> Packet {
         hook_id,
         end_hook: true,
         path: vec![ENDPOINT_A, ENDPOINT_B],
-        procedure_id: "stream.open".to_string(),
+        procedure_id: 2,
         data: b"open".to_vec(),
     }
 }
@@ -33,7 +33,7 @@ fn stream_frame_packet(hook_id: u16, index: usize, end_hook: bool) -> Packet {
         hook_id,
         end_hook,
         path: vec![ENDPOINT_A],
-        procedure_id: "stream.frame".to_string(),
+        procedure_id: 3,
         data: format!("stream-{index}").into_bytes(),
     }
 }

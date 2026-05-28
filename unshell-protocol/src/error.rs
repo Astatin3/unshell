@@ -89,18 +89,15 @@ pub enum SerializeError {
     /// The packet path contains more bytes than the frame length field can represent.
     PathTooLarge,
 
-    /// The procedure identifier is too large to encode in a `u32` length field.
-    ProcIdTooLarge,
-
     /// The body section is too large to encode in a `u32` length field.
     BodyTooLarge,
 }
 
 /// Errors produced while parsing a [`Packet`] from untrusted wire bytes.
 ///
-/// Deserialization rejects partial, inconsistent, or invalid UTF-8 frames before
-/// endpoint routing sees them. Keeping these separate from route failures makes it
-/// clear whether a packet failed before or after it became structured data.
+/// Deserialization rejects partial or inconsistent frames before endpoint routing
+/// sees them. Keeping these separate from route failures makes it clear whether a
+/// packet failed before or after it became structured data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeserializeError {
     /// The buffer ended before the parser could read the required field.
@@ -111,12 +108,6 @@ pub enum DeserializeError {
 
     /// The path length overflowed while computing the path byte range.
     PathTooLong,
-
-    /// The procedure id length overflowed while computing the body byte range.
-    ProcIdTooLong,
-
-    /// The encoded procedure id was not valid UTF-8.
-    InvalidUtf8,
 }
 
 impl From<SerializeError> for EndpointError {

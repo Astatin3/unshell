@@ -1,4 +1,4 @@
-use alloc::{string::ToString, vec, vec::Vec};
+use alloc::{vec, vec::Vec};
 
 use crate::{DeserializeError, EndpointError, Packet, SerializeError};
 
@@ -9,7 +9,7 @@ fn make_packet() -> Packet {
         hook_id: 42,
         end_hook: false,
         path: vec![1, 2, 3],
-        procedure_id: "my.service.Method".to_string(),
+        procedure_id: 0xAABB_CCDD,
         data: vec![0xDE, 0xAD, 0xBE, 0xEF],
     }
 }
@@ -19,6 +19,15 @@ fn make_packet_flags(end_hook: bool) -> Packet {
         end_hook,
         ..make_packet()
     }
+}
+
+fn body_len_offset(buf: &[u8]) -> usize {
+    let path_len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
+    8 + (path_len * 4)
+}
+
+fn procedure_id_offset(buf: &[u8]) -> usize {
+    body_len_offset(buf) + 4
 }
 
 // ── Round-trip ────────────────────────────────────────────────────────────
@@ -37,14 +46,16 @@ fn full_round_trip() {
 }
 
 #[test]
-fn header_round_trip() {
+fn procedure_id_is_fixed_width_u32() {
     let packet = make_packet();
     let buf = packet.serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
+    let proc_offset = procedure_id_offset(&buf);
 
-    assert_eq!(header.hook_id, packet.hook_id);
-    assert_eq!(header.end_hook, packet.end_hook);
-    assert_eq!(header.path, packet.path);
+    assert_eq!(
+        &buf[proc_offset..proc_offset + 4],
+        &packet.procedure_id.to_le_bytes()
+    );
+    assert_eq!(&buf[proc_offset + 4..], packet.data.as_slice());
 }
 
 // ── Flags ─────────────────────────────────────────────────────────────────
@@ -52,17 +63,15 @@ fn header_round_trip() {
 #[test]
 fn flags_end_hook_false() {
     let packet = make_packet_flags(false);
-    let buf = packet.serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-    assert!(!header.end_hook);
+    let result = Packet::deserialize(&packet.serialize().unwrap()).unwrap();
+    assert!(!result.end_hook);
 }
 
 #[test]
 fn flags_end_hook_true() {
     let packet = make_packet_flags(true);
-    let buf = packet.serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-    assert!(header.end_hook);
+    let result = Packet::deserialize(&packet.serialize().unwrap()).unwrap();
+    assert!(result.end_hook);
 }
 
 // ── Empty fields ──────────────────────────────────────────────────────────
@@ -73,20 +82,18 @@ fn empty_path() {
         path: vec![],
         ..make_packet()
     };
-    let buf = packet.serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-    assert_eq!(header.path, &[] as &[u32]);
+    let result = Packet::deserialize(&packet.serialize().unwrap()).unwrap();
+    assert_eq!(result.path, &[] as &[u32]);
 }
 
 #[test]
-fn empty_procedure_id() {
+fn zero_procedure_id() {
     let packet = Packet {
-        procedure_id: "".to_string(),
+        procedure_id: 0,
         ..make_packet()
     };
-    let buf = packet.serialize().unwrap();
-    let result = Packet::deserialize(&buf).unwrap();
-    assert_eq!(result.procedure_id, "");
+    let result = Packet::deserialize(&packet.serialize().unwrap()).unwrap();
+    assert_eq!(result.procedure_id, 0);
 }
 
 #[test]
@@ -95,8 +102,7 @@ fn empty_data() {
         data: vec![],
         ..make_packet()
     };
-    let buf = packet.serialize().unwrap();
-    let result = Packet::deserialize(&buf).unwrap();
+    let result = Packet::deserialize(&packet.serialize().unwrap()).unwrap();
     assert_eq!(result.data, &[] as &[u8]);
 }
 
@@ -106,75 +112,14 @@ fn all_fields_empty() {
         hook_id: 0,
         end_hook: false,
         path: vec![],
-        procedure_id: "".to_string(),
+        procedure_id: 0,
         data: vec![],
     };
-    let buf = packet.serialize().unwrap();
-    let result = Packet::deserialize(&buf).unwrap();
+    let result = Packet::deserialize(&packet.serialize().unwrap()).unwrap();
     assert_eq!(result.hook_id, 0);
     assert_eq!(result.path, Vec::<u32>::new());
-    assert_eq!(result.procedure_id, "");
+    assert_eq!(result.procedure_id, 0);
     assert_eq!(result.data, &[] as &[u8]);
-}
-
-// ── Zero-copy: borrows point into the original buffer ─────────────────────
-
-#[test]
-fn header_path_is_borrowed_from_buffer() {
-    let buf = make_packet().serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-
-    let path_ptr = header.path.as_ptr() as *const u8;
-    let buf_range = buf.as_ptr_range();
-    assert!(
-        buf_range.contains(&path_ptr),
-        "path must be a subslice of the input buffer, not a new allocation"
-    );
-}
-
-#[test]
-fn body_remainder_is_borrowed_from_buffer() {
-    let buf = make_packet().serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-
-    let remainder_ptr = header.body_remainder.as_ptr();
-    let buf_range = buf.as_ptr_range();
-    assert!(
-        buf_range.contains(&remainder_ptr),
-        "body_remainder must point into the input buffer"
-    );
-}
-
-// ── Partial deserialization: body is untouched by header parse ────────────
-
-#[test]
-fn deserialize_header_does_not_read_body() {
-    let buf = make_packet().serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-
-    // Re-parse body from the remainder to confirm it's intact.
-    let body_buf = header.body_remainder;
-    let body_len =
-        u32::from_le_bytes([body_buf[0], body_buf[1], body_buf[2], body_buf[3]]) as usize;
-    assert!(
-        body_buf.len() >= 4 + body_len,
-        "body_remainder must contain the full body"
-    );
-}
-
-#[test]
-fn can_forward_buffer_after_header_parse() {
-    // Simulates a router: parse the header, then forward the raw buffer
-    // without touching the body.
-    let original = make_packet().serialize().unwrap();
-    let header = Packet::deserialize_header(&original).unwrap();
-
-    assert_eq!(header.path, &[1, 2, 3]);
-
-    // "Forward" by deserializing the full original buffer downstream.
-    let forwarded = Packet::deserialize(&original).unwrap();
-    assert_eq!(forwarded.procedure_id, "my.service.Method");
-    assert_eq!(forwarded.data, &[0xDE, 0xAD, 0xBE, 0xEF]);
 }
 
 // ── Truncation / corruption ───────────────────────────────────────────────
@@ -184,7 +129,7 @@ fn truncated_in_fixed_prefix() {
     let buf = make_packet().serialize().unwrap();
     // Cut inside the fixed 8-byte prefix.
     assert_eq!(
-        Packet::deserialize_header(&buf[..4]).unwrap_err(),
+        Packet::deserialize(&buf[..4]).unwrap_err(),
         DeserializeError::BufferTooShort
     );
 }
@@ -194,7 +139,18 @@ fn truncated_in_path() {
     let buf = make_packet().serialize().unwrap();
     // Cut to just past the fixed prefix, mid-path.
     assert_eq!(
-        Packet::deserialize_header(&buf[..9]).unwrap_err(),
+        Packet::deserialize(&buf[..9]).unwrap_err(),
+        DeserializeError::BufferTooShort
+    );
+}
+
+#[test]
+fn truncated_before_body_len() {
+    let buf = make_packet().serialize().unwrap();
+    let body_len_offset = body_len_offset(&buf);
+
+    assert_eq!(
+        Packet::deserialize(&buf[..body_len_offset + 2]).unwrap_err(),
         DeserializeError::BufferTooShort
     );
 }
@@ -203,27 +159,43 @@ fn truncated_in_path() {
 fn truncated_in_body() {
     let buf = make_packet().serialize().unwrap();
     // Remove last byte — well into the body.
-    assert!(Packet::deserialize(&buf[..buf.len() - 1]).is_err());
+    assert_eq!(
+        Packet::deserialize(&buf[..buf.len() - 1]).unwrap_err(),
+        DeserializeError::BodyLengthMismatch
+    );
 }
 
 #[test]
 fn empty_buffer_rejected() {
     assert_eq!(
-        Packet::deserialize_header(&[]).unwrap_err(),
+        Packet::deserialize(&[]).unwrap_err(),
         DeserializeError::BufferTooShort
     );
 }
 
 #[test]
-fn invalid_utf8_in_procedure_id() {
+fn body_length_mismatch_is_rejected() {
     let mut buf = make_packet().serialize().unwrap();
-    // Find where procedure_id starts: 8 + path_len*4 + 4 (body_len) + 4 (proc_id_len)
-    let path_len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
-    let proc_id_offset = 8 + (path_len * 4) + 4 + 4;
-    buf[proc_id_offset] = 0xFF;
+    let body_len_offset = body_len_offset(&buf);
+    let inflated_body_len = 999u32;
+    buf[body_len_offset..body_len_offset + 4].copy_from_slice(&inflated_body_len.to_le_bytes());
+
     assert_eq!(
         Packet::deserialize(&buf).unwrap_err(),
-        DeserializeError::InvalidUtf8
+        DeserializeError::BodyLengthMismatch
+    );
+}
+
+#[test]
+fn body_too_short_for_procedure_id_is_rejected() {
+    let mut buf = make_packet().serialize().unwrap();
+    let body_len_offset = body_len_offset(&buf);
+    let short_body_len = 3u32;
+    buf[body_len_offset..body_len_offset + 4].copy_from_slice(&short_body_len.to_le_bytes());
+
+    assert_eq!(
+        Packet::deserialize(&buf).unwrap_err(),
+        DeserializeError::BufferTooShort
     );
 }
 
