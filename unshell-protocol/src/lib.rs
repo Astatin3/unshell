@@ -34,6 +34,7 @@ type RouteMap = BTreeMap<EndpointName, PacketQueue>;
 
 #[cfg(test)]
 mod tests {
+    mod merkle_sync;
     mod oneshot;
     mod packet;
 }
