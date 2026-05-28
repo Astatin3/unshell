@@ -1,13 +1,8 @@
-pub mod error;
 mod routing;
 
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::{
-    leaf::Leaf,
-    packet::Packet,
-    types::{ConnectionSet, HookMap, Path, RouteMap},
-};
+use crate::{ConnectionSet, HookMap, Leaf, Packet, Path, RouteMap};
 
 pub struct Endpoint {
     // This endpoint's identifier

@@ -1,6 +1,6 @@
-use super::*;
-use alloc::string::ToString;
-use alloc::vec;
+use alloc::{string::ToString, vec, vec::Vec};
+
+use crate::{DeserializeError, EndpointError, Packet, SerializeError};
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -224,5 +224,29 @@ fn invalid_utf8_in_procedure_id() {
     assert_eq!(
         Packet::deserialize(&buf).unwrap_err(),
         DeserializeError::InvalidUtf8
+    );
+}
+
+#[test]
+fn serialize_error_wraps_into_endpoint_error() {
+    let error: EndpointError = SerializeError::BodyTooLarge.into();
+
+    assert_eq!(
+        error,
+        EndpointError::PacketSerialize {
+            source: SerializeError::BodyTooLarge,
+        }
+    );
+}
+
+#[test]
+fn deserialize_error_wraps_into_endpoint_error() {
+    let error: EndpointError = DeserializeError::BufferTooShort.into();
+
+    assert_eq!(
+        error,
+        EndpointError::PacketDeserialize {
+            source: DeserializeError::BufferTooShort,
+        }
     );
 }

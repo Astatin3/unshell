@@ -23,10 +23,12 @@ pub mod logger;
 /// proc-macro output and downstream code do not need a second migration.
 pub use unshell_protocol as protocol;
 
-/// Re-export the leaf library crate behind the historical `unshell::leaves` path
+// Re-export the leaf library crate behind the historical `unshell::leaves` path
+// once the leaf crate is part of the active workspace again.
 // pub use unshell_leaves as leaves;
 
-/// Re-export the runtime crate behind the `unshell::runtime` path.
+// Re-export the runtime crate behind the `unshell::runtime` path once the runtime
+// crate is part of the active workspace again.
 // pub use unshell_runtime as runtime;
 
 // pub use unshell_macros::{Procedure, leaf, procedures};
@@ -40,21 +42,22 @@ pub use unshell_protocol as protocol;
 /// Why it exists: the common bootstrap case should not require callers to manually construct an
 /// empty path, `Vec<ChildRoute>`, and a `Vec<LeafSpec>` when they already have leaf host values.
 ///
-// # Example
-// ```rust
-// use unshell::{create_endpoint, leaf};
-// use unshell::protocol::tree::Endpoint;
-
-// #[derive(Default)]
-// struct DemoLeaf;
-
-// #[leaf(id = "org.example.v1.demo", procedures = ["ping"], endpoint_struct = DemoLeaf)]
-// struct Demo;
-
-// let endpoint = create_endpoint!("demo", DemoLeaf::default());
-// assert!(endpoint.path().is_empty());
-// assert_eq!(endpoint.local_id(), Some("demo"));
-// ```
+/// # Example
+///
+/// ```rust,ignore
+/// use unshell::{create_endpoint, leaf};
+/// use unshell::protocol::tree::Endpoint;
+///
+/// #[derive(Default)]
+/// struct DemoLeaf;
+///
+/// #[leaf(id = "org.example.v1.demo", procedures = ["ping"], endpoint_struct = DemoLeaf)]
+/// struct Demo;
+///
+/// let endpoint = create_endpoint!("demo", DemoLeaf::default());
+/// assert!(endpoint.path().is_empty());
+/// assert_eq!(endpoint.local_id(), Some("demo"));
+/// ```
 #[macro_export]
 macro_rules! create_endpoint {
     ($id:expr $(, $leaf:expr )* $(,)?) => {{

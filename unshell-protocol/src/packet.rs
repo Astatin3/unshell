@@ -1,10 +1,9 @@
-#[cfg(test)]
-mod tests;
-
 extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+
+use crate::{DeserializeError, SerializeError};
 
 #[derive(Debug)]
 pub struct Packet {
@@ -25,22 +24,6 @@ pub struct HeaderRef<'buf> {
     pub end_hook: bool,
     pub path: &'buf [u32],
     pub body_remainder: &'buf [u8],
-}
-
-#[derive(Debug)]
-pub enum SerializeError {
-    PathTooLarge,
-    ProcIdTooLarge,
-    BodyTooLarge,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DeserializeError {
-    BufferTooShort,
-    BodyLengthMismatch,
-    PathTooLong,
-    ProcIdTooLong,
-    InvalidUtf8,
 }
 
 impl Packet {
