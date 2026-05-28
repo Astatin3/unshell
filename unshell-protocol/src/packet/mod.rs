@@ -9,9 +9,8 @@ use alloc::vec::Vec;
 #[derive(Debug)]
 pub struct Packet {
     pub hook_id: u16,
-    pub is_upwards_call: bool,
     pub end_hook: bool,
-    pub path: String,
+    pub path: Vec<u32>,
     // ── body (routers never read below this line) ──
     pub procedure_id: String,
     pub data: Vec<u8>,
@@ -23,9 +22,8 @@ pub struct Packet {
 #[derive(Debug)]
 pub struct HeaderRef<'buf> {
     pub hook_id: u16,
-    pub is_upwards_call: bool,
     pub end_hook: bool,
-    pub path: &'buf str,
+    pub path: &'buf [u32],
     pub body_remainder: &'buf [u8],
 }
 
@@ -47,10 +45,9 @@ pub enum DeserializeError {
 
 impl Packet {
     pub fn serialize(&self) -> Result<Vec<u8>, SerializeError> {
-        let path_bytes = self.path.as_bytes();
         let proc_id_bytes = self.procedure_id.as_bytes();
 
-        let path_len = u32::try_from(path_bytes.len()).map_err(|_| SerializeError::PathTooLarge)?;
+        let path_len = self.path.len() as u32;
         let proc_id_len =
             u32::try_from(proc_id_bytes.len()).map_err(|_| SerializeError::ProcIdTooLarge)?;
 
@@ -61,16 +58,18 @@ impl Packet {
             .ok_or(SerializeError::BodyTooLarge)?;
         let body_len = u32::try_from(body_payload_len).map_err(|_| SerializeError::BodyTooLarge)?;
 
-        let total = 8 + path_bytes.len() + 4 + body_payload_len;
+        let total = 8 + (self.path.len() * 4) + 4 + body_payload_len;
         let mut buf = Vec::with_capacity(total);
 
         // ── header ────────────────────────────────────────────────────────────
-        let flags = (self.is_upwards_call as u8) | ((self.end_hook as u8) << 1);
+        let flags = self.end_hook as u8;
         buf.extend_from_slice(&self.hook_id.to_le_bytes());
         buf.push(flags);
         buf.push(0u8); // padding
         buf.extend_from_slice(&path_len.to_le_bytes());
-        buf.extend_from_slice(path_bytes);
+        for &segment in &self.path {
+            buf.extend_from_slice(&segment.to_le_bytes());
+        }
 
         // ── body ──────────────────────────────────────────────────────────────
         buf.extend_from_slice(&body_len.to_le_bytes());
@@ -91,25 +90,25 @@ impl Packet {
 
         let hook_id = u16::from_le_bytes([buf[0], buf[1]]);
         let flags = buf[2];
-        let is_upwards_call = flags & 0b0000_0001 != 0;
-        let end_hook = flags & 0b0000_0010 != 0;
+        let end_hook = flags & 0b0000_0001 != 0;
         let path_len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
 
         let path_start = 8usize;
         let path_end = path_start
-            .checked_add(path_len)
+            .checked_add(path_len * 4)
             .ok_or(DeserializeError::PathTooLong)?;
 
         if buf.len() < path_end {
             return Err(DeserializeError::BufferTooShort);
         }
 
-        let path = core::str::from_utf8(&buf[path_start..path_end])
-            .map_err(|_| DeserializeError::InvalidUtf8)?;
+        // Cast the buffer slice to a u32 slice.
+        // This requires alignment. rkyv handles this, but for a manual cast:
+        let path_ptr = buf[path_start..path_end].as_ptr() as *const u32;
+        let path = unsafe { core::slice::from_raw_parts(path_ptr, path_len) };
 
         Ok(HeaderRef {
             hook_id,
-            is_upwards_call,
             end_hook,
             path,
             body_remainder: &buf[path_end..],
@@ -157,9 +156,8 @@ impl Packet {
 
         Ok(Self {
             hook_id: header.hook_id,
-            is_upwards_call: header.is_upwards_call,
             end_hook: header.end_hook,
-            path: header.path.into(),
+            path: header.path.to_vec(),
             procedure_id: procedure_id.into(),
             data,
         })

@@ -1,6 +1,6 @@
 #![no_std]
 
-pub extern crate alloc;
+extern crate alloc;
 
 pub mod endpoint;
 pub mod leaf;

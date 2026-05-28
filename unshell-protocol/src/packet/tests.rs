@@ -7,17 +7,15 @@ use alloc::vec;
 fn make_packet() -> Packet {
     Packet {
         hook_id: 42,
-        is_upwards_call: true,
         end_hook: false,
-        path: "my/service/path".to_string(),
+        path: vec![1, 2, 3],
         procedure_id: "my.service.Method".to_string(),
         data: vec![0xDE, 0xAD, 0xBE, 0xEF],
     }
 }
 
-fn make_packet_flags(is_upwards_call: bool, end_hook: bool) -> Packet {
+fn make_packet_flags(end_hook: bool) -> Packet {
     Packet {
-        is_upwards_call,
         end_hook,
         ..make_packet()
     }
@@ -32,7 +30,6 @@ fn full_round_trip() {
     let result = Packet::deserialize(&buf).unwrap();
 
     assert_eq!(result.hook_id, packet.hook_id);
-    assert_eq!(result.is_upwards_call, packet.is_upwards_call);
     assert_eq!(result.end_hook, packet.end_hook);
     assert_eq!(result.path, packet.path);
     assert_eq!(result.procedure_id, packet.procedure_id);
@@ -46,7 +43,6 @@ fn header_round_trip() {
     let header = Packet::deserialize_header(&buf).unwrap();
 
     assert_eq!(header.hook_id, packet.hook_id);
-    assert_eq!(header.is_upwards_call, packet.is_upwards_call);
     assert_eq!(header.end_hook, packet.end_hook);
     assert_eq!(header.path, packet.path);
 }
@@ -54,38 +50,18 @@ fn header_round_trip() {
 // ── Flags ─────────────────────────────────────────────────────────────────
 
 #[test]
-fn flags_both_false() {
-    let packet = make_packet_flags(false, false);
+fn flags_end_hook_false() {
+    let packet = make_packet_flags(false);
     let buf = packet.serialize().unwrap();
     let header = Packet::deserialize_header(&buf).unwrap();
-    assert!(!header.is_upwards_call);
     assert!(!header.end_hook);
 }
 
 #[test]
-fn flags_both_true() {
-    let packet = make_packet_flags(true, true);
+fn flags_end_hook_true() {
+    let packet = make_packet_flags(true);
     let buf = packet.serialize().unwrap();
     let header = Packet::deserialize_header(&buf).unwrap();
-    assert!(header.is_upwards_call);
-    assert!(header.end_hook);
-}
-
-#[test]
-fn flags_upwards_only() {
-    let packet = make_packet_flags(true, false);
-    let buf = packet.serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-    assert!(header.is_upwards_call);
-    assert!(!header.end_hook);
-}
-
-#[test]
-fn flags_end_hook_only() {
-    let packet = make_packet_flags(false, true);
-    let buf = packet.serialize().unwrap();
-    let header = Packet::deserialize_header(&buf).unwrap();
-    assert!(!header.is_upwards_call);
     assert!(header.end_hook);
 }
 
@@ -94,12 +70,12 @@ fn flags_end_hook_only() {
 #[test]
 fn empty_path() {
     let packet = Packet {
-        path: "".to_string(),
+        path: vec![],
         ..make_packet()
     };
     let buf = packet.serialize().unwrap();
     let header = Packet::deserialize_header(&buf).unwrap();
-    assert_eq!(header.path, "");
+    assert_eq!(header.path, &[] as &[u32]);
 }
 
 #[test]
@@ -128,16 +104,15 @@ fn empty_data() {
 fn all_fields_empty() {
     let packet = Packet {
         hook_id: 0,
-        is_upwards_call: false,
         end_hook: false,
-        path: "".to_string(),
+        path: vec![],
         procedure_id: "".to_string(),
         data: vec![],
     };
     let buf = packet.serialize().unwrap();
     let result = Packet::deserialize(&buf).unwrap();
     assert_eq!(result.hook_id, 0);
-    assert_eq!(result.path, "");
+    assert_eq!(result.path, Vec::<u32>::new());
     assert_eq!(result.procedure_id, "");
     assert_eq!(result.data, &[] as &[u8]);
 }
@@ -149,7 +124,7 @@ fn header_path_is_borrowed_from_buffer() {
     let buf = make_packet().serialize().unwrap();
     let header = Packet::deserialize_header(&buf).unwrap();
 
-    let path_ptr = header.path.as_ptr();
+    let path_ptr = header.path.as_ptr() as *const u8;
     let buf_range = buf.as_ptr_range();
     assert!(
         buf_range.contains(&path_ptr),
@@ -194,7 +169,7 @@ fn can_forward_buffer_after_header_parse() {
     let original = make_packet().serialize().unwrap();
     let header = Packet::deserialize_header(&original).unwrap();
 
-    assert_eq!(header.path, "my/service/path");
+    assert_eq!(header.path, &[1, 2, 3]);
 
     // "Forward" by deserializing the full original buffer downstream.
     let forwarded = Packet::deserialize(&original).unwrap();
@@ -240,22 +215,11 @@ fn empty_buffer_rejected() {
 }
 
 #[test]
-fn invalid_utf8_in_path() {
-    let mut buf = make_packet().serialize().unwrap();
-    // Overwrite the first byte of the path (offset 8) with an invalid UTF-8 byte.
-    buf[8] = 0xFF;
-    assert_eq!(
-        Packet::deserialize_header(&buf).unwrap_err(),
-        DeserializeError::InvalidUtf8
-    );
-}
-
-#[test]
 fn invalid_utf8_in_procedure_id() {
     let mut buf = make_packet().serialize().unwrap();
-    // Find where procedure_id starts: 8 + path_len + 4 (body_len) + 4 (proc_id_len)
+    // Find where procedure_id starts: 8 + path_len*4 + 4 (body_len) + 4 (proc_id_len)
     let path_len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
-    let proc_id_offset = 8 + path_len + 4 + 4;
+    let proc_id_offset = 8 + (path_len * 4) + 4 + 4;
     buf[proc_id_offset] = 0xFF;
     assert_eq!(
         Packet::deserialize(&buf).unwrap_err(),
