@@ -1,3 +1,4 @@
+mod streams;
 mod support;
 
 use crate::{Endpoint, EndpointError, RouteDirection};
