@@ -10,9 +10,12 @@
 //! The library requires `alloc` for path and payload management.
 
 #![no_std]
+#![feature(const_index)]
+#![feature(const_trait_impl)]
 
 pub extern crate alloc;
 
+mod hash;
 pub mod logger;
 
 pub mod protocol {
@@ -20,3 +23,5 @@ pub mod protocol {
 
     pub use unshell_macros::unshell_leaf;
 }
+
+pub use hash::hash;

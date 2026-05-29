@@ -1,8 +1,8 @@
 /// Leaf id used by the generated fake PTY wrapper.
-pub const LEAF_FAKE_PTY: u32 = 300;
+pub const LEAF_FAKE_PTY: u32 = unshell::hash("dev.unshell.v1.pty");
 
 /// Outer procedure id used by all fake PTY session packets.
-pub const PROC_PTY: u32 = 30;
+pub const PROC_PTY: u32 = unshell::hash("dev.unshell.v1.pty.pty");
 
 /// Downward opcode that opens one PTY session.
 pub const OP_OPEN: u8 = 0;
