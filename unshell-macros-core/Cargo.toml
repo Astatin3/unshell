@@ -1,20 +1,13 @@
 [package]
-name = "unshell-leaves"
+name = "unshell-macros-core"
 version.workspace = true
 edition.workspace = true
-description = "Application-layer UnShell leaves and client surfaces"
-
-[features]
-default = []
-leaf_endpoint = []
-leaf_tui = []
+description = "Parser and code generator for UnShell procedural macros"
 
 [dependencies]
-rkyv = { workspace = true }
-portable-pty = { workspace = true }
-crossbeam-channel = { workspace = true }
-unshell-macros = { workspace = true }
-unshell-protocol = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }
 
 [lints.rust]
 elided_lifetimes_in_paths = "warn"
@@ -27,4 +20,3 @@ unsafe_op_in_unsafe_fn = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
 trivial_casts = "allow"
-missing_docs = "warn"

@@ -400,6 +400,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaf-pty"
+version = "0.1.0"
+dependencies = [
+ "unshell",
+]
+
+[[package]]
 name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -847,7 +854,24 @@ dependencies = [
  "rkyv",
  "static_init",
  "thiserror",
+ "unshell-macros",
  "unshell-protocol",
+]
+
+[[package]]
+name = "unshell-macros"
+version = "0.1.0"
+dependencies = [
+ "unshell-macros-core",
+]
+
+[[package]]
+name = "unshell-macros-core"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

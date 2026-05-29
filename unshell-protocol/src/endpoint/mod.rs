@@ -69,6 +69,37 @@ impl Endpoint {
         Self::take_clear(path, f, &mut self.inbound);
     }
 
+    /// Drain inbound packets for `path` that match `predicate` and preserve the rest.
+    ///
+    /// Generated leaf dispatch uses this instead of [`Self::take_inbound_clear`] so
+    /// one leaf can consume only its procedure or session packets without stealing
+    /// traffic intended for another leaf. Matching packets are passed by value because
+    /// most handlers need to move payload bytes into application state; unmatched
+    /// packets are reinserted in their original FIFO order.
+    pub fn take_inbound_matching<P, F>(&mut self, path: u32, mut predicate: P, mut f: F)
+    where
+        P: FnMut(&Packet) -> bool,
+        F: FnMut(Packet),
+    {
+        let Some(mut queue) = self.inbound.remove(&path) else {
+            return;
+        };
+
+        let mut unmatched = Vec::new();
+
+        while let Some(packet) = queue.pop_front() {
+            if predicate(&packet) {
+                f(packet);
+            } else {
+                unmatched.push(packet);
+            }
+        }
+
+        if !unmatched.is_empty() {
+            self.inbound.entry(path).or_default().extend(unmatched);
+        }
+    }
+
     /// Run a function over all outbound packets with some ID then clear it.
     pub fn take_outbound_clear<F>(&mut self, path: u32, f: F)
     where

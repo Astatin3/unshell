@@ -10,7 +10,7 @@ use crate::{DeserializeError, SerializeError};
 /// path. `procedure_id` is therefore a compact numeric contract id instead of a
 /// string label; application code can maintain its own id-to-name table outside the
 /// hot packet path if it needs human-readable names.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Packet {
     pub hook_id: u16,
     pub end_hook: bool,

@@ -1,22 +1,16 @@
 #![no_std]
 
-extern crate alloc;
+pub extern crate alloc;
 
 mod endpoint;
 mod error;
+mod leaf;
 mod packet;
 
 pub use endpoint::{Endpoint, HookID};
 pub use error::*;
+pub use leaf::*;
 pub use packet::Packet;
-
-pub trait Leaf {
-    // Identifier for this leaf
-    fn get_id(&self) -> u32;
-
-    // Gets called every program loop
-    fn update(&mut self, _: &mut Endpoint);
-}
 
 // Various named types used for brevity
 use alloc::{
@@ -28,7 +22,7 @@ type Path = Vec<u32>;
 type EndpointName = u32;
 type ConnectionSet = BTreeSet<(EndpointName, bool)>;
 type HookMap = BTreeMap<HookID, EndpointName>;
-type PacketQueue = VecDeque<Packet>;
+pub type PacketQueue = VecDeque<Packet>;
 type RouteMap = BTreeMap<EndpointName, PacketQueue>;
 
 #[cfg(test)]
