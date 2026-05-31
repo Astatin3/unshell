@@ -1,5 +1,8 @@
 use crate::protocol::{Endpoint, Leaf, Packet};
 
+#[cfg(feature = "interface")]
+use crate::protocol::LeafMeta;
+
 use alloc::{boxed::Box, format, vec, vec::Vec};
 
 use super::support::{CommsLeaf, ENDPOINT_A, ENDPOINT_B, assert_hook_present, assert_hook_removed};
@@ -82,6 +85,16 @@ impl Leaf for StreamCallerLeaf {
         LEAF_STREAM_CALLER
     }
 
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Stream Caller Leaf",
+            identifier: "dev.unshell.test.stream_caller_leaf",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
+    }
+
     fn update(&mut self, endpoint: &mut Endpoint) {
         if self.has_run {
             return;
@@ -96,6 +109,16 @@ impl Leaf for StreamCallerLeaf {
 impl Leaf for StreamRespondentLeaf {
     fn get_id(&self) -> u32 {
         LEAF_STREAM_RESPONDENT
+    }
+
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Stream Respondant Leaf",
+            identifier: "dev.unshell.test.stream_respondent_leaf",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
     }
 
     fn update(&mut self, endpoint: &mut Endpoint) {

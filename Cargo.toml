@@ -7,8 +7,6 @@ members = [
     "unshell-macros-core",
     "unshell-macros",
 
-    # "unshell-protocol",
-
     "unshell-leaves/leaf-pty",
 ]
 resolver = "2"
@@ -32,6 +30,8 @@ proc-macro2       = "1.0.106"
 portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
 
+ratatui = "0.30.0"
+
 unshell          = { path = "." }
 # unshell-protocol = { path = "./unshell-protocol" }
 unshell-macros-core = { path = "./unshell-macros-core" }
@@ -51,28 +51,23 @@ edition.workspace = true
 description = "Pure no_std implementation of the UnShell Protocol"
 
 [features]
-default = []
+# default = ["interface_ratatui"]
+
 log = []
 log_debug = ["log", "dep:chrono"]
 
-# Leaf features
-# leaf_endpoint = ["unshell-leaves/leaf_endpoint"]
-# leaf_tui = ["unshell-leaves/leaf_tui"]
-
-# obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
-# obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
+interface = []
+interface_ratatui = ["interface", "dep:ratatui"]
 
 [dependencies]
 rkyv              = { workspace = true }
 thiserror         = { workspace = true, optional = true }
 chrono            = { workspace = true, optional = true }
-# ush-obfuscate     = { workspace = true }
 static_init       = { workspace = true }
 
+ratatui           = { workspace = true, optional = true }
+
 unshell-macros    = { workspace = true }
-# unshell-protocol  = { workspace = true }
-# unshell-runtime   = { workspace = true }
-# unshell-leaves    = { workspace = true }
 
 [dev-dependencies]
 crossbeam-channel.workspace = true

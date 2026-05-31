@@ -120,4 +120,11 @@ impl Endpoint {
             queue.clear();
         }
     }
+
+    pub fn iter_leaves<F>(&mut self) -> core::slice::IterMut<'_, Box<dyn Leaf + 'static>>
+    where
+        F: FnMut(&Packet),
+    {
+        self.leaves.iter_mut()
+    }
 }

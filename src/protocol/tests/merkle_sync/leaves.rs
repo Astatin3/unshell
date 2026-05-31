@@ -5,6 +5,9 @@ use crossbeam_channel::{Receiver, Sender};
 
 use crate::protocol::{Endpoint, Leaf, Packet};
 
+#[cfg(feature = "interface")]
+use crate::protocol::LeafMeta;
+
 use super::{
     codec::{decode_block_chunk, decode_child_summary, decode_u32},
     constants::{
@@ -96,6 +99,16 @@ impl Leaf for MockConnectionLeaf {
         LEAF_MOCK_CONNECTION
     }
 
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Merke Connection Leaf",
+            identifier: "dev.unshell.test.merkle.connection",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
+    }
+
     fn update(&mut self, endpoint: &mut Endpoint) {
         if !self.started {
             endpoint
@@ -126,6 +139,16 @@ impl Leaf for MerkleCallerLeaf {
         LEAF_MERKLE_CALLER
     }
 
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Merke Caller Leaf",
+            identifier: "dev.unshell.test.merkle.caller",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
+    }
+
     fn update(&mut self, endpoint: &mut Endpoint) {
         self.receive_responses(endpoint);
         self.dispatch_next_request(endpoint);
@@ -135,6 +158,16 @@ impl Leaf for MerkleCallerLeaf {
 impl Leaf for MerkleRespondentLeaf {
     fn get_id(&self) -> u32 {
         LEAF_MERKLE_RESPONDENT
+    }
+
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Merke Respondent Leaf",
+            identifier: "dev.unshell.test.merkle.respondent",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
     }
 
     fn update(&mut self, endpoint: &mut Endpoint) {

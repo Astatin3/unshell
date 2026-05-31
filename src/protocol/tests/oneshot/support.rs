@@ -1,5 +1,8 @@
 use crate::protocol::{Endpoint, Leaf, Packet};
 
+#[cfg(feature = "interface")]
+use crate::protocol::LeafMeta;
+
 use alloc::{vec, vec::Vec};
 use crossbeam_channel::{Receiver, Sender};
 
@@ -112,6 +115,16 @@ impl Leaf for ControllerLeaf {
         LEAF_CONTROLLER
     }
 
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Controller Leaf",
+            identifier: "dev.unshell.test.controller_leaf",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
+    }
+
     fn update(&mut self, endpoint: &mut Endpoint) {
         if !self.has_run {
             // The controller starts exactly one request so the end-to-end test can
@@ -127,6 +140,16 @@ impl Leaf for ControllerLeaf {
 impl Leaf for CommsLeaf {
     fn get_id(&self) -> u32 {
         LEAF_COMMS
+    }
+
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Comms Leaf",
+            identifier: "dev.unshell.test.comms_leaf",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
     }
 
     fn update(&mut self, endpoint: &mut Endpoint) {
@@ -158,6 +181,16 @@ impl Leaf for CommsLeaf {
 impl Leaf for ResponderLeaf {
     fn get_id(&self) -> u32 {
         LEAF_RESPONDER
+    }
+
+    #[cfg(feature = "interface")]
+    fn get_meta(&self) -> LeafMeta {
+        LeafMeta {
+            name: "Responder Leaf",
+            identifier: "dev.unshell.test.responder_leaf",
+            version: "v0",
+            authors: vec!["ASTATIN3"],
+        }
     }
 
     fn update(&mut self, endpoint: &mut Endpoint) {

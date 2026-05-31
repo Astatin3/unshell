@@ -1,12 +1,18 @@
 mod endpoint;
 mod error;
 mod leaf;
+mod leaf_meta;
 mod packet;
+mod procedure;
+mod session;
 
 pub use endpoint::{Endpoint, HookID};
 pub use error::*;
-pub use leaf::*;
+pub use leaf::Leaf;
+pub use leaf_meta::LeafMeta;
 pub use packet::Packet;
+pub use procedure::*;
+pub use session::*;
 pub use unshell_macros::unshell_leaf;
 
 // Various named types used for brevity
