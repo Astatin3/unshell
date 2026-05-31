@@ -4,8 +4,6 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 members = [
     "ush-obfuscate",
     "base62",
-    "unshell-macros-core",
-    "unshell-macros",
 
     "unshell-leaves/leaf-pty",
 ]
@@ -24,9 +22,6 @@ rkyv             = "0.8.16"
 thiserror        = "2.0.18"
 chrono           = "0.4.44"
 static_init      = "1.0.4"
-syn               = "2.0.117"
-quote             = "1.0.45"
-proc-macro2       = "1.0.106"
 portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
 
@@ -34,8 +29,6 @@ ratatui = "0.30.0"
 
 unshell          = { path = "." }
 # unshell-protocol = { path = "./unshell-protocol" }
-unshell-macros-core = { path = "./unshell-macros-core" }
-unshell-macros = { path = "./unshell-macros" }
 
 # ush-obfuscate = { path = "./ush-obfuscate" }
 # base62        = { path = "./base62" }
@@ -66,8 +59,6 @@ chrono            = { workspace = true, optional = true }
 static_init       = { workspace = true }
 
 ratatui           = { workspace = true, optional = true }
-
-unshell-macros    = { workspace = true }
 
 [dev-dependencies]
 crossbeam-channel.workspace = true

@@ -2,6 +2,9 @@ use alloc::vec::Vec;
 
 use crate::protocol::{Endpoint, HookID, Packet, PacketQueue};
 
+#[cfg(feature = "interface_ratatui")]
+use crate::interface::SessionView;
+
 /// Contract implemented by one hook-backed generated session family.
 ///
 /// A session family maps one outer `procedure_id` to many live hook instances. The
@@ -74,6 +77,16 @@ pub trait Session<L> {
         incoming: &mut PacketQueue,
         ctx: &mut SessionCtx<'_>,
     ) -> SessionStatus;
+
+    #[cfg(feature = "interface_ratatui")]
+    fn render_ratatui(
+        _: &L,
+        _: &Self::State,
+        _: &mut SessionView,
+        _: &mut ratatui::Frame<'_>,
+        _: ratatui::layout::Rect,
+    ) {
+    }
 }
 
 /// Context passed to [`Session::init`].
@@ -247,6 +260,42 @@ pub struct SessionEntry<S> {
 
     /// Whether application logic has finished and only retry flushing may remain.
     pub closed: bool,
+}
+
+/// Generated storage for one session family.
+///
+/// The macro only names this field and picks the concrete `Session` type. All update,
+/// retry, and cleanup behavior lives in normal Rust helpers so the template stays
+/// small and readable.
+pub struct SessionFamily<S> {
+    /// Active hook-backed sessions for this family.
+    pub entries: Vec<SessionEntry<S>>,
+}
+
+impl<S> SessionFamily<S> {
+    /// Creates an empty session family.
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Counts packets retained by this family for retry or future session work.
+    pub fn pending_packet_count(&self) -> usize {
+        let mut count = 0usize;
+
+        for entry in &self.entries {
+            count += entry.inbox.len() + entry.outbox.len();
+        }
+
+        count
+    }
+}
+
+impl<S> Default for SessionFamily<S> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<S> SessionEntry<S> {

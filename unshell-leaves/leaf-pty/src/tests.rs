@@ -2,6 +2,9 @@ use alloc::{vec, vec::Vec};
 
 use unshell::protocol::{Endpoint, Leaf, Packet};
 
+#[cfg(feature = "interface")]
+use unshell::interface::{InterfaceEventKind, InterfaceStore};
+
 use super::{
     FakePtyLeaf, FakePtyState, OP_ABORT, OP_ERROR, OP_EXIT, OP_INPUT, OP_OPENED, OP_OUTPUT,
     OP_STDIN_EOF, OP_TERMINATE, PROC_PTY, frame_opcode, frame_payload, pty_open_packet, pty_packet,
@@ -390,4 +393,40 @@ fn pty_leaf_does_not_consume_other_leaf_packets() {
     assert_eq!(other_packets.len(), 1);
     assert_eq!(other_packets[0].procedure_id, PROC_OTHER);
     assert_eq!(other_packets[0].data, b"leave-me".to_vec());
+}
+
+#[cfg(feature = "interface")]
+#[test]
+fn interface_update_records_session_flow() {
+    let (mut endpoint_a, mut endpoint_b) = pty_endpoints();
+    let mut leaf = FakePtyLeaf::new(FakePtyState::new());
+    let mut interface = InterfaceStore::new();
+    let hook_id = endpoint_a.get_hook_id();
+
+    endpoint_a
+        .add_outbound(pty_open_packet(
+            vec![ENDPOINT_A, ENDPOINT_B],
+            hook_id,
+            &[ENDPOINT_A],
+        ))
+        .unwrap();
+    transfer_packets(&mut endpoint_a, &mut endpoint_b, ENDPOINT_B, ENDPOINT_A);
+
+    leaf.update_interface(&mut endpoint_b, &mut interface);
+
+    assert_eq!(leaf.active_session_count(), 1);
+    assert!(interface.events().iter().any(|event| {
+        matches!(
+            &event.kind,
+            InterfaceEventKind::SessionCreated { hook_id: recorded_hook, .. }
+                if *recorded_hook == hook_id
+        )
+    }));
+    assert!(interface.events().iter().any(|event| {
+        matches!(
+            &event.kind,
+            InterfaceEventKind::RouteSuccess { packet }
+                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_OPENED)
+        )
+    }));
 }

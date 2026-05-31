@@ -4,10 +4,9 @@ use crate::{constants::LEAF_FAKE_PTY, session::PtySession};
 
 /// User-owned state for the generated fake PTY leaf.
 ///
-/// The macro-generated `FakePtyLeaf` wrapper stores sessions and retry queues around
-/// this struct. Keeping counters here makes tests and future procedures observe leaf
-/// behavior without reaching into generated session storage.
-#[unshell_leaf(leaf = FakePtyLeaf, id = LEAF_FAKE_PTY, sessions(PtySession))]
+/// The `unshell_leaf!` template stores sessions and retry queues around this struct.
+/// Keeping counters here makes tests and future procedures observe leaf behavior
+/// without reaching into generated session storage.
 pub struct FakePtyState {
     /// Number of sessions that application logic considers active.
     pub active_count: usize,
@@ -33,5 +32,21 @@ impl FakePtyState {
 impl Default for FakePtyState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+unshell_leaf! {
+    pub leaf FakePtyLeaf for FakePtyState {
+        id: LEAF_FAKE_PTY,
+        meta: unshell::protocol::LeafMeta {
+            name: "Fake PTY Leaf",
+            identifier: "dev.unshell.v1.pty",
+            version: "v0",
+            authors: unshell::alloc::vec!["ASTATIN3"],
+        },
+        sessions {
+            pty: PtySession,
+        }
+        procedures {}
     }
 }

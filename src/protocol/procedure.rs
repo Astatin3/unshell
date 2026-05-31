@@ -2,6 +2,9 @@ use alloc::vec::Vec;
 
 use crate::protocol::{Endpoint, HookID, Packet, PacketQueue};
 
+#[cfg(feature = "interface_ratatui")]
+use crate::interface::ProcedureView;
+
 /// Contract implemented by one generated one-packet procedure handler.
 ///
 /// Procedures are for stateless or short-lived operations such as ping, capabilities,
@@ -13,6 +16,15 @@ pub trait Procedure<L> {
 
     /// Handles one packet and optionally queues response packets in `out`.
     fn handle(leaf: &mut L, endpoint: &mut Endpoint, packet: Packet, out: &mut ProcedureOut);
+
+    #[cfg(feature = "interface_ratatui")]
+    fn render_ratatui(
+        _: &L,
+        _: &mut ProcedureView,
+        _: &mut ratatui::Frame<'_>,
+        _: ratatui::layout::Rect,
+    ) {
+    }
 }
 
 /// Output accumulator passed to [`Procedure::handle`].

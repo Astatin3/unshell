@@ -1829,23 +1829,6 @@ dependencies = [
  "rkyv",
  "static_init",
  "thiserror 2.0.18",
- "unshell-macros",
-]
-
-[[package]]
-name = "unshell-macros"
-version = "0.1.0"
-dependencies = [
- "unshell-macros-core",
-]
-
-[[package]]
-name = "unshell-macros-core"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]

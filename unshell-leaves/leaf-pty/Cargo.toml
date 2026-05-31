@@ -7,6 +7,11 @@ description = "Hook-backed PTY leaf implementation for UnShell"
 [dependencies]
 unshell = { workspace = true }
 
+[features]
+default = []
+interface = ["unshell/interface"]
+interface_ratatui = ["interface", "unshell/interface_ratatui"]
+
 [lints.rust]
 elided_lifetimes_in_paths = "warn"
 future_incompatible = { level = "warn", priority = -1 }
