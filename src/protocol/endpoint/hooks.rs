@@ -16,10 +16,11 @@ impl Endpoint {
     /// reuse an id before the previous route has closed. If every `u16` id is active
     /// the function panics; that is a hard local resource exhaustion condition, not a
     /// recoverable packet error.
+    ///
+    /// TODO: Reevaluate this method of allocation checking. It can be quite slow
     pub fn allocate_hook_id(&mut self) -> HookID {
         for _ in 0..=HookID::MAX {
-            let candidate = self.last_hook;
-            self.last_hook = self.last_hook.wrapping_add(1);
+            let candidate = self.last_hook.next();
 
             if !self.hooks.contains_key(&candidate) {
                 return candidate;

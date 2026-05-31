@@ -1,10 +1,27 @@
 use alloc::string::String;
 
-mod hash;
-mod ordering;
+// TODO: Make this seed dependent on env var;
+pub const GLOBAL_SEED: u32 = 0xDEAFBEEF;
+// pub const GLOBAL_NONCE: u32 = {
+//     let time = match u128::from_str_radix(env!("BUILD_TIME"), 10) {
+//         Ok(i) => i,
+//         Err(_) => panic!("Failed to parse BUILD_TIME"),
+//     };
 
-pub use hash::sha256;
-pub use ordering::feistel_shuffle;
+//     GLOBAL_SEED ^ (time as u32)
+// };
+
+mod feistel;
+#[allow(dead_code)]
+mod feistel_state;
+mod sha256;
+
+pub use feistel::feistel_shuffle;
+pub use feistel_state::{Counter, FeistelLCGShuffle, FeistelShuffle, NoShuffle};
+pub use sha256::sha256;
+
+#[cfg(test)]
+mod tests;
 
 #[macro_export]
 macro_rules! hash_256 {
