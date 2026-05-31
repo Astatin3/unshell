@@ -77,7 +77,7 @@ macro_rules! unshell_leaf {
                 mut interface: Option<&mut $crate::interface::InterfaceStore>,
             ) {
                 let leaf_id = $id;
-                self.__unshell_flush_all(endpoint, $crate::interface::borrow_store(&mut interface));
+                self.__unshell_flush_all(endpoint, &mut interface);
 
                 let Some(local_id) = endpoint.path.last().copied() else {
                     return;
@@ -94,7 +94,7 @@ macro_rules! unshell_leaf {
                     self.__unshell_dispatch_packet(
                         endpoint,
                         packet,
-                        $crate::interface::borrow_store(&mut interface),
+                        &mut interface,
                     );
                 }
 
@@ -103,18 +103,18 @@ macro_rules! unshell_leaf {
                         leaf_id,
                         &mut self.state,
                         &mut self.$session_field,
-                        $crate::interface::borrow_store(&mut interface),
+                        &mut interface,
                     );
                 )*
 
-                self.__unshell_flush_all(endpoint, $crate::interface::borrow_store(&mut interface));
+                self.__unshell_flush_all(endpoint, &mut interface);
             }
 
             fn __unshell_dispatch_packet(
                 &mut self,
                 endpoint: &mut $crate::protocol::Endpoint,
                 packet: $crate::protocol::Packet,
-                mut interface: Option<&mut $crate::interface::InterfaceStore>,
+                interface: &mut Option<&mut $crate::interface::InterfaceStore>,
             ) {
                 let leaf_id = $id;
 
@@ -128,7 +128,7 @@ macro_rules! unshell_leaf {
                             &mut self.$session_field,
                             packet,
                             &mut self.outbox,
-                            $crate::interface::borrow_store(&mut interface),
+                            interface,
                         );
                         return;
                     }
@@ -145,7 +145,7 @@ macro_rules! unshell_leaf {
                             endpoint,
                             packet,
                             &mut self.outbox,
-                            $crate::interface::borrow_store(&mut interface),
+                            interface,
                         );
                         return;
                     }
@@ -158,7 +158,7 @@ macro_rules! unshell_leaf {
             fn __unshell_flush_all(
                 &mut self,
                 endpoint: &mut $crate::protocol::Endpoint,
-                mut interface: Option<&mut $crate::interface::InterfaceStore>,
+                interface: &mut Option<&mut $crate::interface::InterfaceStore>,
             ) {
                 let leaf_id = $id;
 
@@ -166,7 +166,7 @@ macro_rules! unshell_leaf {
                     endpoint,
                     leaf_id,
                     &mut self.outbox,
-                    $crate::interface::borrow_store(&mut interface),
+                    interface,
                 );
 
                 $(
@@ -174,7 +174,7 @@ macro_rules! unshell_leaf {
                         endpoint,
                         leaf_id,
                         &mut self.$session_field,
-                        $crate::interface::borrow_store(&mut interface),
+                        interface,
                     );
                 )*
             }

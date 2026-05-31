@@ -61,14 +61,14 @@ pub fn dispatch_session<L, S>(
     family: &mut SessionFamily<S::State>,
     packet: Packet,
     outbox: &mut LeafOutbox,
-    mut interface: Option<&mut InterfaceStore>,
+    interface: &mut Option<&mut InterfaceStore>,
 ) where
     S: Session<L>,
 {
     let hook_id = packet.hook_id;
     let procedure_id = S::PROCEDURE_ID;
 
-    if let Some(store) = crate::interface::borrow_store(&mut interface) {
+    if let Some(store) = interface.as_mut() {
         store.record_inbound(leaf_id, &packet);
     }
 
@@ -79,7 +79,7 @@ pub fn dispatch_session<L, S>(
     {
         entry.inbox.push_back(packet);
 
-        if let Some(store) = interface {
+        if let Some(store) = interface.as_mut() {
             store.record_session_packet_queued(leaf_id, procedure_id, hook_id);
         }
 
@@ -94,17 +94,17 @@ pub fn dispatch_session<L, S>(
         SessionInitResult::Created(state) => {
             family.entries.push(SessionEntry::new(hook_id, state));
 
-            if let Some(store) = interface {
+            if let Some(store) = interface.as_mut() {
                 store.record_session_created(leaf_id, procedure_id, hook_id, started_ns);
             }
         }
         SessionInitResult::Rejected => {
-            if let Some(store) = interface {
+            if let Some(store) = interface.as_mut() {
                 store.record_session_rejected(leaf_id, procedure_id, hook_id, started_ns);
             }
         }
         SessionInitResult::RejectedWith(packet) => {
-            if let Some(store) = interface {
+            if let Some(store) = interface.as_mut() {
                 store.record_session_rejected(leaf_id, procedure_id, hook_id, started_ns);
                 store.record_outbound_queued(leaf_id, &packet);
             }
@@ -119,7 +119,7 @@ pub fn update_session_family<L, S>(
     leaf_id: u32,
     leaf: &mut L,
     family: &mut SessionFamily<S::State>,
-    mut interface: Option<&mut InterfaceStore>,
+    interface: &mut Option<&mut InterfaceStore>,
 ) where
     S: Session<L>,
 {
@@ -138,7 +138,7 @@ pub fn update_session_family<L, S>(
         );
         let status = S::update(leaf, &mut entry.state, &mut entry.inbox, &mut ctx);
 
-        if let Some(store) = crate::interface::borrow_store(&mut interface) {
+        if let Some(store) = interface.as_mut() {
             store.record_session_update(
                 leaf_id,
                 S::PROCEDURE_ID,
@@ -161,13 +161,13 @@ pub fn dispatch_procedure<L, P>(
     endpoint: &mut Endpoint,
     packet: Packet,
     outbox: &mut LeafOutbox,
-    mut interface: Option<&mut InterfaceStore>,
+    interface: &mut Option<&mut InterfaceStore>,
 ) where
     P: Procedure<L>,
 {
     let started_ns = interface.as_ref().and_then(|store| store.now_ns());
 
-    if let Some(store) = crate::interface::borrow_store(&mut interface) {
+    if let Some(store) = interface.as_mut() {
         store.record_inbound(leaf_id, &packet);
     }
 
@@ -179,7 +179,7 @@ pub fn dispatch_procedure<L, P>(
 
     let packets = procedure_out.into_packets();
 
-    if let Some(store) = interface {
+    if let Some(store) = interface.as_mut() {
         store.record_procedure_call(leaf_id, P::PROCEDURE_ID, hook_id, started_ns);
 
         for packet in &packets {
@@ -195,7 +195,7 @@ pub fn flush_leaf_outbox(
     endpoint: &mut Endpoint,
     leaf_id: u32,
     outbox: &mut LeafOutbox,
-    interface: Option<&mut InterfaceStore>,
+    interface: &mut Option<&mut InterfaceStore>,
 ) -> bool {
     flush_packet_queue_with_interface(endpoint, leaf_id, &mut outbox.packets, interface)
 }
@@ -205,17 +205,12 @@ pub fn flush_session_family<L, S>(
     endpoint: &mut Endpoint,
     leaf_id: u32,
     family: &mut SessionFamily<S::State>,
-    mut interface: Option<&mut InterfaceStore>,
+    interface: &mut Option<&mut InterfaceStore>,
 ) where
     S: Session<L>,
 {
     for entry in &mut family.entries {
-        flush_packet_queue_with_interface(
-            endpoint,
-            leaf_id,
-            &mut entry.outbox,
-            crate::interface::borrow_store(&mut interface),
-        );
+        flush_packet_queue_with_interface(endpoint, leaf_id, &mut entry.outbox, interface);
     }
 
     family
@@ -232,23 +227,23 @@ pub fn flush_packet_queue_with_interface(
     endpoint: &mut Endpoint,
     leaf_id: u32,
     outbox: &mut PacketQueue,
-    mut interface: Option<&mut InterfaceStore>,
+    interface: &mut Option<&mut InterfaceStore>,
 ) -> bool {
     while let Some(packet) = outbox.front().cloned() {
-        if let Some(store) = crate::interface::borrow_store(&mut interface) {
+        if let Some(store) = interface.as_mut() {
             store.record_route_attempt(leaf_id, &packet);
         }
 
         match endpoint.add_outbound(packet.clone()) {
             Ok(()) => {
-                if let Some(store) = crate::interface::borrow_store(&mut interface) {
+                if let Some(store) = interface.as_mut() {
                     store.record_route_success(leaf_id, &packet);
                 }
 
                 outbox.pop_front();
             }
             Err(error) => {
-                if let Some(store) = interface {
+                if let Some(store) = interface.as_mut() {
                     store.record_route_failure(leaf_id, &packet, error);
                 }
 
