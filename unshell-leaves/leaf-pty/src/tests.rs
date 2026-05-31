@@ -3,7 +3,7 @@ use alloc::{vec, vec::Vec};
 use unshell::protocol::{Endpoint, Leaf, Packet};
 
 #[cfg(feature = "interface")]
-use unshell::interface::{InterfaceEventKind, InterfaceStore};
+use unshell::interface::{InterfaceEventKind, InterfaceStore, SessionKey, SessionViewStatus};
 
 use super::{
     FakePtyLeaf, FakePtyState, OP_ABORT, OP_ERROR, OP_EXIT, OP_INPUT, OP_OPENED, OP_OUTPUT,
@@ -427,6 +427,74 @@ fn interface_update_records_session_flow() {
             &event.kind,
             InterfaceEventKind::RouteSuccess { packet }
                 if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_OPENED)
+        )
+    }));
+}
+
+#[cfg(feature = "interface")]
+#[test]
+fn interface_update_records_failed_final_route_without_dropping_session() {
+    let (mut endpoint_a, mut endpoint_b) = pty_endpoints();
+    let mut leaf = FakePtyLeaf::new(FakePtyState::new());
+    let mut interface = InterfaceStore::new();
+    let hook_id = endpoint_a.get_hook_id();
+
+    endpoint_a
+        .add_outbound(pty_open_packet(
+            vec![ENDPOINT_A, ENDPOINT_B],
+            hook_id,
+            &[ENDPOINT_A],
+        ))
+        .unwrap();
+    transfer_packets(&mut endpoint_a, &mut endpoint_b, ENDPOINT_B, ENDPOINT_A);
+    leaf.update_interface(&mut endpoint_b, &mut interface);
+    transfer_packets(&mut endpoint_b, &mut endpoint_a, ENDPOINT_A, ENDPOINT_B);
+    drain_parent_pty_packets(&mut endpoint_a);
+
+    send_downward_frame(
+        &mut endpoint_a,
+        &mut endpoint_b,
+        hook_id,
+        OP_TERMINATE,
+        &[],
+        false,
+    );
+    endpoint_b.connections.remove(&(ENDPOINT_A, true));
+    leaf.update_interface(&mut endpoint_b, &mut interface);
+
+    let session_key = SessionKey {
+        leaf_id: leaf.get_id(),
+        procedure_id: PROC_PTY,
+        hook_id,
+    };
+
+    assert_eq!(leaf.active_session_count(), 1);
+    assert_eq!(leaf.pending_packet_count(), 1);
+    assert_eq!(
+        interface.session_views().get(&session_key).unwrap().status,
+        SessionViewStatus::Closed
+    );
+    assert!(interface.events().iter().any(|event| {
+        matches!(
+            &event.kind,
+            InterfaceEventKind::RouteFailure { packet, .. }
+                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_EXIT)
+        )
+    }));
+
+    endpoint_b.connections.insert((ENDPOINT_A, true));
+    leaf.update_interface(&mut endpoint_b, &mut interface);
+    transfer_packets(&mut endpoint_b, &mut endpoint_a, ENDPOINT_A, ENDPOINT_B);
+    let packets = drain_parent_pty_packets(&mut endpoint_a);
+
+    assert_eq!(leaf.active_session_count(), 0);
+    assert_eq!(packets.len(), 1);
+    assert_frame(&packets[0], hook_id, OP_EXIT, true, &[0]);
+    assert!(interface.events().iter().any(|event| {
+        matches!(
+            &event.kind,
+            InterfaceEventKind::RouteSuccess { packet }
+                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_EXIT)
         )
     }));
 }
