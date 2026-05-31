@@ -11,14 +11,12 @@
 //! The library requires `alloc` for path and payload management.
 
 #![no_std]
-#![feature(const_index)]
-#![feature(const_trait_impl)]
 
 pub extern crate alloc;
 
-mod hash;
+pub mod crypto;
 pub mod interface;
 pub mod logger;
 pub mod protocol;
 
-pub use hash::hash;
+// pub use hash::hash;
