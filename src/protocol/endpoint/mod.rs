@@ -5,7 +5,7 @@ pub use hooks::HookID;
 
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::{ConnectionSet, HookMap, Leaf, Packet, Path, RouteMap};
+use crate::protocol::{ConnectionSet, HookMap, Leaf, Packet, Path, RouteMap};
 
 pub struct Endpoint {
     // This endpoint's identifier

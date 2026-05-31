@@ -1,4 +1,4 @@
-use crate::{Endpoint, Leaf, Packet};
+use crate::protocol::{Endpoint, Leaf, Packet};
 
 use alloc::{vec, vec::Vec};
 use crossbeam_channel::{Receiver, Sender};

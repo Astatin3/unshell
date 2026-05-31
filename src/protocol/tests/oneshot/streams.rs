@@ -1,4 +1,4 @@
-use crate::{Endpoint, Leaf, Packet};
+use crate::protocol::{Endpoint, Leaf, Packet};
 
 use alloc::{boxed::Box, format, vec, vec::Vec};
 

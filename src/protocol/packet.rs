@@ -2,7 +2,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use crate::{DeserializeError, SerializeError};
+use crate::protocol::{DeserializeError, SerializeError};
 
 /// Fully decoded UnShell test packet.
 ///

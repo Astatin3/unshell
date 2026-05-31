@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
 
+use crate::protocol::Packet;
+
 use super::{
     rpc::OutgoingFrame,
     tree::{BlockChunk, ChildSummary},
@@ -76,7 +78,7 @@ impl ResponseStream {
     }
 
     /// Builds the next packet without advancing the stream.
-    pub(super) fn next_packet(&self) -> Option<crate::Packet> {
+    pub(super) fn next_packet(&self) -> Option<Packet> {
         let frame = self.frames.get(self.next_index)?;
         Some(frame.to_packet(self.hook_id, self.next_index + 1 == self.frames.len()))
     }

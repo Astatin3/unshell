@@ -6,6 +6,7 @@
 //! ## Architecture
 //!
 //! - [`protocol`] - Wire types, framing, stateless validation, and routing/runtime.
+//! - [`interface`] - Typed control surfaces used by UI adapters and control leaves.
 //!
 //! The library requires `alloc` for path and payload management.
 
@@ -16,12 +17,8 @@
 pub extern crate alloc;
 
 mod hash;
+pub mod interface;
 pub mod logger;
-
-pub mod protocol {
-    pub use unshell_protocol::*;
-
-    pub use unshell_macros::unshell_leaf;
-}
+pub mod protocol;
 
 pub use hash::hash;

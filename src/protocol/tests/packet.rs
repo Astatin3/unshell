@@ -1,6 +1,6 @@
 use alloc::{vec, vec::Vec};
 
-use crate::{DeserializeError, EndpointError, Packet, SerializeError};
+use crate::protocol::{DeserializeError, EndpointError, Packet, SerializeError};
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 

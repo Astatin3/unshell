@@ -1,6 +1,6 @@
 use alloc::{vec, vec::Vec};
 
-use crate::Packet;
+use crate::protocol::Packet;
 
 use super::{
     codec::{encode_block_chunk, encode_child_summary, encode_u32},

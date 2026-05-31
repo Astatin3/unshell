@@ -1,7 +1,7 @@
 mod streams;
 mod support;
 
-use crate::{Endpoint, EndpointError, RouteDirection};
+use crate::protocol::{Endpoint, EndpointError, RouteDirection};
 
 use alloc::{boxed::Box, vec};
 
@@ -16,7 +16,7 @@ fn test_oneshot() {
     let (tx_a, rx_a) = crossbeam_channel::unbounded();
     let (tx_b, rx_b) = crossbeam_channel::unbounded();
 
-    let mut endpoint_a = crate::endpoint::Endpoint::new(
+    let mut endpoint_a = Endpoint::new(
         ENDPOINT_A,
         vec![
             Box::new(ControllerLeaf { has_run: false }),
@@ -31,7 +31,7 @@ fn test_oneshot() {
     );
     endpoint_a.path = vec![ENDPOINT_A];
 
-    let mut endpoint_b = crate::endpoint::Endpoint::new(
+    let mut endpoint_b = Endpoint::new(
         ENDPOINT_B,
         vec![
             Box::new(ResponderLeaf),

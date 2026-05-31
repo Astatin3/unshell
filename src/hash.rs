@@ -1,6 +1,6 @@
 //! Temporary hash function
 
-const fn hash_recursive<'a>(state: &mut [u8; 4], input: &'a [u8]) {
+const fn hash_recursive(state: &mut [u8; 4], input: &[u8]) {
     match input.len() {
         3 => {
             state[0] ^= input[0];

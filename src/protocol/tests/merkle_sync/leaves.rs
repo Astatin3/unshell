@@ -3,7 +3,7 @@ use core::cell::RefCell;
 
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::{Endpoint, Leaf, Packet};
+use crate::protocol::{Endpoint, Leaf, Packet};
 
 use super::{
     codec::{decode_block_chunk, decode_child_summary, decode_u32},

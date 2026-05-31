@@ -1,4 +1,4 @@
-use crate::{Endpoint, EndpointError, EndpointName};
+use crate::protocol::{Endpoint, EndpointError, EndpointName};
 
 /// Compact identifier for one routed return channel.
 ///

@@ -114,7 +114,7 @@ impl LeafGenerator {
 
                 fn __unshell_parent_reply_path(
                     endpoint: &::unshell::protocol::Endpoint,
-                ) -> ::unshell::protocol::alloc::vec::Vec<u32> {
+                ) -> ::unshell::alloc::vec::Vec<u32> {
                     if endpoint.path.len() > 1 {
                         endpoint.path[..endpoint.path.len() - 1].to_vec()
                     } else {
@@ -135,7 +135,7 @@ impl LeafGenerator {
                         return;
                     };
 
-                    let mut __unshell_packets = ::unshell::protocol::alloc::vec::Vec::new();
+                    let mut __unshell_packets = ::unshell::alloc::vec::Vec::new();
                     endpoint.take_inbound_matching(
                         __unshell_local_id,
                         Self::__unshell_packet_is_owned,
@@ -177,7 +177,7 @@ impl LeafGenerator {
                 let field = &store.field;
                 let session_ty = &store.ty;
                 quote! {
-                    #field: ::unshell::protocol::alloc::vec::Vec<
+                    #field: ::unshell::alloc::vec::Vec<
                         ::unshell::protocol::SessionEntry<
                             <#session_ty as ::unshell::protocol::Session<#state_type>>::State
                         >
@@ -193,7 +193,7 @@ impl LeafGenerator {
             .iter()
             .map(|store| {
                 let field = &store.field;
-                quote!(#field: ::unshell::protocol::alloc::vec::Vec::new())
+                quote!(#field: ::unshell::alloc::vec::Vec::new())
             })
             .collect()
     }

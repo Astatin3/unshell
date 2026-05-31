@@ -7,7 +7,7 @@ members = [
     "unshell-macros-core",
     "unshell-macros",
 
-    "unshell-protocol",
+    # "unshell-protocol",
 
     "unshell-leaves/leaf-pty",
 ]
@@ -33,7 +33,7 @@ portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
 
 unshell          = { path = "." }
-unshell-protocol = { path = "./unshell-protocol" }
+# unshell-protocol = { path = "./unshell-protocol" }
 unshell-macros-core = { path = "./unshell-macros-core" }
 unshell-macros = { path = "./unshell-macros" }
 
@@ -70,10 +70,12 @@ chrono            = { workspace = true, optional = true }
 static_init       = { workspace = true }
 
 unshell-macros    = { workspace = true }
-unshell-protocol  = { workspace = true }
+# unshell-protocol  = { workspace = true }
 # unshell-runtime   = { workspace = true }
 # unshell-leaves    = { workspace = true }
 
+[dev-dependencies]
+crossbeam-channel.workspace = true
 
 [profile.minimize]
 inherits = "release"

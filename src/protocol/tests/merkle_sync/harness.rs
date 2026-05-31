@@ -1,7 +1,7 @@
 use alloc::{boxed::Box, rc::Rc, vec};
 use core::cell::RefCell;
 
-use crate::Endpoint;
+use crate::protocol::Endpoint;
 
 use super::{
     constants::{ENDPOINT_CALLER, ENDPOINT_RESPONDENT},

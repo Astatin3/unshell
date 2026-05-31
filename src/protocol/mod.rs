@@ -1,7 +1,3 @@
-#![no_std]
-
-pub extern crate alloc;
-
 mod endpoint;
 mod error;
 mod leaf;
@@ -11,6 +7,7 @@ pub use endpoint::{Endpoint, HookID};
 pub use error::*;
 pub use leaf::*;
 pub use packet::Packet;
+pub use unshell_macros::unshell_leaf;
 
 // Various named types used for brevity
 use alloc::{

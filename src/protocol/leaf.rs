@@ -1,4 +1,4 @@
-use crate::{Endpoint, HookID, Packet, PacketQueue};
+use crate::protocol::{Endpoint, HookID, Packet, PacketQueue};
 
 use alloc::vec::Vec;
 

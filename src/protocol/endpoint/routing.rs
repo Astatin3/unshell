@@ -1,4 +1,4 @@
-use crate::{Endpoint, EndpointError, Packet, RouteDirection};
+use crate::protocol::{Endpoint, EndpointError, Packet, RouteDirection};
 
 impl Endpoint {
     /// Register an inbound packet from legacy trusted code.

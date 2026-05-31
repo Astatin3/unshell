@@ -6,7 +6,7 @@ macro_rules! hashtest {
     };
 }
 
-const MAP: [(&'static str, u32); 6] = [
+const MAP: [(&str, u32); 6] = [
     hashtest!("abc123"),
     hashtest!("abc124"),
     hashtest!("abc125"),
