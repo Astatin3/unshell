@@ -4,10 +4,8 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 members = [
     "ush-obfuscate",
     "base62",
-    "unshell-macros",
-    "unshell-protocol",
-    "unshell-leaves",
-    "treetest",
+
+    "unshell-leaves/leaf-pty",
 ]
 resolver = "2"
 
@@ -20,22 +18,26 @@ repository  = "https://github.com/Astatin3/unshell"
 include     = ["LICENSE", "**/*.rs", "Cargo.toml"]
 
 [workspace.dependencies]
-rkyv             = "0.8.16"
-thiserror        = "2.0.18"
-chrono           = "0.4.44"
-static_init      = "1.0.4"
-syn               = "2.0.117"
-quote             = "1.0.45"
-proc-macro2       = "1.0.106"
+rkyv              = "0.8.16"
+thiserror         = "2.0.18"
+chrono            = "0.4.44"
+static_init       = "1.0.4"
 portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
+const-random      = "0.1.18"
+
+
+ratatui = "0.30.0"
+
 unshell          = { path = "." }
-unshell-protocol = { path = "./unshell-protocol" }
-unshell-leaves   = { path = "./unshell-leaves" }
-unshell-macros   = { path = "./unshell-macros" }
+# unshell-protocol = { path = "./unshell-protocol" }
 
 # ush-obfuscate = { path = "./ush-obfuscate" }
 # base62        = { path = "./base62" }
+
+# Leaves
+leaf-pty = { path = "./unshell-leaves/leaf-pty" }
+
 
 [package]
 name    = "unshell"
@@ -44,76 +46,33 @@ edition.workspace = true
 description = "Pure no_std implementation of the UnShell Protocol"
 
 [features]
-default = []
+default = ["counter_shuffle_feistel_lcg"]
+
 log = []
 log_debug = ["log", "dep:chrono"]
 
-# Leaf features
-leaf_endpoint = ["unshell-leaves/leaf_endpoint"]
-leaf_tui = ["unshell-leaves/leaf_tui"]
+interface = []
+interface_ratatui = ["interface", "dep:ratatui"]
 
-# obfuscate_aes = ["ush-obfuscate/obfuscate_aes"]
-# obfuscate_ref = ["ush-obfuscate/obfuscate_ref"]
+counter_shuffle_none = []
+counter_shuffle_feistel = []
+counter_shuffle_feistel_lcg = []
 
 [dependencies]
 rkyv              = { workspace = true }
 thiserror         = { workspace = true, optional = true }
 chrono            = { workspace = true, optional = true }
-# ush-obfuscate     = { workspace = true }
 static_init       = { workspace = true }
-unshell-macros    = { workspace = true }
-unshell-protocol  = { workspace = true }
-unshell-leaves    = { workspace = true }
+
+const-random      = { workspace = true }
+
+ratatui           = { workspace = true, optional = true }
 
 [dev-dependencies]
-crossbeam-channel = { workspace = true }
+crossbeam-channel.workspace = true
 
-[[example]]
-name = "leaf_derive"
-path = "examples/protocol/leaf_derive.rs"
 
-[[example]]
-name = "crossbeam_channel_leaf"
-path = "examples/protocol/crossbeam_channel_leaf.rs"
-
-[[example]]
-name = "remote_shell_endpoint"
-path = "examples/protocol/remote_shell_endpoint.rs"
-required-features = ["leaf_endpoint"]
-
-[[example]]
-name = "remote_shell_receive"
-path = "examples/protocol/remote_shell_receive.rs"
-required-features = ["leaf_endpoint"]
-
-[[example]]
-name = "remote_shell_single_endpoint"
-path = "examples/protocol/remote_shell_single_endpoint.rs"
-required-features = ["leaf_endpoint"]
-
-[[example]]
-name = "bench"
-path = "examples/protocol/bench/bench.rs"
-
-[[example]]
-name = "op_encode_call"
-path = "examples/protocol/bench/op_encode_call.rs"
-
-[[example]]
-name = "op_decode_call"
-path = "examples/protocol/bench/op_decode_call.rs"
-
-[[example]]
-name = "op_forward_call_receive"
-path = "examples/protocol/bench/op_forward_call_receive.rs"
-
-[[example]]
-name = "op_local_call_receive"
-path = "examples/protocol/bench/op_local_call_receive.rs"
-
-[[example]]
-name = "op_hook_data_receive"
-path = "examples/protocol/bench/op_hook_data_receive.rs"
+[build-dependencies]
 
 [profile.minimize]
 inherits = "release"
@@ -136,4 +95,4 @@ unsafe_op_in_unsafe_fn             = "warn"
 unused_import_braces               = "warn"
 unused_lifetimes                   = "warn"
 trivial_casts                      = "allow"
-missing_docs                       = "warn"
+# missing_docs                       = "warn"

@@ -1,4 +1,3 @@
-#![feature(proc_macro_quote)]
 #![feature(proc_macro_span)]
 #![allow(dead_code, unused_macros, unused_imports)]
 
