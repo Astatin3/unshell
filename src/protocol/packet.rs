@@ -31,6 +31,17 @@ impl Packet {
     /// validation path. That makes deserialization a single full-packet parse,
     /// which matches how the endpoint mock transports actually consume packets.
     pub fn serialize(&self) -> Result<Vec<u8>, SerializeError> {
+        let mut buf = Vec::new();
+        self.serialize_into(&mut buf)?;
+        Ok(buf)
+    }
+
+    /// Appends this packet's serialized frame to an existing byte buffer.
+    ///
+    /// Transports use this to avoid allocating a temporary frame only to copy it into
+    /// their socket write buffer. The method performs all size checks before writing so
+    /// serialization errors do not leave a partial frame in `buf`.
+    pub fn serialize_into(&self, buf: &mut Vec<u8>) -> Result<(), SerializeError> {
         let path_len = u32::try_from(self.path.len()).map_err(|_| SerializeError::PathTooLarge)?;
 
         // body = fixed procedure_id field + data bytes
@@ -49,7 +60,8 @@ impl Packet {
             .and_then(|n| n.checked_add(4))
             .and_then(|n| n.checked_add(body_payload_len))
             .ok_or(SerializeError::BodyTooLarge)?;
-        let mut buf = Vec::with_capacity(total);
+
+        buf.reserve(total);
 
         // ── header ────────────────────────────────────────────────────────────
         let flags = self.end_hook as u8;
@@ -66,7 +78,7 @@ impl Packet {
         buf.extend_from_slice(&self.procedure_id.to_le_bytes());
         buf.extend_from_slice(&self.data);
 
-        Ok(buf)
+        Ok(())
     }
 
     /// Deserializes a full packet from untrusted transport bytes.
@@ -75,6 +87,7 @@ impl Packet {
     /// partial parse path was removed because current routing tests and mock
     /// transports always deserialize before calling endpoint routing, so keeping a
     /// borrowed header API only preserved unused unsafe casting complexity.
+    #[inline(never)]
     pub fn deserialize(buf: &[u8]) -> Result<Self, DeserializeError> {
         // fixed prefix: hook_id (2) + flags (1) + padding (1) + path_len (4)
         if buf.len() < 8 {

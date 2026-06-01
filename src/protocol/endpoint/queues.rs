@@ -50,6 +50,15 @@ impl Endpoint {
         Self::take_clear(path, f, &mut self.outbound);
     }
 
+    /// Removes and returns all outbound packets queued for `path`.
+    ///
+    /// Transport leaves use this when they need packet ownership instead of a borrowed
+    /// callback. Keeping this non-generic avoids creating a new closure-shaped copy of
+    /// the queue-draining loop for each concrete transport implementation.
+    pub fn take_outbound_queue(&mut self, path: u32) -> Option<PacketQueue> {
+        Self::route_remove(path, &mut self.outbound)
+    }
+
     fn take_clear<F>(path: u32, mut f: F, queue: &mut RouteMap)
     where
         F: FnMut(&Packet),
