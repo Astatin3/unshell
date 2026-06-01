@@ -28,7 +28,8 @@ use crate::interface::SessionView;
 ///         incoming: &mut PacketQueue,
 ///         endpoint: &mut Endpoint,
 ///     ) -> SessionStatus {
-///         while let Some(packet) = incoming.pop_front() {
+///         while !incoming.is_empty() {
+///             let packet = incoming.remove(0);
 ///             session.apply(leaf, packet, endpoint);
 ///         }
 ///         SessionStatus::Running

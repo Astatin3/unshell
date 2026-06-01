@@ -29,7 +29,8 @@ impl Endpoint {
 
         let mut unmatched = Vec::new();
 
-        while let Some(packet) = queue.pop_front() {
+        while !queue.is_empty() {
+            let packet = queue.remove(0);
             if predicate(&packet) {
                 f(packet);
             } else {
@@ -74,7 +75,7 @@ impl Endpoint {
 
     /// Appends a packet to the route queue for `endpoint`.
     pub(crate) fn route_push(endpoint: EndpointName, packet: Packet, routes: &mut RouteMap) {
-        Self::route_queue_mut(endpoint, routes).push_back(packet);
+        Self::route_queue_mut(endpoint, routes).push(packet);
     }
 
     /// Returns the route queue for `endpoint` if one exists.
@@ -87,6 +88,9 @@ impl Endpoint {
     }
 
     /// Removes and returns the queue for `endpoint`.
+    ///
+    /// Route map entry order is intentionally not observable; each route's packet
+    /// queue preserves FIFO ordering internally, so `swap_remove` keeps removal small.
     pub(crate) fn route_remove(
         endpoint: EndpointName,
         routes: &mut RouteMap,
@@ -95,7 +99,7 @@ impl Endpoint {
             .iter()
             .position(|(queued_endpoint, _)| *queued_endpoint == endpoint)?;
 
-        Some(routes.remove(index).1)
+        Some(routes.swap_remove(index).1)
     }
 
     /// Returns whether a route queue exists for `endpoint`.
@@ -118,8 +122,9 @@ impl Endpoint {
         {
             &mut routes[index].1
         } else {
+            let index = routes.len();
             routes.push((endpoint, PacketQueue::new()));
-            &mut routes.last_mut().unwrap().1
+            &mut routes[index].1
         }
     }
 

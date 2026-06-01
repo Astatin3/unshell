@@ -517,6 +517,7 @@ name = "endpoint_test"
 version = "0.1.0"
 dependencies = [
  "leaf-shell",
+ "tcp_simple",
  "unshell",
 ]
 

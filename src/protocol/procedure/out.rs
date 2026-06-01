@@ -42,7 +42,7 @@ impl ProcedureOut {
     }
 
     fn send_with_end(&mut self, data: &[u8], end_hook: bool) {
-        self.outbox.push_back(Packet {
+        self.outbox.push(Packet {
             hook_id: self.hook_id,
             end_hook,
             path: self.reply_path.clone(),

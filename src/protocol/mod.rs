@@ -22,13 +22,20 @@ pub use session::*;
 pub use ratatui;
 
 // Various named types used for brevity
-use alloc::{collections::vec_deque::VecDeque, vec::Vec};
+use alloc::vec::Vec;
 
 type Path = Vec<u32>;
 type EndpointName = u32;
 type ConnectionSet = Vec<(EndpointName, bool)>;
 type HookMap = Vec<(HookID, EndpointName)>;
-pub type PacketQueue = VecDeque<Packet>;
+
+/// FIFO packet storage for generated leaves and endpoint route queues.
+///
+/// A compact `Vec` is smaller than `VecDeque` in minimized endpoint binaries. Callers
+/// that drain the front should use `remove(0)` to preserve protocol packet order; the
+/// expected per-hook queues are short enough that the O(n) shift is preferable to the
+/// larger ring-buffer machinery in implant-sized builds.
+pub type PacketQueue = Vec<Packet>;
 type RouteMap = Vec<(EndpointName, PacketQueue)>;
 
 #[cfg(test)]
