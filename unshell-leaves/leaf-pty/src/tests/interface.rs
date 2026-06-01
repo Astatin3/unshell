@@ -2,17 +2,16 @@ use alloc::vec;
 
 use unshell::{
     interface::{InterfaceEventKind, InterfaceStore, ProcedureKey, SessionKey, SessionViewStatus},
-    protocol::{Leaf, Packet},
+    protocol::{Leaf, Packet, SessionStatus},
 };
 
 use crate::{
-    FakePtyLeaf, FakePtyState, OP_EXIT, OP_OPENED, OP_TERMINATE, PROC_PTY, constants::PROC_PING,
-    frame_opcode, pty_open_packet,
+    FakePtyLeaf, FakePtyState, OP_TERMINATE, PROC_PTY, constants::PROC_PING, pty_open_packet,
 };
 
 use super::support::{
-    ENDPOINT_A, ENDPOINT_B, assert_frame, drain_parent_packets, drain_parent_pty_packets,
-    pty_endpoints, send_downward_frame, transfer_packets,
+    ENDPOINT_A, ENDPOINT_B, drain_parent_packets, drain_parent_pty_packets, pty_endpoints,
+    send_downward_frame, transfer_packets,
 };
 
 fn view_has_event<F>(interface: &InterfaceStore, event_indexes: &[usize], mut predicate: F) -> bool
@@ -51,11 +50,7 @@ fn interface_update_records_session_flow() {
     let hook_id = endpoint_a.get_hook_id();
 
     endpoint_a
-        .add_outbound(pty_open_packet(
-            vec![ENDPOINT_A, ENDPOINT_B],
-            hook_id,
-            &[ENDPOINT_A],
-        ))
+        .add_outbound(pty_open_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id))
         .unwrap();
     transfer_packets(&mut endpoint_a, &mut endpoint_b, ENDPOINT_B, ENDPOINT_A);
 
@@ -83,34 +78,21 @@ fn interface_update_records_session_flow() {
         &session_view.events,
         |event| matches!(
             event,
-            InterfaceEventKind::OutboundQueued { packet }
-                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_OPENED)
-        ),
-    ));
-    assert!(view_has_event(
-        &interface,
-        &session_view.events,
-        |event| matches!(
-            event,
-            InterfaceEventKind::RouteSuccess { packet }
-                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_OPENED)
+            InterfaceEventKind::SessionUpdated { hook_id: recorded_hook, status, .. }
+                if *recorded_hook == hook_id && *status == SessionStatus::Running
         ),
     ));
 }
 
 #[test]
-fn interface_update_records_failed_final_route_without_dropping_session() {
+fn interface_update_records_failed_direct_route_without_retry() {
     let (mut endpoint_a, mut endpoint_b) = pty_endpoints();
     let mut leaf = FakePtyLeaf::new(FakePtyState::new());
     let mut interface = InterfaceStore::new();
     let hook_id = endpoint_a.get_hook_id();
 
     endpoint_a
-        .add_outbound(pty_open_packet(
-            vec![ENDPOINT_A, ENDPOINT_B],
-            hook_id,
-            &[ENDPOINT_A],
-        ))
+        .add_outbound(pty_open_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id))
         .unwrap();
     transfer_packets(&mut endpoint_a, &mut endpoint_b, ENDPOINT_B, ENDPOINT_A);
     leaf.update_interface(&mut endpoint_b, &mut interface);
@@ -135,18 +117,9 @@ fn interface_update_records_failed_final_route_without_dropping_session() {
     };
     let session_view = interface.session_views().get(&session_key).unwrap();
 
-    assert_eq!(leaf.active_session_count(), 1);
-    assert_eq!(leaf.pending_packet_count(), 1);
+    assert_eq!(leaf.active_session_count(), 0);
+    assert_eq!(leaf.pending_packet_count(), 0);
     assert_eq!(session_view.status, SessionViewStatus::Closed);
-    assert!(view_has_event(
-        &interface,
-        &session_view.events,
-        |event| matches!(
-            event,
-            InterfaceEventKind::RouteFailure { packet, .. }
-                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_EXIT)
-        ),
-    ));
 
     endpoint_b.connections.insert((ENDPOINT_A, true));
     leaf.update_interface(&mut endpoint_b, &mut interface);
@@ -156,17 +129,8 @@ fn interface_update_records_failed_final_route_without_dropping_session() {
     let session_view = interface.session_views().get(&session_key).unwrap();
 
     assert_eq!(leaf.active_session_count(), 0);
-    assert_eq!(packets.len(), 1);
-    assert_frame(&packets[0], hook_id, OP_EXIT, true, &[0]);
-    assert!(view_has_event(
-        &interface,
-        &session_view.events,
-        |event| matches!(
-            event,
-            InterfaceEventKind::RouteSuccess { packet }
-                if packet.hook_id == hook_id && frame_opcode(packet) == Some(OP_EXIT)
-        ),
-    ));
+    assert!(packets.is_empty());
+    assert_eq!(session_view.status, SessionViewStatus::Closed);
 }
 
 #[test]

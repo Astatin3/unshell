@@ -3,26 +3,27 @@ use alloc::collections::VecDeque;
 use crate::{
     interface::{InterfaceEventKind, InterfaceStore, InterfaceTarget},
     protocol::{
-        Endpoint, Packet, PacketQueue, Procedure, ProcedureOut, Session, SessionCtx, SessionEntry,
+        Endpoint, Packet, PacketQueue, Procedure, ProcedureOut, Session, SessionEntry,
         SessionFamily, SessionInitError, SessionStatus,
     },
 };
 
 /// Retry queue shared by generated leaves.
 ///
-/// Sessions already own per-hook outboxes. This leaf-level queue is for rejected
-/// session initialization responses and one-shot procedures, both of which need the
-/// same retry semantics as session output without becoming separate framework types.
+/// Leaf-level retry queue shared by generated leaves.
+///
+/// Sessions route directly through `Endpoint` to keep their runtime shape small. This
+/// queue remains only for one-shot procedures, whose handlers still use `ProcedureOut`
+/// and should not route while the procedure is borrowing leaf state.
 pub struct LeafOutbox {
     packets: VecDeque<LeafOutboxEntry>,
 }
 
 /// One packet retained by a leaf-level retry queue.
 ///
-/// Session entry outboxes have an obvious owner from their surrounding session entry.
-/// Leaf-level outboxes are mixed: rejected session initialization packets and one-shot
-/// procedure responses both land here. Storing the owner beside the packet keeps route
-/// logging precise without exposing another public queue type.
+/// Procedure responses from different generated branches share one queue. Storing the
+/// owner beside the packet keeps route logging precise without exposing another public
+/// queue type.
 #[derive(Clone)]
 struct LeafOutboxEntry {
     packet: Packet,
@@ -85,15 +86,14 @@ impl Default for LeafOutbox {
 /// Dispatches one packet into a generated session family.
 ///
 /// The macro picks `S` and the family field. This helper owns the boring details:
-/// find the hook, initialize missing sessions, queue rejected responses, and update
+/// find the hook, initialize missing sessions, route rejected responses, and update
 /// interface state when a caller supplied one.
 pub fn dispatch_session<L, S>(
-    endpoint: &Endpoint,
+    endpoint: &mut Endpoint,
     leaf_id: u32,
     leaf: &mut L,
     family: &mut SessionFamily<S>,
     packet: Packet,
-    outbox: &mut LeafOutbox,
     interface: &mut Option<&mut InterfaceStore>,
 ) where
     S: Session<L>,
@@ -149,7 +149,7 @@ pub fn dispatch_session<L, S>(
     };
     match S::init(leaf, packet) {
         Ok(state) => {
-            family.entries.push(SessionEntry::new(hook_id, path, state));
+            family.entries.push(SessionEntry::new(hook_id, state));
 
             if let Some(store) = interface.as_mut() {
                 store.record_for(
@@ -195,21 +195,16 @@ pub fn dispatch_session<L, S>(
                         finished_ns: store.now_ns(),
                     },
                 );
-                store.record_for(
-                    target,
-                    InterfaceEventKind::OutboundQueued {
-                        packet: packet.clone(),
-                    },
-                );
             }
 
-            outbox.push_for_target(packet, target);
+            let _ = flush_packet_with_target(endpoint, target, &packet, interface);
         }
     }
 }
 
 /// Updates every live session in one generated session family.
 pub fn update_session_family<L, S>(
+    endpoint: &mut Endpoint,
     leaf_id: u32,
     leaf: &mut L,
     family: &mut SessionFamily<S>,
@@ -223,13 +218,7 @@ pub fn update_session_family<L, S>(
         }
 
         let started_ns = interface.as_ref().and_then(|store| store.now_ns());
-        let outbox_start = entry.outbox.len();
-        let path = entry.path.clone();
-        let status = {
-            let mut ctx = SessionCtx::new(entry.hook_id, path, S::PROCEDURE_ID, &mut entry.outbox);
-
-            S::update(leaf, &mut entry.state, &mut entry.inbox, &mut ctx)
-        };
+        let status = S::update(leaf, &mut entry.state, &mut entry.inbox, endpoint);
         let target = InterfaceTarget::session(leaf_id, S::PROCEDURE_ID, entry.hook_id);
 
         if let Some(store) = interface.as_mut() {
@@ -243,21 +232,14 @@ pub fn update_session_family<L, S>(
                     finished_ns: store.now_ns(),
                 },
             );
-
-            for packet in entry.outbox.iter().skip(outbox_start) {
-                store.record_for(
-                    target,
-                    InterfaceEventKind::OutboundQueued {
-                        packet: packet.clone(),
-                    },
-                );
-            }
         }
 
         if matches!(status, SessionStatus::Closed) {
             entry.closed = true;
         }
     }
+
+    family.entries.retain(|entry| !entry.closed);
 }
 
 /// Dispatches one packet into a generated one-shot procedure.
@@ -328,56 +310,6 @@ pub fn flush_leaf_outbox(
         });
 
         (target, entry.packet.clone())
-    })
-}
-
-/// Flushes and retains one generated session family.
-pub fn flush_session_family<L, S>(
-    endpoint: &mut Endpoint,
-    leaf_id: u32,
-    family: &mut SessionFamily<S>,
-    interface: &mut Option<&mut InterfaceStore>,
-) where
-    S: Session<L>,
-{
-    for entry in &mut family.entries {
-        let target = InterfaceTarget::session(leaf_id, S::PROCEDURE_ID, entry.hook_id);
-        flush_packet_queue_with_target(endpoint, target, &mut entry.outbox, interface);
-    }
-
-    family
-        .entries
-        .retain(|entry| !entry.closed || !entry.outbox.is_empty());
-}
-
-/// Flushes a retry queue through [`Endpoint::add_outbound`].
-///
-/// This is the interface-aware version of [`crate::protocol::flush_packet_queue`]. It
-/// logs route attempts before trying them, then logs either success or the route error
-/// without dropping the packet on failure.
-pub fn flush_packet_queue_with_interface(
-    endpoint: &mut Endpoint,
-    leaf_id: u32,
-    outbox: &mut PacketQueue,
-    interface: &mut Option<&mut InterfaceStore>,
-) -> bool {
-    flush_outbox(endpoint, outbox, interface, |packet| {
-        (
-            InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id),
-            packet.clone(),
-        )
-    })
-}
-
-/// Flushes a packet queue whose owner is already known by the generated runtime.
-fn flush_packet_queue_with_target(
-    endpoint: &mut Endpoint,
-    target: InterfaceTarget,
-    outbox: &mut PacketQueue,
-    interface: &mut Option<&mut InterfaceStore>,
-) -> bool {
-    flush_outbox(endpoint, outbox, interface, |packet| {
-        (target, packet.clone())
     })
 }
 

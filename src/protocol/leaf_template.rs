@@ -98,6 +98,7 @@ macro_rules! unshell_leaf {
 
                 $(
                     $crate::protocol::update_session_family::<$State, $Session>(
+                        endpoint,
                         leaf_id,
                         &mut self.state,
                         &mut self.$session_field,
@@ -126,7 +127,6 @@ macro_rules! unshell_leaf {
                             &mut self.state,
                             &mut self.$session_field,
                             packet,
-                            &mut self.outbox,
                             interface,
                         );
                         return;
@@ -167,15 +167,6 @@ macro_rules! unshell_leaf {
                     &mut self.outbox,
                     interface,
                 );
-
-                $(
-                    $crate::protocol::flush_session_family::<$State, $Session>(
-                        endpoint,
-                        leaf_id,
-                        &mut self.$session_field,
-                        interface,
-                    );
-                )*
             }
         }
 

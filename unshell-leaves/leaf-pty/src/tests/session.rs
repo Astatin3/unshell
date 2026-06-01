@@ -124,7 +124,7 @@ fn exit_end_hook_cleans_route_and_session() {
 }
 
 #[test]
-fn failed_final_exit_route_retries_without_losing_session() {
+fn failed_final_exit_route_closes_session_without_retry() {
     let (mut endpoint_a, mut endpoint_b) = pty_endpoints();
     let mut leaf = FakePtyLeaf::new(FakePtyState::new());
     let hook_id = open_pty_session(&mut endpoint_a, &mut endpoint_b, &mut leaf);
@@ -141,19 +141,18 @@ fn failed_final_exit_route_retries_without_losing_session() {
     endpoint_b.connections.remove(&(ENDPOINT_A, true));
     leaf.update(&mut endpoint_b);
 
-    assert_eq!(leaf.active_session_count(), 1);
-    assert_eq!(leaf.pending_packet_count(), 1);
-    assert_hook_present(&endpoint_b, hook_id);
+    assert_eq!(leaf.active_session_count(), 0);
+    assert_eq!(leaf.pending_packet_count(), 0);
+    assert_hook_removed(&endpoint_b, hook_id);
 
     endpoint_b.connections.insert((ENDPOINT_A, true));
     leaf.update(&mut endpoint_b);
     transfer_packets(&mut endpoint_b, &mut endpoint_a, ENDPOINT_A, ENDPOINT_B);
     let packets = drain_parent_pty_packets(&mut endpoint_a);
 
-    assert_eq!(packets.len(), 1);
-    assert_frame(&packets[0], hook_id, OP_EXIT, true, &[0]);
+    assert!(packets.is_empty());
     assert_eq!(leaf.active_session_count(), 0);
-    assert_hook_removed(&endpoint_a, hook_id);
+    assert_hook_present(&endpoint_a, hook_id);
     assert_hook_removed(&endpoint_b, hook_id);
 }
 
@@ -252,10 +251,7 @@ fn pty_leaf_does_not_consume_other_leaf_packets() {
     endpoint.connections.insert((ENDPOINT_A, true));
 
     endpoint
-        .add_inbound_from(
-            ENDPOINT_A,
-            pty_open_packet(vec![ENDPOINT_A, ENDPOINT_B], 7, &[ENDPOINT_A]),
-        )
+        .add_inbound_from(ENDPOINT_A, pty_open_packet(vec![ENDPOINT_A, ENDPOINT_B], 7))
         .unwrap();
     endpoint
         .add_inbound_from(

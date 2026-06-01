@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::protocol::{Endpoint, EndpointError, EndpointName};
+use crate::protocol::{Endpoint, EndpointError, EndpointName, Packet};
 
 /// Compact identifier for one routed return channel.
 ///
@@ -103,6 +103,52 @@ impl Endpoint {
             path.push(peer);
             Ok(path)
         }
+    }
+
+    /// Routes raw response data over an existing hook immediately.
+    ///
+    /// This is the compact session-output path: it avoids an intermediate context and
+    /// retry queue. If a final packet cannot route, the local hook is still removed so
+    /// an implant does not retain dead hook state forever.
+    pub fn send_hook_raw(
+        &mut self,
+        hook_id: HookID,
+        procedure_id: u32,
+        data: Vec<u8>,
+        end_hook: bool,
+    ) -> Result<(), EndpointError> {
+        let path = self.hook_path(hook_id)?;
+        let packet = Packet {
+            hook_id,
+            end_hook,
+            path,
+            procedure_id,
+            data,
+        };
+
+        let result = self.add_outbound(packet);
+
+        if result.is_err() && end_hook {
+            self.close_hook(hook_id);
+        }
+
+        result
+    }
+
+    /// Routes a one-byte-opcode response frame over an existing hook immediately.
+    pub fn send_hook_frame(
+        &mut self,
+        hook_id: HookID,
+        procedure_id: u32,
+        opcode: u8,
+        payload: &[u8],
+        end_hook: bool,
+    ) -> Result<(), EndpointError> {
+        let mut data = Vec::with_capacity(payload.len() + 1);
+        data.push(opcode);
+        data.extend_from_slice(payload);
+
+        self.send_hook_raw(hook_id, procedure_id, data, end_hook)
     }
 
     /// Validates that `actual_peer` is the peer allowed to use `hook_id`.

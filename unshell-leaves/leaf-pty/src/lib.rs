@@ -16,11 +16,10 @@ mod session;
 mod state;
 
 pub use codec::{
-    decode_open_reply_path, encode_frame, encode_open, frame_opcode, frame_payload,
-    pty_open_packet, pty_packet,
+    encode_frame, encode_open, frame_opcode, frame_payload, pty_open_packet, pty_packet,
 };
 pub use constants::*;
-pub use session::{PtySession, PtySessionState};
+pub use session::PtySessionState;
 pub use state::{FakePtyLeaf, FakePtyState};
 
 #[cfg(test)]

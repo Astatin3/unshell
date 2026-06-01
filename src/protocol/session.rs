@@ -28,10 +28,10 @@ use crate::interface::SessionView;
 ///         leaf: &mut MyLeafState,
 ///         session: &mut Self,
 ///         incoming: &mut PacketQueue,
-///         ctx: &mut SessionCtx<'_>,
+///         endpoint: &mut Endpoint,
 ///     ) -> SessionStatus {
 ///         while let Some(packet) = incoming.pop_front() {
-///             session.apply(leaf, packet, ctx);
+///             session.apply(leaf, packet, endpoint);
 ///         }
 ///         SessionStatus::Running
 ///     }
@@ -51,14 +51,15 @@ pub trait Session<L>: Sized {
     /// Advances one active hook session.
     ///
     /// The generated leaf calls this for every live session on each update tick so
-    /// sessions can poll external workers even when no new packet arrived. Outbound
-    /// packets must be queued through `ctx`; direct endpoint routing would bypass the
-    /// generated retry rules.
+    /// sessions can poll external workers even when no new packet arrived. Session
+    /// output is routed immediately through `endpoint`; callers that need retry
+    /// semantics should keep their own compact application state and retry on a later
+    /// tick.
     fn update(
         leaf: &mut L,
         session: &mut Self,
         incoming: &mut PacketQueue,
-        ctx: &mut SessionCtx<'_>,
+        endpoint: &mut Endpoint,
     ) -> SessionStatus;
 
     #[cfg(feature = "interface_ratatui")]
@@ -121,97 +122,9 @@ pub enum SessionStatus {
 
     /// The session has finished application work.
     ///
-    /// The generated leaf still retains the entry until every queued packet routes
-    /// successfully, which prevents a failed final frame from losing session cleanup.
+    /// The generated leaf removes the entry after the update tick. Final packets are
+    /// routed immediately by the session before returning this status.
     Closed,
-}
-
-/// Mutable output context passed to [`Session::update`].
-///
-/// The context queues packets only; it never routes them immediately. Centralizing
-/// routing in generated code is what makes final-frame retries reliable.
-pub struct SessionCtx<'a> {
-    hook_id: HookID,
-    path: Vec<u32>,
-    procedure_id: u32,
-    outbox: &'a mut PacketQueue,
-}
-
-impl<'a> SessionCtx<'a> {
-    /// Creates a context for one session update call.
-    pub fn new(
-        hook_id: HookID,
-        path: Vec<u32>,
-        procedure_id: u32,
-        outbox: &'a mut PacketQueue,
-    ) -> Self {
-        Self {
-            hook_id,
-            path,
-            procedure_id,
-            outbox,
-        }
-    }
-
-    /// Returns the hook id used for packets emitted through this context.
-    pub fn hook_id(&self) -> HookID {
-        self.hook_id
-    }
-
-    /// Queues a one-byte-opcode frame without closing the hook.
-    pub fn send(&mut self, opcode: u8, data: &[u8]) {
-        self.send_frame(opcode, data, false);
-    }
-
-    /// Queues a one-byte-opcode frame that closes the hook after successful routing.
-    pub fn send_final(&mut self, opcode: u8, data: &[u8]) {
-        self.send_frame(opcode, data, true);
-    }
-
-    /// Queues a protocol-specific error frame without closing the hook.
-    ///
-    /// The `code` is used as the frame opcode because the protocol layer does not
-    /// reserve a universal error opcode. Leaves that have a dedicated error opcode can
-    /// pass that value here or call [`Self::send`] directly.
-    pub fn error(&mut self, code: u8, data: &[u8]) {
-        self.send(code, data);
-    }
-
-    /// Queues a protocol-specific error frame that closes the hook after routing.
-    pub fn error_final(&mut self, code: u8, data: &[u8]) {
-        self.send_final(code, data);
-    }
-
-    /// Queues raw packet data without adding an opcode byte.
-    pub fn send_raw(&mut self, data: &[u8]) {
-        self.send_raw_with_end(data, false);
-    }
-
-    /// Queues raw packet data and closes the hook after successful routing.
-    pub fn send_raw_final(&mut self, data: &[u8]) {
-        self.send_raw_with_end(data, true);
-    }
-
-    fn send_frame(&mut self, opcode: u8, data: &[u8], end_hook: bool) {
-        let mut frame = Vec::with_capacity(data.len() + 1);
-        frame.push(opcode);
-        frame.extend_from_slice(data);
-        self.enqueue_data(frame, end_hook);
-    }
-
-    fn send_raw_with_end(&mut self, data: &[u8], end_hook: bool) {
-        self.enqueue_data(data.to_vec(), end_hook);
-    }
-
-    fn enqueue_data(&mut self, data: Vec<u8>, end_hook: bool) {
-        self.outbox.push_back(Packet {
-            hook_id: self.hook_id,
-            end_hook,
-            path: self.path.clone(),
-            procedure_id: self.procedure_id,
-            data,
-        });
-    }
 }
 
 /// Storage entry used by macro-generated session stores.
@@ -223,23 +136,13 @@ pub struct SessionEntry<S> {
     /// Hook id associated with this live session.
     pub hook_id: HookID,
 
-    /// Destination path for packets emitted on this hook.
-    ///
-    /// This is generated runtime state, not user session state. It is captured from
-    /// endpoint hook routing when the session is created so leaf sessions never have
-    /// to carry or understand a reply path.
-    pub path: Vec<u32>,
-
     /// Application-owned session state.
     pub state: S,
 
     /// Packets delivered for this hook but not yet consumed by the session.
     pub inbox: PacketQueue,
 
-    /// Packets emitted by the session but not yet accepted by endpoint routing.
-    pub outbox: PacketQueue,
-
-    /// Whether application logic has finished and only retry flushing may remain.
+    /// Whether application logic has finished and should be removed after update.
     pub closed: bool,
 }
 
@@ -266,7 +169,7 @@ impl<S> SessionFamily<S> {
         let mut count = 0usize;
 
         for entry in &self.entries {
-            count += entry.inbox.len() + entry.outbox.len();
+            count += entry.inbox.len();
         }
 
         count
@@ -281,31 +184,12 @@ impl<S> Default for SessionFamily<S> {
 
 impl<S> SessionEntry<S> {
     /// Creates one active session entry for `hook_id`.
-    pub fn new(hook_id: HookID, path: Vec<u32>, state: S) -> Self {
+    pub fn new(hook_id: HookID, state: S) -> Self {
         Self {
             hook_id,
-            path,
             state,
             inbox: PacketQueue::new(),
-            outbox: PacketQueue::new(),
             closed: false,
         }
     }
-}
-
-/// Flushes a retry queue through [`Endpoint::add_outbound`].
-///
-/// The packet at the front is cloned for each attempt and removed only after routing
-/// succeeds. This preserves final frames when a route is temporarily unavailable.
-/// The return value is true when the queue was fully drained.
-pub fn flush_packet_queue(endpoint: &mut Endpoint, outbox: &mut PacketQueue) -> bool {
-    while let Some(packet) = outbox.front().cloned() {
-        if endpoint.add_outbound(packet).is_err() {
-            return false;
-        }
-
-        outbox.pop_front();
-    }
-
-    true
 }

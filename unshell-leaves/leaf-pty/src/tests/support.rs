@@ -72,11 +72,7 @@ pub(super) fn open_pty_session(
 ) -> u16 {
     let hook_id = endpoint_a.get_hook_id();
     endpoint_a
-        .add_outbound(pty_open_packet(
-            vec![ENDPOINT_A, ENDPOINT_B],
-            hook_id,
-            &[ENDPOINT_A],
-        ))
+        .add_outbound(pty_open_packet(vec![ENDPOINT_A, ENDPOINT_B], hook_id))
         .unwrap();
 
     transfer_packets(endpoint_a, endpoint_b, ENDPOINT_B, ENDPOINT_A);

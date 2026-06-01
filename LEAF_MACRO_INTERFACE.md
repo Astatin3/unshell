@@ -88,11 +88,11 @@ The macro delegates behavior to small helpers:
 - `update_session_family`
 - `dispatch_procedure`
 - `flush_leaf_outbox`
-- `flush_session_family`
-- `flush_packet_queue_with_interface`
 
 This keeps the macro readable. The helper functions own the mechanics of session
-lookup, initialization, retry-safe flushing, and optional interface logging.
+lookup, initialization, procedure response flushing, and optional interface logging.
+Sessions route their own output immediately through `Endpoint` helpers to avoid a
+per-session output context and retry queue in small implant builds.
 
 ## Interface Store
 
@@ -108,7 +108,7 @@ InterfaceStore
 
 Generated leaves receive an optional mutable store during `update_interface`. The
 helpers create and update the appropriate session/procedure views when packets are
-dispatched, sessions update, and outbound routes succeed or fail.
+dispatched, sessions update, and queued procedure outbound routes succeed or fail.
 
 Internally, interface events are target-driven:
 
@@ -132,9 +132,9 @@ procedure packet both have `procedure_id` and `hook_id`, but they should not bot
 create session views. The runtime already knows which dispatch branch handled the
 packet, so that answer is carried into the store.
 
-Leaf-level retry queues also carry the same owner metadata. That matters because the
-shared leaf outbox contains both rejected session-init responses and procedure
-responses. Session-entry outboxes use their surrounding session key directly.
+Leaf-level retry queues carry the same owner metadata for procedure responses.
+Session responses bypass this queue and use `Endpoint::send_hook_raw` or
+`Endpoint::send_hook_frame` directly.
 
 Time remains caller-supplied:
 
