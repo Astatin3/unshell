@@ -1,29 +1,15 @@
-mod no_procedures;
-
 /// Declares a generated leaf wrapper using a small template-like syntax.
 ///
 /// The macro deliberately requires callers to name every generated session field. It
 /// does not infer identifiers, inspect struct fields, or hide behavior inside a proc
 /// macro. All real dispatch and retry behavior lives in normal Rust helpers.
+///
+/// The procedure list is handled by small internal `@...` rules instead of by
+/// separate full macro expansions. That keeps the generated shape easy to audit
+/// while still allowing empty `procedures {}` leaves to avoid allocating a
+/// `LeafOutbox`.
 #[macro_export]
 macro_rules! unshell_leaf {
-    (
-        $vis:vis leaf $Leaf:ident for $State:ty {
-            id: $id:expr,
-            meta: $meta:expr,
-            sessions { $( $session_field:ident : $Session:ty ),* $(,)? }
-            procedures {}
-        }
-    ) => {
-        $crate::__unshell_leaf_no_procedures! {
-            $vis leaf $Leaf for $State {
-                id: $id,
-                meta: $meta,
-                sessions { $( $session_field : $Session ),* }
-            }
-        }
-    };
-
     (
         $vis:vis leaf $Leaf:ident for $State:ty {
             id: $id:expr,
@@ -34,7 +20,7 @@ macro_rules! unshell_leaf {
     ) => {
         $vis struct $Leaf {
             state: $State,
-            outbox: $crate::protocol::LeafOutbox,
+            outbox: $crate::unshell_leaf!(@outbox_type $( $procedure_field : $Procedure ),*),
             $(
                 $session_field: $crate::protocol::SessionFamily<$Session>,
             )*
@@ -45,7 +31,7 @@ macro_rules! unshell_leaf {
             pub fn new(state: $State) -> Self {
                 Self {
                     state,
-                    outbox: $crate::protocol::LeafOutbox::new(),
+                    outbox: $crate::unshell_leaf!(@outbox_new $( $procedure_field : $Procedure ),*),
                     $(
                         $session_field: $crate::protocol::SessionFamily::new(),
                     )*
@@ -69,14 +55,16 @@ macro_rules! unshell_leaf {
 
             /// Returns queued packets owned by this generated leaf.
             pub fn pending_packet_count(&self) -> usize {
-                let mut count = self.outbox.len();
-                $(
-                    count += self.$session_field.pending_packet_count();
-                )*
-                count
+                $crate::unshell_leaf!(
+                    @outbox_len
+                    &self.outbox;
+                    $( $procedure_field : $Procedure ),*
+                ) $(+ self.$session_field.pending_packet_count())*
             }
 
             fn __unshell_packet_is_owned(packet: &$crate::protocol::Packet) -> bool {
+                let _ = packet;
+
                 false
                 $(
                     || packet.procedure_id
@@ -93,7 +81,14 @@ macro_rules! unshell_leaf {
                 endpoint: &mut $crate::protocol::Endpoint,
             ) {
                 let leaf_id = $id;
-                self.__unshell_flush_all(endpoint);
+                let _ = leaf_id;
+
+                $crate::unshell_leaf!(
+                    @flush_outbox
+                    endpoint,
+                    &mut self.outbox;
+                    $( $procedure_field : $Procedure ),*
+                );
 
                 let Some(local_id) = endpoint.path.last().copied() else {
                     return;
@@ -118,7 +113,12 @@ macro_rules! unshell_leaf {
                     );
                 )*
 
-                self.__unshell_flush_all(endpoint);
+                $crate::unshell_leaf!(
+                    @flush_outbox
+                    endpoint,
+                    &mut self.outbox;
+                    $( $procedure_field : $Procedure ),*
+                );
             }
 
             #[cfg(feature = "interface")]
@@ -128,7 +128,16 @@ macro_rules! unshell_leaf {
                 interface: &mut $crate::interface::InterfaceStore,
             ) {
                 let leaf_id = $id;
-                self.__unshell_flush_all_interface(endpoint, interface);
+                let _ = leaf_id;
+
+                $crate::unshell_leaf!(
+                    @flush_outbox_interface
+                    endpoint,
+                    leaf_id,
+                    &mut self.outbox,
+                    interface;
+                    $( $procedure_field : $Procedure ),*
+                );
 
                 let Some(local_id) = endpoint.path.last().copied() else {
                     return;
@@ -155,7 +164,14 @@ macro_rules! unshell_leaf {
                     );
                 )*
 
-                self.__unshell_flush_all_interface(endpoint, interface);
+                $crate::unshell_leaf!(
+                    @flush_outbox_interface
+                    endpoint,
+                    leaf_id,
+                    &mut self.outbox,
+                    interface;
+                    $( $procedure_field : $Procedure ),*
+                );
             }
 
             fn __unshell_dispatch_packet(
@@ -207,6 +223,7 @@ macro_rules! unshell_leaf {
                 interface: &mut $crate::interface::InterfaceStore,
             ) {
                 let leaf_id = $id;
+                let _ = leaf_id;
 
                 $(
                     if packet.procedure_id
@@ -245,35 +262,6 @@ macro_rules! unshell_leaf {
                 let _ = packet;
                 let _ = interface;
             }
-
-            fn __unshell_flush_all(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-            ) {
-                let leaf_id = $id;
-                let _ = leaf_id;
-
-                $crate::protocol::flush_leaf_outbox(
-                    endpoint,
-                    &mut self.outbox,
-                );
-            }
-
-            #[cfg(feature = "interface")]
-            fn __unshell_flush_all_interface(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-                interface: &mut $crate::interface::InterfaceStore,
-            ) {
-                let leaf_id = $id;
-
-                $crate::protocol::flush_leaf_outbox_interface(
-                    endpoint,
-                    leaf_id,
-                    &mut self.outbox,
-                    interface,
-                );
-            }
         }
 
         impl $crate::protocol::Leaf for $Leaf {
@@ -309,6 +297,7 @@ macro_rules! unshell_leaf {
                 interface: &mut $crate::interface::InterfaceStore,
             ) {
                 let leaf_id = $id;
+                let _ = (&frame, &area, &interface, leaf_id);
 
                 $(
                     for entry in &mut self.$session_field.entries {
@@ -345,4 +334,58 @@ macro_rules! unshell_leaf {
             }
         }
     };
+
+    // Select the leaf-level outbox type. Empty procedure lists use `()` so
+    // session-only leaves carry no retry queue, while non-empty lists share the
+    // normal procedure response queue.
+    (@outbox_type) => {
+        ()
+    };
+
+    (@outbox_type $first_field:ident : $FirstProcedure:ty $(, $procedure_field:ident : $Procedure:ty )* $(,)?) => {
+        $crate::protocol::LeafOutbox
+    };
+
+    // Construct the procedure outbox selected by `@outbox_type`.
+    (@outbox_new) => {
+        ()
+    };
+
+    (@outbox_new $first_field:ident : $FirstProcedure:ty $(, $procedure_field:ident : $Procedure:ty )* $(,)?) => {
+        $crate::protocol::LeafOutbox::new()
+    };
+
+    // Count queued procedure packets without forcing session-only leaves to own a queue.
+    (@outbox_len $outbox:expr;) => {
+        0usize
+    };
+
+    (@outbox_len $outbox:expr; $first_field:ident : $FirstProcedure:ty $(, $procedure_field:ident : $Procedure:ty )* $(,)?) => {
+        $outbox.len()
+    };
+
+    // Flush queued procedure responses when the leaf declares at least one procedure.
+    (@flush_outbox $endpoint:expr, $outbox:expr;) => {};
+
+    (@flush_outbox $endpoint:expr, $outbox:expr; $first_field:ident : $FirstProcedure:ty $(, $procedure_field:ident : $Procedure:ty )* $(,)?) => {{
+        let _ = stringify!($first_field);
+        $(
+            let _ = stringify!($procedure_field);
+        )*
+
+        $crate::protocol::flush_leaf_outbox($endpoint, $outbox);
+    }};
+
+    // Flush queued procedure responses with interface logging when procedures exist.
+    (@flush_outbox_interface $endpoint:expr, $leaf_id:expr, $outbox:expr, $interface:expr;) => {};
+
+    (@flush_outbox_interface $endpoint:expr, $leaf_id:expr, $outbox:expr, $interface:expr; $first_field:ident : $FirstProcedure:ty $(, $procedure_field:ident : $Procedure:ty )* $(,)?) => {{
+        let _ = stringify!($first_field);
+        $(
+            let _ = stringify!($procedure_field);
+        )*
+
+        $crate::protocol::flush_leaf_outbox_interface($endpoint, $leaf_id, $outbox, $interface);
+    }};
+
 }
