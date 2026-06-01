@@ -107,7 +107,7 @@ const fn compress(state: &mut [u32; 8], block: &[u8; 64]) {
 /// Returns the SHA-256 digest of `input` as 32 raw bytes.
 pub const fn sha256(input: &[u8]) -> [u8; 32] {
     // Padded length is the next multiple of 64 that fits input + 1 (0x80) + 8 (length).
-    let padded_len = ((input.len() + 9 + 63) / 64) * 64;
+    let padded_len = (input.len() + 9).div_ceil(64) * 64;
     let mut state = H;
     let mut block_start = 0;
 

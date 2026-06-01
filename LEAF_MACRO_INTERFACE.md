@@ -106,6 +106,32 @@ Generated leaves receive an optional mutable store during `update_interface`. Th
 helpers create and update the appropriate session/procedure views when packets are
 dispatched, sessions update, and outbound routes succeed or fail.
 
+Internally, interface events are target-driven:
+
+```text
+generated runtime
+  knows packet owner
+        |
+        v
+InterfaceTarget::Session(SessionKey)
+InterfaceTarget::Procedure(ProcedureKey)
+        |
+        v
+InterfaceStore::record(...)
+  append InterfaceEvent
+  link event index to exactly one view
+  update SessionViewStatus when applicable
+```
+
+This is deliberately not inferred from `Packet`. A PTY session packet and a one-shot
+procedure packet both have `procedure_id` and `hook_id`, but they should not both
+create session views. The runtime already knows which dispatch branch handled the
+packet, so that answer is carried into the store.
+
+Leaf-level retry queues also carry the same owner metadata. That matters because the
+shared leaf outbox contains both rejected session-init responses and procedure
+responses. Session-entry outboxes use their surrounding session key directly.
+
 Time remains caller-supplied:
 
 ```rust

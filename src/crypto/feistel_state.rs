@@ -1,11 +1,37 @@
 use crate::crypto::feistel_shuffle;
 
-#[cfg(feature = "counter_shuffle_none")]
+/// Counter implementation selected by feature flags.
+///
+/// Cargo's `--all-features` enables every counter strategy at once, so these cfgs are
+/// intentionally priority-ordered instead of mutually exclusive aliases. The strongest
+/// configured shuffle wins: Feistel+LCG, then Feistel, then the linear fallback.
+#[cfg(all(
+    feature = "counter_shuffle_none",
+    not(any(
+        feature = "counter_shuffle_feistel",
+        feature = "counter_shuffle_feistel_lcg"
+    ))
+))]
 pub type Counter = NoShuffle;
-#[cfg(feature = "counter_shuffle_feistel")]
+
+/// Counter implementation selected when Feistel is enabled without Feistel+LCG.
+#[cfg(all(
+    feature = "counter_shuffle_feistel",
+    not(feature = "counter_shuffle_feistel_lcg")
+))]
 pub type Counter = FeistelShuffle;
+
+/// Default and strongest counter implementation.
 #[cfg(feature = "counter_shuffle_feistel_lcg")]
 pub type Counter = FeistelLCGShuffle;
+
+/// Fallback used only when all counter shuffle features are disabled.
+#[cfg(not(any(
+    feature = "counter_shuffle_none",
+    feature = "counter_shuffle_feistel",
+    feature = "counter_shuffle_feistel_lcg"
+)))]
+pub type Counter = NoShuffle;
 
 const NONCE16_1: u16 = const_random::const_random!(u16);
 const NONCE16_2: u16 = const_random::const_random!(u16);
@@ -27,9 +53,18 @@ impl NoShuffle {
         Self(NONCE16_1)
     }
 
+    // This is an id generator API, not an iterator: callers need a bare `u16` and no
+    // exhaustion state because the counter intentionally wraps through the full space.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u16 {
         self.0 = self.0.wrapping_add(1);
         self.0
+    }
+}
+
+impl Default for NoShuffle {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -42,9 +77,18 @@ impl FeistelShuffle {
         Self(NONCE16_1, NONCE32)
     }
 
+    // This is an id generator API, not an iterator: callers need a bare `u16` and no
+    // exhaustion state because the counter intentionally wraps through the full space.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u16 {
         self.0 = self.0.wrapping_add(FEISTEL_STEP);
         feistel_shuffle(self.0, self.1)
+    }
+}
+
+impl Default for FeistelShuffle {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -65,11 +109,20 @@ impl FeistelLCGShuffle {
         Self { state: 0, a, c }
     }
 
+    // This is an id generator API, not an iterator: callers need a bare `u16` and no
+    // exhaustion state because the counter intentionally wraps through the full space.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u16 {
         // 1. Advance state using LCG (Guarantees single cycle of 65536)
         self.state = self.state.wrapping_mul(self.a).wrapping_add(self.c);
 
         // 2. Apply Feistel shuffle to the state (Adds randomness)
         feistel_shuffle(self.state, self.a as u32)
+    }
+}
+
+impl Default for FeistelLCGShuffle {
+    fn default() -> Self {
+        Self::new()
     }
 }

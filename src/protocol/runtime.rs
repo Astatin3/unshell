@@ -1,5 +1,7 @@
+use alloc::collections::VecDeque;
+
 use crate::{
-    interface::InterfaceStore,
+    interface::{InterfaceStore, InterfaceTarget},
     protocol::{
         Endpoint, Packet, PacketQueue, Procedure, ProcedureOut, Session, SessionCtx, SessionEntry,
         SessionFamily, SessionInit, SessionInitResult, SessionStatus,
@@ -12,25 +14,49 @@ use crate::{
 /// session initialization responses and one-shot procedures, both of which need the
 /// same retry semantics as session output without becoming separate framework types.
 pub struct LeafOutbox {
-    packets: PacketQueue,
+    packets: VecDeque<LeafOutboxEntry>,
+}
+
+/// One packet retained by a leaf-level retry queue.
+///
+/// Session entry outboxes have an obvious owner from their surrounding session entry.
+/// Leaf-level outboxes are mixed: rejected session initialization packets and one-shot
+/// procedure responses both land here. Storing the owner beside the packet keeps route
+/// logging precise without exposing another public queue type.
+#[derive(Clone)]
+struct LeafOutboxEntry {
+    packet: Packet,
+    target: LeafOutboxTarget,
+}
+
+/// Interface owner attached to a leaf-level outbox entry.
+#[derive(Clone, Copy)]
+enum LeafOutboxTarget {
+    /// Compatibility path for packets queued through the public `push`/`extend` API.
+    InferFromPacket,
+
+    /// Runtime-known session or procedure target.
+    Explicit(InterfaceTarget),
 }
 
 impl LeafOutbox {
     /// Creates an empty leaf-level outbox.
     pub fn new() -> Self {
         Self {
-            packets: PacketQueue::new(),
+            packets: VecDeque::new(),
         }
     }
 
     /// Adds one packet to the retry queue.
     pub fn push(&mut self, packet: Packet) {
-        self.packets.push_back(packet);
+        self.push_with_target(packet, LeafOutboxTarget::InferFromPacket);
     }
 
     /// Adds all packets from `packets` in FIFO order.
     pub fn extend(&mut self, packets: PacketQueue) {
-        self.packets.extend(packets);
+        for packet in packets {
+            self.push(packet);
+        }
     }
 
     /// Returns the number of queued packets.
@@ -41,6 +67,22 @@ impl LeafOutbox {
     /// Returns true when the queue has no pending packets.
     pub fn is_empty(&self) -> bool {
         self.packets.is_empty()
+    }
+
+    /// Adds one packet with a runtime-known interface target.
+    pub(crate) fn push_for_target(&mut self, packet: Packet, target: InterfaceTarget) {
+        self.push_with_target(packet, LeafOutboxTarget::Explicit(target));
+    }
+
+    /// Adds all packets with the same runtime-known interface target.
+    pub(crate) fn extend_for_target(&mut self, packets: PacketQueue, target: InterfaceTarget) {
+        for packet in packets {
+            self.push_for_target(packet, target);
+        }
+    }
+
+    fn push_with_target(&mut self, packet: Packet, target: LeafOutboxTarget) {
+        self.packets.push_back(LeafOutboxEntry { packet, target });
     }
 }
 
@@ -67,9 +109,10 @@ pub fn dispatch_session<L, S>(
 {
     let hook_id = packet.hook_id;
     let procedure_id = S::PROCEDURE_ID;
+    let target = InterfaceTarget::session(leaf_id, procedure_id, hook_id);
 
     if let Some(store) = interface.as_mut() {
-        store.record_inbound(leaf_id, &packet);
+        store.record_inbound_for(target, &packet);
     }
 
     if let Some(entry) = family
@@ -80,7 +123,7 @@ pub fn dispatch_session<L, S>(
         entry.inbox.push_back(packet);
 
         if let Some(store) = interface.as_mut() {
-            store.record_session_packet_queued(leaf_id, procedure_id, hook_id);
+            store.record_session_packet_queued_for(target);
         }
 
         return;
@@ -95,21 +138,21 @@ pub fn dispatch_session<L, S>(
             family.entries.push(SessionEntry::new(hook_id, state));
 
             if let Some(store) = interface.as_mut() {
-                store.record_session_created(leaf_id, procedure_id, hook_id, started_ns);
+                store.record_session_created_for(target, started_ns);
             }
         }
         SessionInitResult::Rejected => {
             if let Some(store) = interface.as_mut() {
-                store.record_session_rejected(leaf_id, procedure_id, hook_id, started_ns);
+                store.record_session_rejected_for(target, started_ns);
             }
         }
         SessionInitResult::RejectedWith(packet) => {
             if let Some(store) = interface.as_mut() {
-                store.record_session_rejected(leaf_id, procedure_id, hook_id, started_ns);
-                store.record_outbound_queued(leaf_id, &packet);
+                store.record_session_rejected_for(target, started_ns);
+                store.record_outbound_queued_for(target, &packet);
             }
 
-            outbox.push(packet);
+            outbox.push_for_target(packet, target);
         }
     }
 }
@@ -129,23 +172,26 @@ pub fn update_session_family<L, S>(
         }
 
         let started_ns = interface.as_ref().and_then(|store| store.now_ns());
+        let outbox_start = entry.outbox.len();
         let reply_path = S::reply_path(&entry.state).to_vec();
-        let mut ctx = SessionCtx::new(
-            entry.hook_id,
-            reply_path,
-            S::PROCEDURE_ID,
-            &mut entry.outbox,
-        );
-        let status = S::update(leaf, &mut entry.state, &mut entry.inbox, &mut ctx);
+        let status = {
+            let mut ctx = SessionCtx::new(
+                entry.hook_id,
+                reply_path,
+                S::PROCEDURE_ID,
+                &mut entry.outbox,
+            );
+
+            S::update(leaf, &mut entry.state, &mut entry.inbox, &mut ctx)
+        };
+        let target = InterfaceTarget::session(leaf_id, S::PROCEDURE_ID, entry.hook_id);
 
         if let Some(store) = interface.as_mut() {
-            store.record_session_update(
-                leaf_id,
-                S::PROCEDURE_ID,
-                entry.hook_id,
-                status,
-                started_ns,
-            );
+            store.record_session_update_for(target, status, started_ns);
+
+            for packet in entry.outbox.iter().skip(outbox_start) {
+                store.record_outbound_queued_for(target, packet);
+            }
         }
 
         if matches!(status, SessionStatus::Closed) {
@@ -166,9 +212,10 @@ pub fn dispatch_procedure<L, P>(
     P: Procedure<L>,
 {
     let started_ns = interface.as_ref().and_then(|store| store.now_ns());
+    let target = InterfaceTarget::procedure(leaf_id, P::PROCEDURE_ID);
 
     if let Some(store) = interface.as_mut() {
-        store.record_inbound(leaf_id, &packet);
+        store.record_inbound_for(target, &packet);
     }
 
     let hook_id = packet.hook_id;
@@ -180,14 +227,14 @@ pub fn dispatch_procedure<L, P>(
     let packets = procedure_out.into_packets();
 
     if let Some(store) = interface.as_mut() {
-        store.record_procedure_call(leaf_id, P::PROCEDURE_ID, hook_id, started_ns);
+        store.record_procedure_call_for(target, hook_id, started_ns);
 
         for packet in &packets {
-            store.record_outbound_queued(leaf_id, packet);
+            store.record_outbound_queued_for(target, packet);
         }
     }
 
-    outbox.extend(packets);
+    outbox.extend_for_target(packets, target);
 }
 
 /// Flushes a generated leaf-level outbox through endpoint routing.
@@ -197,7 +244,17 @@ pub fn flush_leaf_outbox(
     outbox: &mut LeafOutbox,
     interface: &mut Option<&mut InterfaceStore>,
 ) -> bool {
-    flush_packet_queue_with_interface(endpoint, leaf_id, &mut outbox.packets, interface)
+    while let Some(entry) = outbox.packets.front().cloned() {
+        let target = resolve_leaf_outbox_target(leaf_id, &entry);
+
+        if !flush_packet_with_target(endpoint, target, &entry.packet, interface) {
+            return false;
+        }
+
+        outbox.packets.pop_front();
+    }
+
+    true
 }
 
 /// Flushes and retains one generated session family.
@@ -210,7 +267,8 @@ pub fn flush_session_family<L, S>(
     S: Session<L>,
 {
     for entry in &mut family.entries {
-        flush_packet_queue_with_interface(endpoint, leaf_id, &mut entry.outbox, interface);
+        let target = InterfaceTarget::session(leaf_id, S::PROCEDURE_ID, entry.hook_id);
+        flush_packet_queue_with_target(endpoint, target, &mut entry.outbox, interface);
     }
 
     family
@@ -230,29 +288,71 @@ pub fn flush_packet_queue_with_interface(
     interface: &mut Option<&mut InterfaceStore>,
 ) -> bool {
     while let Some(packet) = outbox.front().cloned() {
-        if let Some(store) = interface.as_mut() {
-            store.record_route_attempt(leaf_id, &packet);
+        let target = InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id);
+
+        if !flush_packet_with_target(endpoint, target, &packet, interface) {
+            return false;
         }
 
-        match endpoint.add_outbound(packet.clone()) {
-            Ok(()) => {
-                if let Some(store) = interface.as_mut() {
-                    store.record_route_success(leaf_id, &packet);
-                }
-
-                outbox.pop_front();
-            }
-            Err(error) => {
-                if let Some(store) = interface.as_mut() {
-                    store.record_route_failure(leaf_id, &packet, error);
-                }
-
-                return false;
-            }
-        }
+        outbox.pop_front();
     }
 
     true
+}
+
+/// Flushes a packet queue whose owner is already known by the generated runtime.
+fn flush_packet_queue_with_target(
+    endpoint: &mut Endpoint,
+    target: InterfaceTarget,
+    outbox: &mut PacketQueue,
+    interface: &mut Option<&mut InterfaceStore>,
+) -> bool {
+    while let Some(packet) = outbox.front().cloned() {
+        if !flush_packet_with_target(endpoint, target, &packet, interface) {
+            return false;
+        }
+
+        outbox.pop_front();
+    }
+
+    true
+}
+
+fn flush_packet_with_target(
+    endpoint: &mut Endpoint,
+    target: InterfaceTarget,
+    packet: &Packet,
+    interface: &mut Option<&mut InterfaceStore>,
+) -> bool {
+    if let Some(store) = interface.as_mut() {
+        store.record_route_attempt_for(target, packet);
+    }
+
+    match endpoint.add_outbound(packet.clone()) {
+        Ok(()) => {
+            if let Some(store) = interface.as_mut() {
+                store.record_route_success_for(target, packet);
+            }
+
+            true
+        }
+        Err(error) => {
+            if let Some(store) = interface.as_mut() {
+                store.record_route_failure_for(target, packet, error);
+            }
+
+            false
+        }
+    }
+}
+
+fn resolve_leaf_outbox_target(leaf_id: u32, entry: &LeafOutboxEntry) -> InterfaceTarget {
+    match entry.target {
+        LeafOutboxTarget::InferFromPacket => {
+            InterfaceTarget::session(leaf_id, entry.packet.procedure_id, entry.packet.hook_id)
+        }
+        LeafOutboxTarget::Explicit(target) => target,
+    }
 }
 
 /// Returns the path used by generated procedure responses.

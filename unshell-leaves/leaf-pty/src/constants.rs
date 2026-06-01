@@ -6,6 +6,9 @@ pub const LEAF_FAKE_PTY: u32 = hash_32!("dev.unshell.v1.pty");
 /// Outer procedure id used by all fake PTY session packets.
 pub const PROC_PTY: u32 = hash_32!("dev.unshell.v1.pty.pty");
 
+/// One-shot procedure id used by tests to prove procedure interface ownership.
+pub(crate) const PROC_PING: u32 = hash_32!("dev.unshell.v1.pty.ping");
+
 /// Downward opcode that opens one PTY session.
 pub const OP_OPEN: u8 = 0;
 

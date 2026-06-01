@@ -2,8 +2,8 @@ use alloc::{collections::BTreeMap, vec::Vec};
 
 use crate::{
     interface::{
-        InterfaceEvent, InterfaceEventKind, ProcedureKey, ProcedureView, SessionKey, SessionView,
-        SessionViewStatus,
+        InterfaceEvent, InterfaceEventKind, InterfaceTarget, ProcedureKey, ProcedureView,
+        SessionKey, SessionView, SessionViewStatus,
     },
     protocol::{EndpointError, HookID, Packet, SessionStatus},
 };
@@ -15,7 +15,6 @@ use crate::{
 /// itself stays with the renderer or application shell so protocol state remains
 /// headless and reusable.
 pub struct InterfaceStore {
-    next_sequence: u64,
     now_ns: Option<u64>,
     events: Vec<InterfaceEvent>,
     sessions: BTreeMap<SessionKey, SessionView>,
@@ -26,7 +25,6 @@ impl InterfaceStore {
     /// Creates an empty caller-owned interface store.
     pub fn new() -> Self {
         Self {
-            next_sequence: 0,
             now_ns: None,
             events: Vec::new(),
             sessions: BTreeMap::new(),
@@ -70,30 +68,32 @@ impl InterfaceStore {
         procedure_id: u32,
         hook_id: HookID,
     ) -> &mut SessionView {
-        self.sessions
-            .entry(SessionKey {
-                leaf_id,
-                procedure_id,
-                hook_id,
-            })
-            .or_insert_with(SessionView::new)
+        self.session_view_for_key_mut(SessionKey {
+            leaf_id,
+            procedure_id,
+            hook_id,
+        })
     }
 
     /// Returns or creates the view for a one-shot procedure family.
     pub fn procedure_view_mut(&mut self, leaf_id: u32, procedure_id: u32) -> &mut ProcedureView {
-        self.procedures
-            .entry(ProcedureKey {
-                leaf_id,
-                procedure_id,
-            })
-            .or_insert_with(ProcedureView::new)
+        self.procedure_view_for_key_mut(ProcedureKey {
+            leaf_id,
+            procedure_id,
+        })
     }
 
     /// Records a packet delivered to a generated leaf.
     pub fn record_inbound(&mut self, leaf_id: u32, packet: &Packet) {
-        self.push_packet_event(
-            leaf_id,
-            packet,
+        let target = InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id);
+        self.record_inbound_for(target, packet);
+    }
+
+    /// Records a packet delivered to a target already known by generated runtime code.
+    pub(crate) fn record_inbound_for(&mut self, target: InterfaceTarget, packet: &Packet) {
+        self.record(
+            target,
+            None,
             InterfaceEventKind::Inbound {
                 packet: packet.clone(),
             },
@@ -107,14 +107,25 @@ impl InterfaceStore {
         procedure_id: u32,
         hook_id: HookID,
     ) {
-        self.push_session_event(
+        self.record_session_packet_queued_for(InterfaceTarget::session(
             leaf_id,
             procedure_id,
             hook_id,
+        ));
+    }
+
+    /// Records that a packet was queued for an existing session inbox.
+    pub(crate) fn record_session_packet_queued_for(&mut self, target: InterfaceTarget) {
+        let InterfaceTarget::Session(key) = target else {
+            return;
+        };
+
+        self.record(
+            target,
             None,
             InterfaceEventKind::SessionPacketQueued {
-                procedure_id,
-                hook_id,
+                procedure_id: key.procedure_id,
+                hook_id: key.hook_id,
             },
         );
     }
@@ -127,14 +138,26 @@ impl InterfaceStore {
         hook_id: HookID,
         started_ns: Option<u64>,
     ) {
-        self.push_session_event(
-            leaf_id,
-            procedure_id,
-            hook_id,
+        let target = InterfaceTarget::session(leaf_id, procedure_id, hook_id);
+        self.record_session_created_for(target, started_ns);
+    }
+
+    /// Records successful creation of a new session state for an explicit target.
+    pub(crate) fn record_session_created_for(
+        &mut self,
+        target: InterfaceTarget,
+        started_ns: Option<u64>,
+    ) {
+        let InterfaceTarget::Session(key) = target else {
+            return;
+        };
+
+        self.record(
+            target,
             Some(SessionViewStatus::Running),
             InterfaceEventKind::SessionCreated {
-                procedure_id,
-                hook_id,
+                procedure_id: key.procedure_id,
+                hook_id: key.hook_id,
                 started_ns,
                 finished_ns: self.now_ns,
             },
@@ -149,14 +172,26 @@ impl InterfaceStore {
         hook_id: HookID,
         started_ns: Option<u64>,
     ) {
-        self.push_session_event(
-            leaf_id,
-            procedure_id,
-            hook_id,
+        let target = InterfaceTarget::session(leaf_id, procedure_id, hook_id);
+        self.record_session_rejected_for(target, started_ns);
+    }
+
+    /// Records rejection of a packet that could not create a session.
+    pub(crate) fn record_session_rejected_for(
+        &mut self,
+        target: InterfaceTarget,
+        started_ns: Option<u64>,
+    ) {
+        let InterfaceTarget::Session(key) = target else {
+            return;
+        };
+
+        self.record(
+            target,
             Some(SessionViewStatus::Rejected),
             InterfaceEventKind::SessionRejected {
-                procedure_id,
-                hook_id,
+                procedure_id: key.procedure_id,
+                hook_id: key.hook_id,
                 started_ns,
                 finished_ns: self.now_ns,
             },
@@ -172,14 +207,27 @@ impl InterfaceStore {
         status: SessionStatus,
         started_ns: Option<u64>,
     ) {
-        self.push_session_event(
-            leaf_id,
-            procedure_id,
-            hook_id,
+        let target = InterfaceTarget::session(leaf_id, procedure_id, hook_id);
+        self.record_session_update_for(target, status, started_ns);
+    }
+
+    /// Records one session update tick for an explicit session target.
+    pub(crate) fn record_session_update_for(
+        &mut self,
+        target: InterfaceTarget,
+        status: SessionStatus,
+        started_ns: Option<u64>,
+    ) {
+        let InterfaceTarget::Session(key) = target else {
+            return;
+        };
+
+        self.record(
+            target,
             Some(SessionViewStatus::from_session_status(status)),
             InterfaceEventKind::SessionUpdated {
-                procedure_id,
-                hook_id,
+                procedure_id: key.procedure_id,
+                hook_id: key.hook_id,
                 status,
                 started_ns,
                 finished_ns: self.now_ns,
@@ -195,11 +243,29 @@ impl InterfaceStore {
         hook_id: HookID,
         started_ns: Option<u64>,
     ) {
-        self.push_procedure_event(
-            leaf_id,
-            procedure_id,
+        self.record_procedure_call_for(
+            InterfaceTarget::procedure(leaf_id, procedure_id),
+            hook_id,
+            started_ns,
+        );
+    }
+
+    /// Records one procedure call for an explicit procedure target.
+    pub(crate) fn record_procedure_call_for(
+        &mut self,
+        target: InterfaceTarget,
+        hook_id: HookID,
+        started_ns: Option<u64>,
+    ) {
+        let InterfaceTarget::Procedure(key) = target else {
+            return;
+        };
+
+        self.record(
+            target,
+            None,
             InterfaceEventKind::ProcedureCalled {
-                procedure_id,
+                procedure_id: key.procedure_id,
                 hook_id,
                 started_ns,
                 finished_ns: self.now_ns,
@@ -209,9 +275,15 @@ impl InterfaceStore {
 
     /// Records a packet emitted by leaf logic before route retry handling.
     pub fn record_outbound_queued(&mut self, leaf_id: u32, packet: &Packet) {
-        self.push_packet_event(
-            leaf_id,
-            packet,
+        let target = InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id);
+        self.record_outbound_queued_for(target, packet);
+    }
+
+    /// Records a packet emitted by leaf logic before route retry handling.
+    pub(crate) fn record_outbound_queued_for(&mut self, target: InterfaceTarget, packet: &Packet) {
+        self.record(
+            target,
+            None,
             InterfaceEventKind::OutboundQueued {
                 packet: packet.clone(),
             },
@@ -220,9 +292,15 @@ impl InterfaceStore {
 
     /// Records a route attempt for a queued outbound packet.
     pub fn record_route_attempt(&mut self, leaf_id: u32, packet: &Packet) {
-        self.push_packet_event(
-            leaf_id,
-            packet,
+        let target = InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id);
+        self.record_route_attempt_for(target, packet);
+    }
+
+    /// Records a route attempt for a queued outbound packet.
+    pub(crate) fn record_route_attempt_for(&mut self, target: InterfaceTarget, packet: &Packet) {
+        self.record(
+            target,
+            None,
             InterfaceEventKind::RouteAttempt {
                 packet: packet.clone(),
             },
@@ -231,9 +309,15 @@ impl InterfaceStore {
 
     /// Records a successful route attempt.
     pub fn record_route_success(&mut self, leaf_id: u32, packet: &Packet) {
-        self.push_packet_event(
-            leaf_id,
-            packet,
+        let target = InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id);
+        self.record_route_success_for(target, packet);
+    }
+
+    /// Records a successful route attempt.
+    pub(crate) fn record_route_success_for(&mut self, target: InterfaceTarget, packet: &Packet) {
+        self.record(
+            target,
+            None,
             InterfaceEventKind::RouteSuccess {
                 packet: packet.clone(),
             },
@@ -242,9 +326,20 @@ impl InterfaceStore {
 
     /// Records a failed route attempt without removing the packet from retry state.
     pub fn record_route_failure(&mut self, leaf_id: u32, packet: &Packet, error: EndpointError) {
-        self.push_packet_event(
-            leaf_id,
-            packet,
+        let target = InterfaceTarget::session(leaf_id, packet.procedure_id, packet.hook_id);
+        self.record_route_failure_for(target, packet, error);
+    }
+
+    /// Records a failed route attempt without removing the packet from retry state.
+    pub(crate) fn record_route_failure_for(
+        &mut self,
+        target: InterfaceTarget,
+        packet: &Packet,
+        error: EndpointError,
+    ) {
+        self.record(
+            target,
+            None,
             InterfaceEventKind::RouteFailure {
                 packet: packet.clone(),
                 error,
@@ -252,43 +347,43 @@ impl InterfaceStore {
         );
     }
 
-    fn push_packet_event(&mut self, leaf_id: u32, packet: &Packet, kind: InterfaceEventKind) {
-        let index = self.push_event(leaf_id, kind);
-        self.link_packet_event(leaf_id, packet, index);
-    }
-
-    fn push_session_event(
+    fn record(
         &mut self,
-        leaf_id: u32,
-        procedure_id: u32,
-        hook_id: HookID,
+        target: InterfaceTarget,
         status: Option<SessionViewStatus>,
         kind: InterfaceEventKind,
     ) {
-        let index = self.push_event(leaf_id, kind);
-        let view = self.session_view_mut(leaf_id, procedure_id, hook_id);
-
-        if let Some(status) = status {
-            view.status = status;
-        }
-
-        view.events.push(index);
+        let index = self.push_event(target.leaf_id(), kind);
+        self.link_event(target, status, index);
     }
 
-    fn push_procedure_event(&mut self, leaf_id: u32, procedure_id: u32, kind: InterfaceEventKind) {
-        let index = self.push_event(leaf_id, kind);
-        self.procedure_view_mut(leaf_id, procedure_id)
-            .events
-            .push(index);
+    fn link_event(
+        &mut self,
+        target: InterfaceTarget,
+        status: Option<SessionViewStatus>,
+        index: usize,
+    ) {
+        match target {
+            InterfaceTarget::Session(key) => {
+                let view = self.session_view_for_key_mut(key);
+
+                if let Some(status) = status {
+                    view.status = status;
+                }
+
+                view.events.push(index);
+            }
+            InterfaceTarget::Procedure(key) => {
+                self.procedure_view_for_key_mut(key).events.push(index);
+            }
+        }
     }
 
     fn push_event(&mut self, leaf_id: u32, kind: InterfaceEventKind) -> usize {
-        let sequence = self.next_sequence;
-        self.next_sequence = self.next_sequence.wrapping_add(1);
         let index = self.events.len();
 
         self.events.push(InterfaceEvent {
-            sequence,
+            sequence: index as u64,
             time_ns: self.now_ns,
             leaf_id,
             kind,
@@ -297,10 +392,14 @@ impl InterfaceStore {
         index
     }
 
-    fn link_packet_event(&mut self, leaf_id: u32, packet: &Packet, index: usize) {
-        self.session_view_mut(leaf_id, packet.procedure_id, packet.hook_id)
-            .events
-            .push(index);
+    fn session_view_for_key_mut(&mut self, key: SessionKey) -> &mut SessionView {
+        self.sessions.entry(key).or_insert_with(SessionView::new)
+    }
+
+    fn procedure_view_for_key_mut(&mut self, key: ProcedureKey) -> &mut ProcedureView {
+        self.procedures
+            .entry(key)
+            .or_insert_with(ProcedureView::new)
     }
 }
 

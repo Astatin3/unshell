@@ -11,6 +11,7 @@ extern crate alloc;
 
 mod codec;
 mod constants;
+mod procedure;
 mod session;
 mod state;
 

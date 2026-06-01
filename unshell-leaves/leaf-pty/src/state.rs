@@ -1,6 +1,6 @@
 use unshell::protocol::{HookID, unshell_leaf};
 
-use crate::{constants::LEAF_FAKE_PTY, session::PtySession};
+use crate::{constants::LEAF_FAKE_PTY, procedure::PingProcedure, session::PtySession};
 
 /// User-owned state for the generated fake PTY leaf.
 ///
@@ -47,6 +47,8 @@ unshell_leaf! {
         sessions {
             pty: PtySession,
         }
-        procedures {}
+        procedures {
+            ping: PingProcedure,
+        }
     }
 }

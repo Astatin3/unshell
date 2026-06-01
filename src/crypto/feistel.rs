@@ -19,10 +19,10 @@ pub fn feistel_shuffle(index: u16, seed: u32) -> u16 {
             .rotate_left(rot_amount)
             .wrapping_add(round.wrapping_mul(0x9E3779B9));
 
-        // Round function F: Simple multiplicative hash mixing R and sub_key
-        // We cast to u32 for multiplication to avoid overflow, then mask back to 8 bits
+        // Round function F: Simple multiplicative hash mixing R and sub_key.
+        // Casting to u8 keeps the low byte, which is the half-block width here.
         let r_u32 = r as u32;
-        let hash_val = ((r_u32.wrapping_mul(sub_key)) ^ (r_u32 >> 4)) as u8 & 0xFF;
+        let hash_val = ((r_u32.wrapping_mul(sub_key)) ^ (r_u32 >> 4)) as u8;
 
         // Feistel step: New L = Old R, New R = Old L XOR F(R, key)
         let temp = l;
