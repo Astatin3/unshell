@@ -5,7 +5,7 @@ members = [
     "ush-obfuscate",
     "base62",
 
-    "unshell-leaves/leaf-pty", "unshell-leaves/leaf-shell",
+    "unshell-leaves/leaf-pty", "unshell-leaves/leaf-shell", "examples/endpoint_test",
 ]
 resolver = "2"
 

@@ -12,7 +12,7 @@ pub(super) const PROC_OTHER: u32 = 31;
 
 /// Creates a bare endpoint at a known absolute path.
 pub(super) fn endpoint_at(id: u32, path: Vec<u32>) -> Endpoint {
-    let mut endpoint = Endpoint::new(id, vec![]);
+    let mut endpoint = Endpoint::new(id);
     endpoint.path = path;
     endpoint
 }
@@ -22,8 +22,8 @@ pub(super) fn pty_endpoints() -> (Endpoint, Endpoint) {
     let mut endpoint_a = endpoint_at(ENDPOINT_A, vec![ENDPOINT_A]);
     let mut endpoint_b = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
 
-    endpoint_a.connections.insert((ENDPOINT_B, false));
-    endpoint_b.connections.insert((ENDPOINT_A, true));
+    endpoint_a.add_connection(ENDPOINT_B, false);
+    endpoint_b.add_connection(ENDPOINT_A, true);
 
     (endpoint_a, endpoint_b)
 }

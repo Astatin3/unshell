@@ -107,7 +107,7 @@ fn interface_update_records_failed_direct_route_without_retry() {
         &[],
         false,
     );
-    endpoint_b.connections.remove(&(ENDPOINT_A, true));
+    endpoint_b.remove_connection(ENDPOINT_A, true);
     leaf.update_interface(&mut endpoint_b, &mut interface);
 
     let session_key = SessionKey {
@@ -121,7 +121,7 @@ fn interface_update_records_failed_direct_route_without_retry() {
     assert_eq!(leaf.pending_packet_count(), 0);
     assert_eq!(session_view.status, SessionViewStatus::Closed);
 
-    endpoint_b.connections.insert((ENDPOINT_A, true));
+    endpoint_b.add_connection(ENDPOINT_A, true);
     leaf.update_interface(&mut endpoint_b, &mut interface);
     transfer_packets(&mut endpoint_b, &mut endpoint_a, ENDPOINT_A, ENDPOINT_B);
     let packets = drain_parent_pty_packets(&mut endpoint_a);

@@ -3,7 +3,7 @@ use crate::protocol::{Endpoint, Leaf, Packet};
 #[cfg(feature = "interface")]
 use crate::protocol::LeafMeta;
 
-use alloc::{boxed::Box, format, vec, vec::Vec};
+use alloc::{format, vec, vec::Vec};
 
 use super::support::{CommsLeaf, ENDPOINT_A, ENDPOINT_B, assert_hook_present, assert_hook_removed};
 
@@ -67,6 +67,20 @@ struct StreamRespondentLeaf {
 struct StreamState {
     hook_id: u16,
     next_index: usize,
+}
+
+/// Concrete stream test harness that keeps leaves outside endpoint routing state.
+///
+/// This mirrors firmware-style ownership: the endpoint only routes packets while the
+/// caller, respondent, and connection leaves are updated explicitly in the same
+/// order the old boxed endpoint dispatcher used.
+struct StreamHarness {
+    endpoint_a: Endpoint,
+    endpoint_b: Endpoint,
+    caller_a: StreamCallerLeaf,
+    comms_a: CommsLeaf,
+    respondent_b: StreamRespondentLeaf,
+    comms_b: CommsLeaf,
 }
 
 impl StreamRespondentLeaf {
@@ -189,66 +203,57 @@ impl StreamRespondentLeaf {
 /// Each endpoint has exactly one application leaf and one mock connection leaf. The
 /// channel leaves are intentionally the same `CommsLeaf` used by the oneshot tests
 /// so stream behavior exercises the same serialization and routing boundary.
-fn stream_endpoints(total_packets: usize) -> (Endpoint, Endpoint) {
+fn stream_endpoints(total_packets: usize) -> StreamHarness {
     let (tx_a, rx_a) = crossbeam_channel::unbounded();
     let (tx_b, rx_b) = crossbeam_channel::unbounded();
 
-    let mut endpoint_a = Endpoint::new(
-        ENDPOINT_A,
-        vec![
-            Box::new(StreamCallerLeaf { has_run: false }),
-            Box::new(CommsLeaf {
-                tx: tx_b,
-                rx: rx_a,
-                remote_id: ENDPOINT_B,
-                is_authority: false,
-                started: false,
-            }),
-        ],
-    );
+    let mut endpoint_a = Endpoint::new(ENDPOINT_A);
     endpoint_a.path = vec![ENDPOINT_A];
 
-    let mut endpoint_b = Endpoint::new(
-        ENDPOINT_B,
-        vec![
-            Box::new(StreamRespondentLeaf::new(total_packets)),
-            Box::new(CommsLeaf {
-                tx: tx_a,
-                rx: rx_b,
-                remote_id: ENDPOINT_A,
-                is_authority: true,
-                started: false,
-            }),
-        ],
-    );
+    let mut endpoint_b = Endpoint::new(ENDPOINT_B);
     endpoint_b.path = vec![ENDPOINT_A, ENDPOINT_B];
 
     // Register routes before the first application packet so leaf order is not a
     // hidden prerequisite for the initial request leaving endpoint A.
-    endpoint_a.connections.insert((ENDPOINT_B, false));
-    endpoint_b.connections.insert((ENDPOINT_A, true));
+    endpoint_a.add_connection(ENDPOINT_B, false);
+    endpoint_b.add_connection(ENDPOINT_A, true);
 
-    (endpoint_a, endpoint_b)
+    StreamHarness {
+        endpoint_a,
+        endpoint_b,
+        caller_a: StreamCallerLeaf { has_run: false },
+        comms_a: CommsLeaf {
+            tx: tx_b,
+            rx: rx_a,
+            remote_id: ENDPOINT_B,
+            is_authority: false,
+            started: false,
+        },
+        respondent_b: StreamRespondentLeaf::new(total_packets),
+        comms_b: CommsLeaf {
+            tx: tx_a,
+            rx: rx_b,
+            remote_id: ENDPOINT_A,
+            is_authority: true,
+            started: false,
+        },
+    }
 }
 
 /// Asserts the requested two-endpoint, four-leaf topology.
-fn assert_four_leaf_topology(endpoint_a: &Endpoint, endpoint_b: &Endpoint) {
-    assert_eq!(
-        endpoint_a.leaves.len(),
-        2,
-        "caller endpoint should have two leaves"
-    );
-    assert_eq!(
-        endpoint_b.leaves.len(),
-        2,
-        "respondent endpoint should have two leaves"
-    );
+fn assert_four_leaf_topology(harness: &StreamHarness) {
+    assert_eq!(harness.caller_a.get_id(), LEAF_STREAM_CALLER);
+    assert_eq!(harness.comms_a.get_id(), 101);
+    assert_eq!(harness.respondent_b.get_id(), LEAF_STREAM_RESPONDENT);
+    assert_eq!(harness.comms_b.get_id(), 101);
 }
 
 /// Drives the initial request until it is queued locally on endpoint B.
-fn deliver_stream_request(endpoint_a: &mut Endpoint, endpoint_b: &mut Endpoint) {
-    endpoint_a.update();
-    endpoint_b.update();
+fn deliver_stream_request(harness: &mut StreamHarness) {
+    harness.caller_a.update(&mut harness.endpoint_a);
+    harness.comms_a.update(&mut harness.endpoint_a);
+    harness.respondent_b.update(&mut harness.endpoint_b);
+    harness.comms_b.update(&mut harness.endpoint_b);
 }
 
 /// Returns the single hook opened by the stream request on both endpoints.
@@ -269,15 +274,13 @@ fn opened_stream_hook_id(endpoint_a: &Endpoint, endpoint_b: &Endpoint) -> u16 {
         "respondent endpoint should have exactly one stream hook"
     );
 
-    let (&caller_hook, &caller_peer) = endpoint_a
+    let &(caller_hook, caller_peer) = endpoint_a
         .hooks
-        .iter()
-        .next()
+        .first()
         .expect("caller endpoint should expose the opened hook");
-    let (&respondent_hook, &respondent_peer) = endpoint_b
+    let &(respondent_hook, respondent_peer) = endpoint_b
         .hooks
-        .iter()
-        .next()
+        .first()
         .expect("respondent endpoint should expose the opened hook");
 
     assert_eq!(
@@ -297,16 +300,16 @@ fn opened_stream_hook_id(endpoint_a: &Endpoint, endpoint_b: &Endpoint) -> u16 {
 }
 
 /// Drives one respondent stream loop and delivers any produced frame to endpoint A.
-fn drive_stream_loop(endpoint_a: &mut Endpoint, endpoint_b: &mut Endpoint) {
-    endpoint_b.update();
-    endpoint_a.update();
+fn drive_stream_loop(harness: &mut StreamHarness) {
+    harness.respondent_b.update(&mut harness.endpoint_b);
+    harness.comms_b.update(&mut harness.endpoint_b);
+    harness.caller_a.update(&mut harness.endpoint_a);
+    harness.comms_a.update(&mut harness.endpoint_a);
 }
 
 /// Returns stream packets that endpoint A has received so far.
 fn received_stream_packets(endpoint: &Endpoint) -> Vec<&Packet> {
-    endpoint
-        .inbound
-        .get(&ENDPOINT_A)
+    Endpoint::route_get(ENDPOINT_A, &endpoint.inbound)
         .map(|queue| queue.iter().collect())
         .unwrap_or_default()
 }
@@ -335,77 +338,77 @@ fn assert_received_stream(
 #[test]
 fn one_directional_stream_returns_one_packet_per_loop() {
     let total_packets = 3;
-    let (mut endpoint_a, mut endpoint_b) = stream_endpoints(total_packets);
-    assert_four_leaf_topology(&endpoint_a, &endpoint_b);
+    let mut harness = stream_endpoints(total_packets);
+    assert_four_leaf_topology(&harness);
 
-    deliver_stream_request(&mut endpoint_a, &mut endpoint_b);
-    let stream_hook_id = opened_stream_hook_id(&endpoint_a, &endpoint_b);
+    deliver_stream_request(&mut harness);
+    let stream_hook_id = opened_stream_hook_id(&harness.endpoint_a, &harness.endpoint_b);
 
-    assert_received_stream(&endpoint_a, 0, false, stream_hook_id);
-    assert_hook_present(&endpoint_a, stream_hook_id);
-    assert_hook_present(&endpoint_b, stream_hook_id);
+    assert_received_stream(&harness.endpoint_a, 0, false, stream_hook_id);
+    assert_hook_present(&harness.endpoint_a, stream_hook_id);
+    assert_hook_present(&harness.endpoint_b, stream_hook_id);
 
     for index in 0..total_packets {
-        drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
+        drive_stream_loop(&mut harness);
         let final_seen = index + 1 == total_packets;
 
-        assert_received_stream(&endpoint_a, index + 1, final_seen, stream_hook_id);
+        assert_received_stream(&harness.endpoint_a, index + 1, final_seen, stream_hook_id);
 
         if final_seen {
-            assert_hook_removed(&endpoint_a, stream_hook_id);
-            assert_hook_removed(&endpoint_b, stream_hook_id);
+            assert_hook_removed(&harness.endpoint_a, stream_hook_id);
+            assert_hook_removed(&harness.endpoint_b, stream_hook_id);
         } else {
-            assert_hook_present(&endpoint_a, stream_hook_id);
-            assert_hook_present(&endpoint_b, stream_hook_id);
+            assert_hook_present(&harness.endpoint_a, stream_hook_id);
+            assert_hook_present(&harness.endpoint_b, stream_hook_id);
         }
     }
 }
 
 #[test]
 fn stream_does_not_emit_before_request_is_processed_by_respondent() {
-    let (mut endpoint_a, mut endpoint_b) = stream_endpoints(2);
+    let mut harness = stream_endpoints(2);
 
-    deliver_stream_request(&mut endpoint_a, &mut endpoint_b);
-    let stream_hook_id = opened_stream_hook_id(&endpoint_a, &endpoint_b);
+    deliver_stream_request(&mut harness);
+    let stream_hook_id = opened_stream_hook_id(&harness.endpoint_a, &harness.endpoint_b);
 
-    assert_received_stream(&endpoint_a, 0, false, stream_hook_id);
-    assert!(endpoint_b.outbound.is_empty());
-    assert_hook_present(&endpoint_a, stream_hook_id);
-    assert_hook_present(&endpoint_b, stream_hook_id);
+    assert_received_stream(&harness.endpoint_a, 0, false, stream_hook_id);
+    assert!(Endpoint::routes_is_empty(&harness.endpoint_b.outbound));
+    assert_hook_present(&harness.endpoint_a, stream_hook_id);
+    assert_hook_present(&harness.endpoint_b, stream_hook_id);
 }
 
 #[test]
 fn stream_stops_after_final_packet() {
     let total_packets = 2;
-    let (mut endpoint_a, mut endpoint_b) = stream_endpoints(total_packets);
+    let mut harness = stream_endpoints(total_packets);
 
-    deliver_stream_request(&mut endpoint_a, &mut endpoint_b);
-    let stream_hook_id = opened_stream_hook_id(&endpoint_a, &endpoint_b);
-    drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
-    drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
-    assert_received_stream(&endpoint_a, total_packets, true, stream_hook_id);
-    assert_hook_removed(&endpoint_b, stream_hook_id);
+    deliver_stream_request(&mut harness);
+    let stream_hook_id = opened_stream_hook_id(&harness.endpoint_a, &harness.endpoint_b);
+    drive_stream_loop(&mut harness);
+    drive_stream_loop(&mut harness);
+    assert_received_stream(&harness.endpoint_a, total_packets, true, stream_hook_id);
+    assert_hook_removed(&harness.endpoint_b, stream_hook_id);
 
-    drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
-    assert_received_stream(&endpoint_a, total_packets, true, stream_hook_id);
-    assert_hook_removed(&endpoint_b, stream_hook_id);
+    drive_stream_loop(&mut harness);
+    assert_received_stream(&harness.endpoint_a, total_packets, true, stream_hook_id);
+    assert_hook_removed(&harness.endpoint_b, stream_hook_id);
 }
 
 #[test]
 fn failed_final_stream_route_keeps_hook_and_retries() {
-    let (mut endpoint_a, mut endpoint_b) = stream_endpoints(1);
+    let mut harness = stream_endpoints(1);
 
-    deliver_stream_request(&mut endpoint_a, &mut endpoint_b);
-    let stream_hook_id = opened_stream_hook_id(&endpoint_a, &endpoint_b);
-    endpoint_b.connections.remove(&(ENDPOINT_A, true));
+    deliver_stream_request(&mut harness);
+    let stream_hook_id = opened_stream_hook_id(&harness.endpoint_a, &harness.endpoint_b);
+    harness.endpoint_b.remove_connection(ENDPOINT_A, true);
 
-    drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
-    assert_received_stream(&endpoint_a, 0, false, stream_hook_id);
-    assert_hook_present(&endpoint_b, stream_hook_id);
+    drive_stream_loop(&mut harness);
+    assert_received_stream(&harness.endpoint_a, 0, false, stream_hook_id);
+    assert_hook_present(&harness.endpoint_b, stream_hook_id);
 
-    endpoint_b.connections.insert((ENDPOINT_A, true));
-    drive_stream_loop(&mut endpoint_a, &mut endpoint_b);
+    harness.endpoint_b.add_connection(ENDPOINT_A, true);
+    drive_stream_loop(&mut harness);
 
-    assert_received_stream(&endpoint_a, 1, true, stream_hook_id);
-    assert_hook_removed(&endpoint_b, stream_hook_id);
+    assert_received_stream(&harness.endpoint_a, 1, true, stream_hook_id);
+    assert_hook_removed(&harness.endpoint_b, stream_hook_id);
 }

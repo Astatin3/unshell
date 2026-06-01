@@ -138,14 +138,14 @@ fn failed_final_exit_route_closes_session_without_retry() {
         &[],
         false,
     );
-    endpoint_b.connections.remove(&(ENDPOINT_A, true));
+    endpoint_b.remove_connection(ENDPOINT_A, true);
     leaf.update(&mut endpoint_b);
 
     assert_eq!(leaf.active_session_count(), 0);
     assert_eq!(leaf.pending_packet_count(), 0);
     assert_hook_removed(&endpoint_b, hook_id);
 
-    endpoint_b.connections.insert((ENDPOINT_A, true));
+    endpoint_b.add_connection(ENDPOINT_A, true);
     leaf.update(&mut endpoint_b);
     transfer_packets(&mut endpoint_b, &mut endpoint_a, ENDPOINT_A, ENDPOINT_B);
     let packets = drain_parent_pty_packets(&mut endpoint_a);
@@ -248,7 +248,7 @@ fn two_pty_sessions_interleave_without_crossing_hooks() {
 fn pty_leaf_does_not_consume_other_leaf_packets() {
     let mut endpoint = endpoint_at(ENDPOINT_B, vec![ENDPOINT_A, ENDPOINT_B]);
     let mut leaf = FakePtyLeaf::new(FakePtyState::new());
-    endpoint.connections.insert((ENDPOINT_A, true));
+    endpoint.add_connection(ENDPOINT_A, true);
 
     endpoint
         .add_inbound_from(ENDPOINT_A, pty_open_packet(vec![ENDPOINT_A, ENDPOINT_B], 7))

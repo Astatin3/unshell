@@ -3,11 +3,11 @@ mod routing;
 
 pub use hooks::HookID;
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::vec::Vec;
 
 use crate::{
     crypto::Counter,
-    protocol::{ConnectionSet, HookMap, Leaf, Packet, Path, RouteMap},
+    protocol::{ConnectionSet, EndpointName, HookMap, Packet, PacketQueue, Path, RouteMap},
 };
 
 pub struct Endpoint {
@@ -19,7 +19,6 @@ pub struct Endpoint {
 
     // Absolute path for this node. Must be set by some leaf
     pub path: Path,
-    pub leaves: Vec<Box<dyn Leaf>>,
 
     // Map of connections so that we can know what is connected
     // and which endpoints are authorities
@@ -34,7 +33,13 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    pub fn new(id: u32, leaves: Vec<Box<dyn Leaf>>) -> Self {
+    /// Creates endpoint routing state for one protocol node.
+    ///
+    /// Leaves are intentionally owned by the caller instead of stored behind
+    /// endpoint-local trait objects. That keeps minimized binaries from pulling in
+    /// dynamic dispatch and allocation paths when a firmware-style application uses a
+    /// fixed set of concrete leaves.
+    pub fn new(id: u32) -> Self {
         Self {
             id,
             // Init the hook at 0, which will increment
@@ -42,25 +47,47 @@ impl Endpoint {
 
             // Set the current path as an empty vec
             path: Vec::new(),
-            leaves,
-            hooks: HookMap::new(),
-            connections: ConnectionSet::new(),
-            inbound: RouteMap::new(),
-            outbound: RouteMap::new(),
+            hooks: Vec::new(),
+            connections: Vec::new(),
+            inbound: Vec::new(),
+            outbound: Vec::new(),
         }
     }
 
-    /// Pass the endpoint state into all of the leaves
-    pub fn update(&mut self) {
-        // Grab the leaf vec temporarily so that we can iter over self
-        // Apparently this only swaps out pointers
-        let mut leaves = core::mem::take(&mut self.leaves);
+    /// Registers an adjacent endpoint and returns whether this is a new edge.
+    ///
+    /// Endpoint routing tables are intentionally tiny in the minimized firmware
+    /// profile. A linear vector keeps that profile from linking tree-map machinery
+    /// while preserving the old set semantics: duplicate connection registrations do
+    /// not create duplicate route entries.
+    pub fn add_connection(&mut self, remote_id: EndpointName, is_authority: bool) -> bool {
+        let connection = (remote_id, is_authority);
 
-        for leaf in leaves.iter_mut() {
-            leaf.update(self);
+        if self.connection_contains(remote_id, is_authority) {
+            false
+        } else {
+            self.connections.push(connection);
+            true
         }
+    }
 
-        self.leaves = leaves;
+    /// Removes an adjacent endpoint registration and reports whether it existed.
+    pub fn remove_connection(&mut self, remote_id: EndpointName, is_authority: bool) -> bool {
+        let Some(index) = self
+            .connections
+            .iter()
+            .position(|connection| *connection == (remote_id, is_authority))
+        else {
+            return false;
+        };
+
+        self.connections.remove(index);
+        true
+    }
+
+    /// Returns whether an adjacent endpoint is registered in the requested direction.
+    pub fn connection_contains(&self, remote_id: EndpointName, is_authority: bool) -> bool {
+        self.connections.contains(&(remote_id, is_authority))
     }
 
     /// Run a function over all inbound packets with some ID then clear it.
@@ -83,7 +110,7 @@ impl Endpoint {
         P: FnMut(&Packet) -> bool,
         F: FnMut(Packet),
     {
-        let Some(mut queue) = self.inbound.remove(&path) else {
+        let Some(mut queue) = Self::route_remove(path, &mut self.inbound) else {
             return;
         };
 
@@ -98,7 +125,7 @@ impl Endpoint {
         }
 
         if !unmatched.is_empty() {
-            self.inbound.entry(path).or_default().extend(unmatched);
+            Self::route_queue_mut(path, &mut self.inbound).extend(unmatched);
         }
     }
 
@@ -114,7 +141,7 @@ impl Endpoint {
     where
         F: FnMut(&Packet),
     {
-        if let Some(queue) = queue.get_mut(&path) {
+        if let Some(queue) = Self::route_queue_mut_existing(path, queue) {
             for packet in queue.iter() {
                 f(packet);
             }
@@ -123,10 +150,95 @@ impl Endpoint {
         }
     }
 
-    pub fn iter_leaves<F>(&mut self) -> core::slice::IterMut<'_, Box<dyn Leaf + 'static>>
-    where
-        F: FnMut(&Packet),
-    {
-        self.leaves.iter_mut()
+    /// Appends a packet to the route queue for `endpoint`.
+    pub(crate) fn route_push(endpoint: EndpointName, packet: Packet, routes: &mut RouteMap) {
+        Self::route_queue_mut(endpoint, routes).push_back(packet);
+    }
+
+    /// Returns the route queue for `endpoint` if one exists.
+    #[cfg(test)]
+    pub(crate) fn route_get(endpoint: EndpointName, routes: &RouteMap) -> Option<&PacketQueue> {
+        routes
+            .iter()
+            .find(|(queued_endpoint, _)| *queued_endpoint == endpoint)
+            .map(|(_, queue)| queue)
+    }
+
+    /// Removes and returns the queue for `endpoint`.
+    pub(crate) fn route_remove(
+        endpoint: EndpointName,
+        routes: &mut RouteMap,
+    ) -> Option<PacketQueue> {
+        let index = routes
+            .iter()
+            .position(|(queued_endpoint, _)| *queued_endpoint == endpoint)?;
+
+        Some(routes.remove(index).1)
+    }
+
+    /// Returns whether a route queue exists for `endpoint`.
+    #[cfg(test)]
+    pub(crate) fn route_contains(endpoint: EndpointName, routes: &RouteMap) -> bool {
+        Self::route_get(endpoint, routes).is_some()
+    }
+
+    /// Returns whether no route queues are present.
+    #[cfg(test)]
+    pub(crate) fn routes_is_empty(routes: &RouteMap) -> bool {
+        routes.is_empty()
+    }
+
+    /// Returns the route queue for `endpoint`, creating it on first use.
+    fn route_queue_mut(endpoint: EndpointName, routes: &mut RouteMap) -> &mut PacketQueue {
+        if let Some(index) = routes
+            .iter()
+            .position(|(queued_endpoint, _)| *queued_endpoint == endpoint)
+        {
+            &mut routes[index].1
+        } else {
+            routes.push((endpoint, PacketQueue::new()));
+            &mut routes.last_mut().unwrap().1
+        }
+    }
+
+    /// Returns the existing route queue for `endpoint` without allocating a new one.
+    fn route_queue_mut_existing(
+        endpoint: EndpointName,
+        routes: &mut RouteMap,
+    ) -> Option<&mut PacketQueue> {
+        routes
+            .iter_mut()
+            .find(|(queued_endpoint, _)| *queued_endpoint == endpoint)
+            .map(|(_, queue)| queue)
+    }
+
+    /// Inserts or updates a hook and returns the previously associated peer.
+    pub(crate) fn hook_insert(
+        &mut self,
+        hook_id: HookID,
+        peer: EndpointName,
+    ) -> Option<EndpointName> {
+        if let Some((_, existing_peer)) = self
+            .hooks
+            .iter_mut()
+            .find(|(existing_hook, _)| *existing_hook == hook_id)
+        {
+            let previous = *existing_peer;
+            *existing_peer = peer;
+            Some(previous)
+        } else {
+            self.hooks.push((hook_id, peer));
+            None
+        }
+    }
+
+    /// Removes a hook and returns the peer it pointed at.
+    pub(crate) fn hook_remove(&mut self, hook_id: HookID) -> Option<EndpointName> {
+        let index = self
+            .hooks
+            .iter()
+            .position(|(existing_hook, _)| *existing_hook == hook_id)?;
+
+        Some(self.hooks.remove(index).1)
     }
 }

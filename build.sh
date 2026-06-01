@@ -8,9 +8,10 @@
 set -e
 
 OBFUSCATION_KEY=kjwerkwerkjbwejehrwhje \
-cargo build --profile minimize -p treetest $@
+# RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none" \
+cargo build --profile minimize -p endpoint_test $@
 
-export BINARY=./target/minimize/treetest
+export BINARY=./target/minimize/endpoint_test
 
 declare -a headers=(
     ".gnu_debuglink" # - Debug information link

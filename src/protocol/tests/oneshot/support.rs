@@ -40,7 +40,7 @@ pub(super) fn echo_packet_with_end(path: Vec<u32>, hook_id: u16, end_hook: bool)
 /// connection table, and hook table. This helper keeps that setup explicit without
 /// hiding the routing state that each test is validating.
 pub(super) fn endpoint_at(id: u32, path: Vec<u32>) -> Endpoint {
-    let mut endpoint = Endpoint::new(id, vec![]);
+    let mut endpoint = Endpoint::new(id);
     endpoint.path = path;
     endpoint
 }
@@ -51,9 +51,7 @@ pub(super) fn endpoint_at(id: u32, path: Vec<u32>) -> Endpoint {
 /// than the immediate neighbor. Tests use this helper to assert both that exactly one
 /// packet exists and that it was queued for the expected adjacent endpoint.
 pub(super) fn single_outbound_packet(endpoint: &Endpoint, next_hop: u32) -> &Packet {
-    let queue = endpoint
-        .outbound
-        .get(&next_hop)
+    let queue = Endpoint::route_get(next_hop, &endpoint.outbound)
         .unwrap_or_else(|| panic!("expected one outbound queue for {next_hop}"));
     assert_eq!(queue.len(), 1, "expected exactly one outbound packet");
     queue.front().unwrap()
@@ -65,9 +63,7 @@ pub(super) fn single_outbound_packet(endpoint: &Endpoint, next_hop: u32) -> &Pac
 /// assert against the local inbound queue instead of only checking that routing did
 /// not produce an error.
 pub(super) fn single_inbound_packet(endpoint: &Endpoint, local_id: u32) -> &Packet {
-    let queue = endpoint
-        .inbound
-        .get(&local_id)
+    let queue = Endpoint::route_get(local_id, &endpoint.inbound)
         .unwrap_or_else(|| panic!("expected one inbound queue for {local_id}"));
     assert_eq!(queue.len(), 1, "expected exactly one inbound packet");
     queue.front().unwrap()
@@ -154,9 +150,7 @@ impl Leaf for CommsLeaf {
 
     fn update(&mut self, endpoint: &mut Endpoint) {
         if !self.started {
-            endpoint
-                .connections
-                .insert((self.remote_id, self.is_authority));
+            endpoint.add_connection(self.remote_id, self.is_authority);
             self.started = true;
         }
 

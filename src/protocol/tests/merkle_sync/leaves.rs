@@ -111,9 +111,7 @@ impl Leaf for MockConnectionLeaf {
 
     fn update(&mut self, endpoint: &mut Endpoint) {
         if !self.started {
-            endpoint
-                .connections
-                .insert((self.remote_id, self.is_authority));
+            endpoint.add_connection(self.remote_id, self.is_authority);
             self.started = true;
         }
 

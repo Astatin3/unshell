@@ -1,40 +1,21 @@
-mod no_procedures;
-
-/// Declares a generated leaf wrapper using a small template-like syntax.
+/// Expands the `unshell_leaf!` specialization for leaves without one-shot procedures.
 ///
-/// The macro deliberately requires callers to name every generated session field. It
-/// does not infer identifiers, inspect struct fields, or hide behavior inside a proc
-/// macro. All real dispatch and retry behavior lives in normal Rust helpers.
+/// This helper stays separate from the public macro because the no-procedure shape is
+/// intentionally different: it does not allocate a `LeafOutbox`, so tiny leaves such as
+/// the shell leaf avoid carrying unused procedure retry machinery in the optimized
+/// endpoint binary.
+#[doc(hidden)]
 #[macro_export]
-macro_rules! unshell_leaf {
+macro_rules! __unshell_leaf_no_procedures {
     (
         $vis:vis leaf $Leaf:ident for $State:ty {
             id: $id:expr,
             meta: $meta:expr,
             sessions { $( $session_field:ident : $Session:ty ),* $(,)? }
-            procedures {}
-        }
-    ) => {
-        $crate::__unshell_leaf_no_procedures! {
-            $vis leaf $Leaf for $State {
-                id: $id,
-                meta: $meta,
-                sessions { $( $session_field : $Session ),* }
-            }
-        }
-    };
-
-    (
-        $vis:vis leaf $Leaf:ident for $State:ty {
-            id: $id:expr,
-            meta: $meta:expr,
-            sessions { $( $session_field:ident : $Session:ty ),* $(,)? }
-            procedures { $( $procedure_field:ident : $Procedure:ty ),* $(,)? }
         }
     ) => {
         $vis struct $Leaf {
             state: $State,
-            outbox: $crate::protocol::LeafOutbox,
             $(
                 $session_field: $crate::protocol::SessionFamily<$Session>,
             )*
@@ -45,7 +26,6 @@ macro_rules! unshell_leaf {
             pub fn new(state: $State) -> Self {
                 Self {
                     state,
-                    outbox: $crate::protocol::LeafOutbox::new(),
                     $(
                         $session_field: $crate::protocol::SessionFamily::new(),
                     )*
@@ -69,11 +49,7 @@ macro_rules! unshell_leaf {
 
             /// Returns queued packets owned by this generated leaf.
             pub fn pending_packet_count(&self) -> usize {
-                let mut count = self.outbox.len();
-                $(
-                    count += self.$session_field.pending_packet_count();
-                )*
-                count
+                0usize $(+ self.$session_field.pending_packet_count())*
             }
 
             fn __unshell_packet_is_owned(packet: &$crate::protocol::Packet) -> bool {
@@ -82,10 +58,6 @@ macro_rules! unshell_leaf {
                     || packet.procedure_id
                         == <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID
                 )*
-                $(
-                    || packet.procedure_id
-                        == <$Procedure as $crate::protocol::Procedure<$State>>::PROCEDURE_ID
-                )*
             }
 
             fn __unshell_update_inner(
@@ -93,7 +65,7 @@ macro_rules! unshell_leaf {
                 endpoint: &mut $crate::protocol::Endpoint,
             ) {
                 let leaf_id = $id;
-                self.__unshell_flush_all(endpoint);
+                let _ = leaf_id;
 
                 let Some(local_id) = endpoint.path.last().copied() else {
                     return;
@@ -117,8 +89,6 @@ macro_rules! unshell_leaf {
                         &mut self.$session_field,
                     );
                 )*
-
-                self.__unshell_flush_all(endpoint);
             }
 
             #[cfg(feature = "interface")]
@@ -128,7 +98,7 @@ macro_rules! unshell_leaf {
                 interface: &mut $crate::interface::InterfaceStore,
             ) {
                 let leaf_id = $id;
-                self.__unshell_flush_all_interface(endpoint, interface);
+                let _ = leaf_id;
 
                 let Some(local_id) = endpoint.path.last().copied() else {
                     return;
@@ -154,8 +124,6 @@ macro_rules! unshell_leaf {
                         interface,
                     );
                 )*
-
-                self.__unshell_flush_all_interface(endpoint, interface);
             }
 
             fn __unshell_dispatch_packet(
@@ -175,21 +143,6 @@ macro_rules! unshell_leaf {
                             &mut self.state,
                             &mut self.$session_field,
                             packet,
-                        );
-                        return;
-                    }
-                )*
-
-                $(
-                    if packet.procedure_id
-                        == <$Procedure as $crate::protocol::Procedure<$State>>::PROCEDURE_ID
-                    {
-                        let _ = stringify!($procedure_field);
-                        $crate::protocol::dispatch_procedure::<$State, $Procedure>(
-                            &mut self.state,
-                            endpoint,
-                            packet,
-                            &mut self.outbox,
                         );
                         return;
                     }
@@ -224,55 +177,9 @@ macro_rules! unshell_leaf {
                     }
                 )*
 
-                $(
-                    if packet.procedure_id
-                        == <$Procedure as $crate::protocol::Procedure<$State>>::PROCEDURE_ID
-                    {
-                        let _ = stringify!($procedure_field);
-                        $crate::protocol::dispatch_procedure_interface::<$State, $Procedure>(
-                            leaf_id,
-                            &mut self.state,
-                            endpoint,
-                            packet,
-                            &mut self.outbox,
-                            interface,
-                        );
-                        return;
-                    }
-                )*
-
                 let _ = endpoint;
                 let _ = packet;
                 let _ = interface;
-            }
-
-            fn __unshell_flush_all(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-            ) {
-                let leaf_id = $id;
-                let _ = leaf_id;
-
-                $crate::protocol::flush_leaf_outbox(
-                    endpoint,
-                    &mut self.outbox,
-                );
-            }
-
-            #[cfg(feature = "interface")]
-            fn __unshell_flush_all_interface(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-                interface: &mut $crate::interface::InterfaceStore,
-            ) {
-                let leaf_id = $id;
-
-                $crate::protocol::flush_leaf_outbox_interface(
-                    endpoint,
-                    leaf_id,
-                    &mut self.outbox,
-                    interface,
-                );
             }
         }
 
@@ -309,6 +216,7 @@ macro_rules! unshell_leaf {
                 interface: &mut $crate::interface::InterfaceStore,
             ) {
                 let leaf_id = $id;
+                let _ = leaf_id;
 
                 $(
                     for entry in &mut self.$session_field.entries {
@@ -320,22 +228,6 @@ macro_rules! unshell_leaf {
                         <$Session as $crate::protocol::Session<$State>>::render_ratatui(
                             &self.state,
                             &entry.state,
-                            view,
-                            frame,
-                            area,
-                        );
-                    }
-                )*
-
-                $(
-                    {
-                        let _ = stringify!($procedure_field);
-                        let view = interface.procedure_view_mut(
-                            leaf_id,
-                            <$Procedure as $crate::protocol::Procedure<$State>>::PROCEDURE_ID,
-                        );
-                        <$Procedure as $crate::protocol::Procedure<$State>>::render_ratatui(
-                            &self.state,
                             view,
                             frame,
                             area,

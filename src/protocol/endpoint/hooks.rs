@@ -24,7 +24,7 @@ impl Endpoint {
         for _ in 0..=HookID::MAX {
             let candidate = self.last_hook.next();
 
-            if !self.hooks.contains_key(&candidate) {
+            if !self.has_hook(candidate) {
                 return candidate;
             }
         }
@@ -49,12 +49,14 @@ impl Endpoint {
     /// tests; ordinary leaf procedures should usually let packet routing pave hooks
     /// instead of mutating hook state by hand.
     pub fn accept_hook(&mut self, hook_id: HookID, peer: u32) -> Option<u32> {
-        self.hooks.insert(hook_id, peer)
+        self.hook_insert(hook_id, peer)
     }
 
     /// Returns true when `hook_id` is currently active.
     pub fn has_hook(&self, hook_id: HookID) -> bool {
-        self.hooks.contains_key(&hook_id)
+        self.hooks
+            .iter()
+            .any(|(existing_hook, _)| *existing_hook == hook_id)
     }
 
     /// Returns the adjacent peer currently associated with `hook_id`.
@@ -63,7 +65,10 @@ impl Endpoint {
     /// a child for downward calls that will reply upward, or a parent for a local
     /// callee that will emit an upward response.
     pub fn hook_peer(&self, hook_id: HookID) -> Option<u32> {
-        self.hooks.get(&hook_id).copied()
+        self.hooks
+            .iter()
+            .find(|(existing_hook, _)| *existing_hook == hook_id)
+            .map(|(_, peer)| *peer)
     }
 
     /// Returns the number of active hooks on this endpoint.
@@ -174,11 +179,11 @@ impl Endpoint {
 
     /// Opens or refreshes `hook_id` for the adjacent `peer` after downward routing succeeds.
     pub(crate) fn open_hook(&mut self, hook_id: HookID, peer: EndpointName) {
-        self.hooks.insert(hook_id, peer);
+        self.hook_insert(hook_id, peer);
     }
 
     /// Removes `hook_id` and reports whether it existed.
     pub(crate) fn close_hook(&mut self, hook_id: HookID) -> bool {
-        self.hooks.remove(&hook_id).is_some()
+        self.hook_remove(hook_id).is_some()
     }
 }
