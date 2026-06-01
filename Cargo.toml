@@ -18,12 +18,14 @@ repository  = "https://github.com/Astatin3/unshell"
 include     = ["LICENSE", "**/*.rs", "Cargo.toml"]
 
 [workspace.dependencies]
-rkyv             = "0.8.16"
-thiserror        = "2.0.18"
-chrono           = "0.4.44"
-static_init      = "1.0.4"
+rkyv              = "0.8.16"
+thiserror         = "2.0.18"
+chrono            = "0.4.44"
+static_init       = "1.0.4"
 portable-pty      = "0.9.0"
 crossbeam-channel = "0.5.15"
+const-random      = "0.1.18"
+
 
 ratatui = "0.30.0"
 
@@ -44,7 +46,7 @@ edition.workspace = true
 description = "Pure no_std implementation of the UnShell Protocol"
 
 [features]
-# default = ["interface_ratatui"]
+default = ["counter_shuffle_feistel_lcg"]
 
 log = []
 log_debug = ["log", "dep:chrono"]
@@ -52,16 +54,25 @@ log_debug = ["log", "dep:chrono"]
 interface = []
 interface_ratatui = ["interface", "dep:ratatui"]
 
+counter_shuffle_none = []
+counter_shuffle_feistel = []
+counter_shuffle_feistel_lcg = []
+
 [dependencies]
 rkyv              = { workspace = true }
 thiserror         = { workspace = true, optional = true }
 chrono            = { workspace = true, optional = true }
 static_init       = { workspace = true }
 
+const-random      = { workspace = true }
+
 ratatui           = { workspace = true, optional = true }
 
 [dev-dependencies]
 crossbeam-channel.workspace = true
+
+
+[build-dependencies]
 
 [profile.minimize]
 inherits = "release"

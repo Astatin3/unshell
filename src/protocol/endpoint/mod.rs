@@ -5,15 +5,17 @@ pub use hooks::HookID;
 
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::protocol::{ConnectionSet, HookMap, Leaf, Packet, Path, RouteMap};
+use crate::{
+    crypto::Counter,
+    protocol::{ConnectionSet, HookMap, Leaf, Packet, Path, RouteMap},
+};
 
 pub struct Endpoint {
     // This endpoint's identifier
     pub id: u32,
 
     // A counter that creates unique hook IDs.
-    // TODO: Randomize the hooks for more obfuscation
-    pub(crate) last_hook: u16,
+    pub(crate) last_hook: Counter,
 
     // Absolute path for this node. Must be set by some leaf
     pub path: Path,
@@ -36,7 +38,7 @@ impl Endpoint {
         Self {
             id,
             // Init the hook at 0, which will increment
-            last_hook: 0,
+            last_hook: Counter::new(),
 
             // Set the current path as an empty vec
             path: Vec::new(),

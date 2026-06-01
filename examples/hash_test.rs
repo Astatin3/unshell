@@ -1,8 +1,6 @@
-use unshell::hash;
-
 macro_rules! hashtest {
     ($input:tt) => {
-        ($input, hash($input))
+        ($input, unshell::hash_32!($input))
     };
 }
 
@@ -17,6 +15,6 @@ const MAP: [(&str, u32); 6] = [
 
 pub fn main() {
     for (a, b) in MAP {
-        println!("unshell::hash(\"{}\") = {}", a, b)
+        println!("unshell::hash_32!(\"{}\") = {}", a, b)
     }
 }
