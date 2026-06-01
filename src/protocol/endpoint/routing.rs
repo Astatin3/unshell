@@ -96,7 +96,7 @@ impl Endpoint {
     /// Delivers a packet to local leaves without changing hook state.
     fn deliver_local(&mut self, packet: Packet) -> Result<(), EndpointError> {
         let local_id = self.local_id()?;
-        self.inbound.entry(local_id).or_default().push_back(packet);
+        Self::route_push(local_id, packet, &mut self.inbound);
         Ok(())
     }
 
@@ -127,7 +127,7 @@ impl Endpoint {
         let end_hook = packet.end_hook;
 
         self.ensure_registered_connection(next_hop, RouteDirection::Downward)?;
-        self.outbound.entry(next_hop).or_default().push_back(packet);
+        Self::route_push(next_hop, packet, &mut self.outbound);
         self.apply_downward_hook_lifecycle(hook_id, end_hook, next_hop);
         Ok(())
     }
@@ -148,7 +148,7 @@ impl Endpoint {
 
         self.ensure_upward_hook_peer(hook_id, actual_peer)?;
         self.ensure_registered_connection(next_hop, RouteDirection::Upward)?;
-        self.outbound.entry(next_hop).or_default().push_back(packet);
+        Self::route_push(next_hop, packet, &mut self.outbound);
         self.apply_upward_hook_lifecycle(hook_id, end_hook);
         Ok(())
     }
@@ -195,8 +195,8 @@ impl Endpoint {
 
     /// Derives packet direction from a registered inbound adjacent peer.
     fn inbound_direction_from_peer(&self, remote_id: u32) -> Result<RouteDirection, EndpointError> {
-        let is_upstream = self.connections.contains(&(remote_id, true));
-        let is_downstream = self.connections.contains(&(remote_id, false));
+        let is_upstream = self.connection_contains(remote_id, true);
+        let is_downstream = self.connection_contains(remote_id, false);
 
         match (is_upstream, is_downstream) {
             (true, false) => Ok(RouteDirection::Downward),
@@ -235,7 +235,7 @@ impl Endpoint {
     ) -> Result<(), EndpointError> {
         let is_upward = matches!(direction, RouteDirection::Upward);
 
-        if self.connections.contains(&(next_hop, is_upward)) {
+        if self.connection_contains(next_hop, is_upward) {
             Ok(())
         } else {
             Err(EndpointError::MissingConnection {

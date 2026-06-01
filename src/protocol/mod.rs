@@ -22,21 +22,14 @@ pub use session::*;
 pub use ratatui;
 
 // Various named types used for brevity
-use alloc::{
-    collections::{btree_map::BTreeMap, btree_set::BTreeSet, vec_deque::VecDeque},
-    vec::Vec,
-};
+use alloc::{collections::vec_deque::VecDeque, vec::Vec};
 
 type Path = Vec<u32>;
 type EndpointName = u32;
-type ConnectionSet = BTreeSet<(EndpointName, bool)>;
-type HookMap = BTreeMap<HookID, EndpointName>;
+type ConnectionSet = Vec<(EndpointName, bool)>;
+type HookMap = Vec<(HookID, EndpointName)>;
 pub type PacketQueue = VecDeque<Packet>;
-type RouteMap = BTreeMap<EndpointName, PacketQueue>;
+type RouteMap = Vec<(EndpointName, PacketQueue)>;
 
 #[cfg(test)]
-mod tests {
-    mod merkle_sync;
-    mod oneshot;
-    mod packet;
-}
+mod tests;

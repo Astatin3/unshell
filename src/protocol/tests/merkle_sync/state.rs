@@ -34,8 +34,8 @@ pub(super) enum CallerPhase {
 
 /// Test-visible caller observations.
 ///
-/// The leaf itself lives behind `Box<dyn Leaf>`, so the harness keeps a shared
-/// report handle for assertions without needing downcasts.
+/// The harness keeps a shared report handle so assertions can inspect caller
+/// behavior without borrowing the concrete leaf for the duration of a protocol run.
 #[derive(Debug, Default)]
 pub(super) struct CallerReport {
     pub(super) done: bool,

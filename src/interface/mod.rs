@@ -12,3 +12,6 @@ pub use event::{InterfaceEvent, InterfaceEventKind};
 pub use key::{ProcedureKey, SessionKey};
 pub use store::InterfaceStore;
 pub use view::{ProcedureView, SessionView, SessionViewStatus};
+
+#[cfg(feature = "interface")]
+pub(crate) use store::InterfaceTarget;

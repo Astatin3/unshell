@@ -1,5 +1,3 @@
-use alloc::string::String;
-
 // TODO: Make this seed dependent on env var;
 pub const GLOBAL_SEED: u32 = 0xDEAFBEEF;
 // pub const GLOBAL_NONCE: u32 = {
@@ -55,17 +53,17 @@ macro_rules! hash_32 {
     }};
 }
 
-pub fn hash_string_32(input: String) -> u32 {
+// pub const fn hash_string_32(input: String) -> u32 {
+//     let hash: [u8; 32] = sha256(input.as_bytes());
+//     u32::from_be_bytes([hash[0], hash[8], hash[16], hash[24]])
+// }
+
+pub const fn hash_str_32(input: &str) -> u32 {
     let hash: [u8; 32] = sha256(input.as_bytes());
     u32::from_be_bytes([hash[0], hash[8], hash[16], hash[24]])
 }
 
-pub fn hash_str_32(input: &str) -> u32 {
-    let hash: [u8; 32] = sha256(input.as_bytes());
-    u32::from_be_bytes([hash[0], hash[8], hash[16], hash[24]])
-}
-
-pub fn hash_32(input: u32) -> u32 {
+pub const fn hash_32(input: u32) -> u32 {
     let hash: [u8; 32] = sha256(&input.to_be_bytes());
     u32::from_be_bytes([hash[0], hash[8], hash[16], hash[24]])
 }

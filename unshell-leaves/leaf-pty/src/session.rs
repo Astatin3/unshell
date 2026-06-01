@@ -1,14 +1,9 @@
-use alloc::vec::Vec;
-
 use unshell::protocol::{
-    HookID, Packet, PacketQueue, Session, SessionCtx, SessionInit, SessionInitResult, SessionStatus,
+    Endpoint, HookID, Packet, PacketQueue, Session, SessionInitError, SessionStatus,
 };
 
 use crate::{
-    codec::{
-        decode_open_reply_path, error_packet, frame_opcode, frame_payload,
-        reply_path_from_destination,
-    },
+    codec::{encode_frame, frame_opcode, frame_payload},
     constants::{
         OP_ABORT, OP_ERROR, OP_EXIT, OP_INPUT, OP_OPEN, OP_OPENED, OP_OUTPUT, OP_STDIN_EOF,
         OP_TERMINATE, PROC_PTY,
@@ -16,51 +11,32 @@ use crate::{
     state::FakePtyState,
 };
 
-/// Session contract for one hook-backed fake PTY.
-pub struct PtySession;
-
 /// Per-hook fake PTY session state.
 ///
-/// A real PTY leaf will replace the pending flags with a worker handle. The reply path
-/// and hook lifecycle behavior should stay the same.
+/// A real PTY leaf will replace the pending flags with a worker handle. Hook routing
+/// is owned by the generated runtime, so this state only tracks PTY behavior.
 pub struct PtySessionState {
     hook_id: HookID,
-    reply_path: Vec<u32>,
     opened_pending: bool,
     stdin_closed: bool,
 }
 
-impl Session<FakePtyState> for PtySession {
+impl Session<FakePtyState> for PtySessionState {
     const PROCEDURE_ID: u32 = PROC_PTY;
 
-    type State = PtySessionState;
-
-    fn reply_path(session: &Self::State) -> &[u32] {
-        &session.reply_path
-    }
-
-    fn init(
-        leaf: &mut FakePtyState,
-        packet: Packet,
-        ctx: &mut SessionInit,
-    ) -> SessionInitResult<Self::State> {
+    fn init(leaf: &mut FakePtyState, packet: Packet) -> Result<Self, SessionInitError> {
         if frame_opcode(&packet) != Some(OP_OPEN) {
-            return SessionInitResult::RejectedWith(error_packet(
-                ctx.hook_id(),
-                reply_path_from_destination(ctx.packet_path()),
+            return Err(SessionInitError::response_final(encode_frame(
+                OP_ERROR,
                 b"unknown-session",
-            ));
+            )));
         }
-
-        let reply_path = decode_open_reply_path(frame_payload(&packet))
-            .unwrap_or_else(|| reply_path_from_destination(ctx.packet_path()));
 
         leaf.active_count += 1;
         leaf.total_opened += 1;
 
-        SessionInitResult::Created(PtySessionState {
-            hook_id: ctx.hook_id(),
-            reply_path,
+        Ok(Self {
+            hook_id: packet.hook_id,
             opened_pending: true,
             stdin_closed: false,
         })
@@ -68,24 +44,44 @@ impl Session<FakePtyState> for PtySession {
 
     fn update(
         leaf: &mut FakePtyState,
-        session: &mut Self::State,
+        session: &mut Self,
         incoming: &mut PacketQueue,
-        ctx: &mut SessionCtx<'_>,
+        endpoint: &mut Endpoint,
     ) -> SessionStatus {
         if session.opened_pending {
-            ctx.send(OP_OPENED, &[]);
+            let _ = endpoint.send_hook_frame(
+                session.hook_id,
+                Self::PROCEDURE_ID,
+                OP_OPENED,
+                &[],
+                false,
+            );
             session.opened_pending = false;
         }
 
         while let Some(packet) = incoming.pop_front() {
             match frame_opcode(&packet) {
-                Some(OP_INPUT) => ctx.send(OP_OUTPUT, frame_payload(&packet)),
+                Some(OP_INPUT) => {
+                    let _ = endpoint.send_hook_frame(
+                        session.hook_id,
+                        Self::PROCEDURE_ID,
+                        OP_OUTPUT,
+                        frame_payload(&packet),
+                        false,
+                    );
+                }
                 Some(OP_STDIN_EOF) => {
                     session.stdin_closed = true;
                     leaf.last_stdin_eof_hook = Some(session.hook_id);
                 }
                 Some(OP_TERMINATE) => {
-                    ctx.send_final(OP_EXIT, &[0]);
+                    let _ = endpoint.send_hook_frame(
+                        session.hook_id,
+                        Self::PROCEDURE_ID,
+                        OP_EXIT,
+                        &[0],
+                        true,
+                    );
                     close_session(leaf);
                     return SessionStatus::Closed;
                 }
@@ -94,12 +90,24 @@ impl Session<FakePtyState> for PtySession {
                     return SessionStatus::Closed;
                 }
                 Some(OP_OPEN) => {
-                    ctx.send_final(OP_ERROR, b"duplicate-open");
+                    let _ = endpoint.send_hook_frame(
+                        session.hook_id,
+                        Self::PROCEDURE_ID,
+                        OP_ERROR,
+                        b"duplicate-open",
+                        true,
+                    );
                     close_session(leaf);
                     return SessionStatus::Closed;
                 }
                 _ => {
-                    ctx.send_final(OP_ERROR, b"unknown-opcode");
+                    let _ = endpoint.send_hook_frame(
+                        session.hook_id,
+                        Self::PROCEDURE_ID,
+                        OP_ERROR,
+                        b"unknown-opcode",
+                        true,
+                    );
                     close_session(leaf);
                     return SessionStatus::Closed;
                 }

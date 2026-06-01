@@ -41,7 +41,7 @@ unshell_leaf! {
             authors: unshell::alloc::vec!["ASTATIN3"],
         },
         sessions {
-            pty: PtySession,
+            pty: PtySessionState,
         }
         procedures {}
     }
@@ -59,9 +59,13 @@ The example above expands to the equivalent of:
 pub struct FakePtyLeaf {
     state: FakePtyState,
     outbox: LeafOutbox,
-    pty: SessionFamily<<PtySession as Session<FakePtyState>>::State>,
+    pty: SessionFamily<PtySessionState>,
 }
 ```
+
+Session types are the per-hook state values themselves. There is no separate
+zero-sized handler struct; a type like `PtySessionState` implements `Session` and is
+stored directly in the generated `SessionFamily`.
 
 The wrapper implements:
 
@@ -84,11 +88,11 @@ The macro delegates behavior to small helpers:
 - `update_session_family`
 - `dispatch_procedure`
 - `flush_leaf_outbox`
-- `flush_session_family`
-- `flush_packet_queue_with_interface`
 
 This keeps the macro readable. The helper functions own the mechanics of session
-lookup, initialization, retry-safe flushing, and optional interface logging.
+lookup, initialization, procedure response flushing, and optional interface logging.
+Sessions route their own output immediately through `Endpoint` helpers to avoid a
+per-session output context and retry queue in small implant builds.
 
 ## Interface Store
 
@@ -104,7 +108,33 @@ InterfaceStore
 
 Generated leaves receive an optional mutable store during `update_interface`. The
 helpers create and update the appropriate session/procedure views when packets are
-dispatched, sessions update, and outbound routes succeed or fail.
+dispatched, sessions update, and queued procedure outbound routes succeed or fail.
+
+Internally, interface events are target-driven:
+
+```text
+generated runtime
+  knows packet owner
+        |
+        v
+InterfaceTarget::Session(SessionKey)
+InterfaceTarget::Procedure(ProcedureKey)
+        |
+        v
+InterfaceStore::record(...)
+  append InterfaceEvent
+  link event index to exactly one view
+  update SessionViewStatus when applicable
+```
+
+This is deliberately not inferred from `Packet`. A PTY session packet and a one-shot
+procedure packet both have `procedure_id` and `hook_id`, but they should not both
+create session views. The runtime already knows which dispatch branch handled the
+packet, so that answer is carried into the store.
+
+Leaf-level retry queues carry the same owner metadata for procedure responses.
+Session responses bypass this queue and use `Endpoint::send_hook_raw` or
+`Endpoint::send_hook_frame` directly.
 
 Time remains caller-supplied:
 
@@ -123,13 +153,12 @@ Ratatui rendering is a plain feature-gated pass:
 leaf.render_ratatui(frame, area, &mut interface);
 ```
 
-Session rendering is an associated function because session families are type-level
-contracts, not stored objects:
+Session rendering is an associated function on the stored session state type:
 
 ```rust
 fn render_ratatui(
     leaf: &LeafState,
-    session: &Self::State,
+    session: &Self,
     view: &mut SessionView,
     frame: &mut ratatui::Frame<'_>,
     area: ratatui::layout::Rect,

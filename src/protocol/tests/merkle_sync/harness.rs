@@ -1,10 +1,13 @@
-use alloc::{boxed::Box, rc::Rc, vec};
+use alloc::{rc::Rc, vec};
 use core::cell::RefCell;
 
-use crate::protocol::Endpoint;
+use crate::protocol::{Endpoint, Leaf};
 
 use super::{
-    constants::{ENDPOINT_CALLER, ENDPOINT_RESPONDENT},
+    constants::{
+        ENDPOINT_CALLER, ENDPOINT_RESPONDENT, LEAF_MERKLE_CALLER, LEAF_MERKLE_RESPONDENT,
+        LEAF_MOCK_CONNECTION,
+    },
     leaves::{MerkleCallerLeaf, MerkleRespondentLeaf, MockConnectionLeaf},
     state::{CallerReport, RespondentReport},
     tree::{MerkleStore, local_fixture, remote_fixture},
@@ -19,6 +22,10 @@ use super::{
 pub(super) struct MerkleHarness {
     pub(super) endpoint_a: Endpoint,
     pub(super) endpoint_b: Endpoint,
+    caller_leaf: MerkleCallerLeaf,
+    caller_connection: MockConnectionLeaf,
+    respondent_leaf: MerkleRespondentLeaf,
+    respondent_connection: MockConnectionLeaf,
     pub(super) caller_report: Rc<RefCell<CallerReport>>,
     pub(super) respondent_report: Rc<RefCell<RespondentReport>>,
     pub(super) remote_root_hash: u32,
@@ -38,37 +45,24 @@ impl MerkleHarness {
         let (tx_a, rx_a) = crossbeam_channel::unbounded();
         let (tx_b, rx_b) = crossbeam_channel::unbounded();
 
-        let mut endpoint_a = Endpoint::new(
-            ENDPOINT_CALLER,
-            vec![
-                Box::new(MerkleCallerLeaf::new(local, caller_report.clone())),
-                Box::new(MockConnectionLeaf::new(
-                    tx_b,
-                    rx_a,
-                    ENDPOINT_RESPONDENT,
-                    false,
-                )),
-            ],
-        );
+        let mut endpoint_a = Endpoint::new(ENDPOINT_CALLER);
         endpoint_a.path = vec![ENDPOINT_CALLER];
 
-        let mut endpoint_b = Endpoint::new(
-            ENDPOINT_RESPONDENT,
-            vec![
-                Box::new(MerkleRespondentLeaf::new(remote, respondent_report.clone())),
-                Box::new(MockConnectionLeaf::new(tx_a, rx_b, ENDPOINT_CALLER, true)),
-            ],
-        );
+        let mut endpoint_b = Endpoint::new(ENDPOINT_RESPONDENT);
         endpoint_b.path = vec![ENDPOINT_CALLER, ENDPOINT_RESPONDENT];
 
         // Register routes before the first caller update so initial packet delivery
         // does not depend on leaf ordering.
-        endpoint_a.connections.insert((ENDPOINT_RESPONDENT, false));
-        endpoint_b.connections.insert((ENDPOINT_CALLER, true));
+        endpoint_a.add_connection(ENDPOINT_RESPONDENT, false);
+        endpoint_b.add_connection(ENDPOINT_CALLER, true);
 
         Self {
             endpoint_a,
             endpoint_b,
+            caller_leaf: MerkleCallerLeaf::new(local, caller_report.clone()),
+            caller_connection: MockConnectionLeaf::new(tx_b, rx_a, ENDPOINT_RESPONDENT, false),
+            respondent_leaf: MerkleRespondentLeaf::new(remote, respondent_report.clone()),
+            respondent_connection: MockConnectionLeaf::new(tx_a, rx_b, ENDPOINT_CALLER, true),
             caller_report,
             respondent_report,
             remote_root_hash,
@@ -77,8 +71,10 @@ impl MerkleHarness {
 
     /// Drives one deterministic protocol loop.
     pub(super) fn tick(&mut self) {
-        self.endpoint_a.update();
-        self.endpoint_b.update();
+        self.caller_leaf.update(&mut self.endpoint_a);
+        self.caller_connection.update(&mut self.endpoint_a);
+        self.respondent_leaf.update(&mut self.endpoint_b);
+        self.respondent_connection.update(&mut self.endpoint_b);
     }
 
     /// Runs until the caller reports completion.
@@ -113,7 +109,9 @@ impl MerkleHarness {
 
     /// Verifies the requested four-leaf topology.
     pub(super) fn assert_four_leaf_topology(&self) {
-        assert_eq!(self.endpoint_a.leaves.len(), 2);
-        assert_eq!(self.endpoint_b.leaves.len(), 2);
+        assert_eq!(self.caller_leaf.get_id(), LEAF_MERKLE_CALLER);
+        assert_eq!(self.caller_connection.get_id(), LEAF_MOCK_CONNECTION);
+        assert_eq!(self.respondent_leaf.get_id(), LEAF_MERKLE_RESPONDENT);
+        assert_eq!(self.respondent_connection.get_id(), LEAF_MOCK_CONNECTION);
     }
 }
