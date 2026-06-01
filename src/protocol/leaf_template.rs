@@ -123,6 +123,7 @@ macro_rules! unshell_leaf {
                         == <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID
                     {
                         $crate::protocol::dispatch_session::<$State, $Session>(
+                            endpoint,
                             leaf_id,
                             &mut self.state,
                             &mut self.$session_field,

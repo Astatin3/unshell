@@ -18,16 +18,12 @@ use crate::interface::SessionView;
 ///     const PROCEDURE_ID: u32 = 7;
 ///     type State = MySessionState;
 ///
-///     fn reply_path(state: &Self::State) -> &[u32] {
-///         &state.reply_path
-///     }
-///
 ///     fn init(
 ///         leaf: &mut MyLeafState,
 ///         packet: Packet,
 ///         ctx: &mut SessionInit,
-///     ) -> SessionInitResult<Self::State> {
-///         SessionInitResult::Created(MySessionState::from_open(leaf, packet, ctx))
+///     ) -> Result<Self::State, SessionInitError> {
+///         Ok(MySessionState::from_open(leaf, packet, ctx))
 ///     }
 ///
 ///     fn update(
@@ -50,20 +46,16 @@ pub trait Session<L> {
     /// Application state stored for one live hook.
     type State;
 
-    /// Returns the destination path for responses emitted by this session.
-    ///
-    /// `Packet` currently carries only a destination path, so protocols that need to
-    /// reply to a caller should capture a reply path during [`Self::init`]. The
-    /// generated leaf clones this path into [`SessionCtx`] before calling update so
-    /// session code can mutably borrow its state while emitting frames.
-    fn reply_path(session: &Self::State) -> &[u32];
-
     /// Creates one session state from a packet whose hook has no active session.
     ///
-    /// Returning [`SessionInitResult::RejectedWith`] lets the generated leaf route a
-    /// protocol-level failure response with the same retry guarantees as normal
-    /// output. Returning [`SessionInitResult::Rejected`] silently consumes the packet.
-    fn init(leaf: &mut L, packet: Packet, ctx: &mut SessionInit) -> SessionInitResult<Self::State>;
+    /// The generated runtime derives all response routing from hook state. Session
+    /// initialization therefore returns only application state or a protocol-level
+    /// rejection; it never stores or receives a caller reply path.
+    fn init(
+        leaf: &mut L,
+        packet: Packet,
+        ctx: &mut SessionInit,
+    ) -> Result<Self::State, SessionInitError>;
 
     /// Advances one active hook session.
     ///
@@ -119,16 +111,42 @@ impl SessionInit {
     }
 }
 
-/// Result of trying to create a session from a packet without an active hook entry.
-pub enum SessionInitResult<S> {
-    /// A new session was created and should be stored by the generated leaf.
-    Created(S),
-
-    /// The packet was intentionally consumed without creating state or a response.
+/// Error returned when a packet cannot create a new session.
+pub enum SessionInitError {
+    /// The packet was intentionally consumed without creating state or sending output.
     Rejected,
 
-    /// The packet was rejected with a response that the generated leaf must route.
-    RejectedWith(Packet),
+    /// The packet was rejected with response data that should be sent on the same hook.
+    Response {
+        /// Raw `Packet::data` for the response frame.
+        data: Vec<u8>,
+
+        /// Whether the response should close the hook after successful routing.
+        end_hook: bool,
+    },
+}
+
+impl SessionInitError {
+    /// Creates a silent session rejection.
+    pub fn rejected() -> Self {
+        Self::Rejected
+    }
+
+    /// Creates a non-final response for a rejected session open.
+    pub fn response(data: Vec<u8>) -> Self {
+        Self::Response {
+            data,
+            end_hook: false,
+        }
+    }
+
+    /// Creates a final response for a rejected session open.
+    pub fn response_final(data: Vec<u8>) -> Self {
+        Self::Response {
+            data,
+            end_hook: true,
+        }
+    }
 }
 
 /// Session lifecycle status returned from [`Session::update`].
@@ -153,7 +171,7 @@ pub enum SessionStatus {
 /// routing in generated code is what makes final-frame retries reliable.
 pub struct SessionCtx<'a> {
     hook_id: HookID,
-    reply_path: Vec<u32>,
+    path: Vec<u32>,
     procedure_id: u32,
     outbox: &'a mut PacketQueue,
 }
@@ -162,13 +180,13 @@ impl<'a> SessionCtx<'a> {
     /// Creates a context for one session update call.
     pub fn new(
         hook_id: HookID,
-        reply_path: Vec<u32>,
+        path: Vec<u32>,
         procedure_id: u32,
         outbox: &'a mut PacketQueue,
     ) -> Self {
         Self {
             hook_id,
-            reply_path,
+            path,
             procedure_id,
             outbox,
         }
@@ -177,11 +195,6 @@ impl<'a> SessionCtx<'a> {
     /// Returns the hook id used for packets emitted through this context.
     pub fn hook_id(&self) -> HookID {
         self.hook_id
-    }
-
-    /// Returns the destination path used for packets emitted through this context.
-    pub fn reply_path(&self) -> &[u32] {
-        &self.reply_path
     }
 
     /// Queues a one-byte-opcode frame without closing the hook.
@@ -233,7 +246,7 @@ impl<'a> SessionCtx<'a> {
         self.outbox.push_back(Packet {
             hook_id: self.hook_id,
             end_hook,
-            path: self.reply_path.clone(),
+            path: self.path.clone(),
             procedure_id: self.procedure_id,
             data,
         });
@@ -248,6 +261,13 @@ impl<'a> SessionCtx<'a> {
 pub struct SessionEntry<S> {
     /// Hook id associated with this live session.
     pub hook_id: HookID,
+
+    /// Destination path for packets emitted on this hook.
+    ///
+    /// This is generated runtime state, not user session state. It is captured from
+    /// endpoint hook routing when the session is created so leaf sessions never have
+    /// to carry or understand a reply path.
+    pub path: Vec<u32>,
 
     /// Application-owned session state.
     pub state: S,
@@ -300,9 +320,10 @@ impl<S> Default for SessionFamily<S> {
 
 impl<S> SessionEntry<S> {
     /// Creates one active session entry for `hook_id`.
-    pub fn new(hook_id: HookID, state: S) -> Self {
+    pub fn new(hook_id: HookID, path: Vec<u32>, state: S) -> Self {
         Self {
             hook_id,
+            path,
             state,
             inbox: PacketQueue::new(),
             outbox: PacketQueue::new(),

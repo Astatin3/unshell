@@ -4,7 +4,7 @@ use crate::{
     interface::{InterfaceEventKind, InterfaceStore, InterfaceTarget},
     protocol::{
         Endpoint, Packet, PacketQueue, Procedure, ProcedureOut, Session, SessionCtx, SessionEntry,
-        SessionFamily, SessionInit, SessionInitResult, SessionStatus,
+        SessionFamily, SessionInit, SessionInitError, SessionStatus,
     },
 };
 
@@ -88,6 +88,7 @@ impl Default for LeafOutbox {
 /// find the hook, initialize missing sessions, queue rejected responses, and update
 /// interface state when a caller supplied one.
 pub fn dispatch_session<L, S>(
+    endpoint: &Endpoint,
     leaf_id: u32,
     leaf: &mut L,
     family: &mut SessionFamily<S::State>,
@@ -131,12 +132,27 @@ pub fn dispatch_session<L, S>(
     }
 
     let started_ns = interface.as_ref().and_then(|store| store.now_ns());
+    let Ok(path) = endpoint.hook_path(hook_id) else {
+        if let Some(store) = interface.as_mut() {
+            store.record_for(
+                target,
+                InterfaceEventKind::SessionRejected {
+                    procedure_id,
+                    hook_id,
+                    started_ns,
+                    finished_ns: store.now_ns(),
+                },
+            );
+        }
+
+        return;
+    };
     let packet_path = packet.path.clone();
     let mut init = SessionInit::new(hook_id, packet_path);
 
     match S::init(leaf, packet, &mut init) {
-        SessionInitResult::Created(state) => {
-            family.entries.push(SessionEntry::new(hook_id, state));
+        Ok(state) => {
+            family.entries.push(SessionEntry::new(hook_id, path, state));
 
             if let Some(store) = interface.as_mut() {
                 store.record_for(
@@ -150,7 +166,7 @@ pub fn dispatch_session<L, S>(
                 );
             }
         }
-        SessionInitResult::Rejected => {
+        Err(SessionInitError::Rejected) => {
             if let Some(store) = interface.as_mut() {
                 store.record_for(
                     target,
@@ -163,7 +179,15 @@ pub fn dispatch_session<L, S>(
                 );
             }
         }
-        SessionInitResult::RejectedWith(packet) => {
+        Err(SessionInitError::Response { data, end_hook }) => {
+            let packet = Packet {
+                hook_id,
+                end_hook,
+                path,
+                procedure_id,
+                data,
+            };
+
             if let Some(store) = interface.as_mut() {
                 store.record_for(
                     target,
@@ -203,14 +227,9 @@ pub fn update_session_family<L, S>(
 
         let started_ns = interface.as_ref().and_then(|store| store.now_ns());
         let outbox_start = entry.outbox.len();
-        let reply_path = S::reply_path(&entry.state).to_vec();
+        let path = entry.path.clone();
         let status = {
-            let mut ctx = SessionCtx::new(
-                entry.hook_id,
-                reply_path,
-                S::PROCEDURE_ID,
-                &mut entry.outbox,
-            );
+            let mut ctx = SessionCtx::new(entry.hook_id, path, S::PROCEDURE_ID, &mut entry.outbox);
 
             S::update(leaf, &mut entry.state, &mut entry.inbox, &mut ctx)
         };

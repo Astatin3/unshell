@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::protocol::{Endpoint, EndpointError, EndpointName};
 
 /// Compact identifier for one routed return channel.
@@ -77,6 +79,30 @@ impl Endpoint {
     /// transport where no final packet can be delivered.
     pub fn forget_hook(&mut self, hook_id: HookID) -> bool {
         self.close_hook(hook_id)
+    }
+
+    /// Returns the destination path for packets sent back over `hook_id`.
+    ///
+    /// Hooks record the adjacent peer that paved the return channel. This helper turns
+    /// that peer into the packet path required by the current router: parent peers map
+    /// to the parent path, and child peers map to the direct child path. Session logic
+    /// should not store this path itself.
+    pub(crate) fn hook_path(&self, hook_id: HookID) -> Result<Vec<u32>, EndpointError> {
+        let peer = self
+            .hook_peer(hook_id)
+            .ok_or(EndpointError::UnknownHook { hook_id })?;
+
+        if self.path.is_empty() {
+            return Err(EndpointError::EndpointPathUnset);
+        }
+
+        if self.path.len() > 1 && self.path[self.path.len() - 2] == peer {
+            Ok(self.path[..self.path.len() - 1].to_vec())
+        } else {
+            let mut path = self.path.clone();
+            path.push(peer);
+            Ok(path)
+        }
     }
 
     /// Validates that `actual_peer` is the peer allowed to use `hook_id`.
