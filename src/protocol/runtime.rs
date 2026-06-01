@@ -4,7 +4,7 @@ use crate::{
     interface::{InterfaceEventKind, InterfaceStore, InterfaceTarget},
     protocol::{
         Endpoint, Packet, PacketQueue, Procedure, ProcedureOut, Session, SessionCtx, SessionEntry,
-        SessionFamily, SessionInit, SessionInitError, SessionStatus,
+        SessionFamily, SessionInitError, SessionStatus,
     },
 };
 
@@ -147,10 +147,7 @@ pub fn dispatch_session<L, S>(
 
         return;
     };
-    let packet_path = packet.path.clone();
-    let mut init = SessionInit::new(hook_id, packet_path);
-
-    match S::init(leaf, packet, &mut init) {
+    match S::init(leaf, packet) {
         Ok(state) => {
             family.entries.push(SessionEntry::new(hook_id, path, state));
 

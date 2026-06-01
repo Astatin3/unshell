@@ -20,9 +20,8 @@ use crate::interface::SessionView;
 ///     fn init(
 ///         leaf: &mut MyLeafState,
 ///         packet: Packet,
-///         ctx: &mut SessionInit,
 ///     ) -> Result<Self, SessionInitError> {
-///         Ok(MySessionState::from_open(leaf, packet, ctx))
+///         Ok(MySessionState::from_open(leaf, packet))
 ///     }
 ///
 ///     fn update(
@@ -47,7 +46,7 @@ pub trait Session<L>: Sized {
     /// The generated runtime derives all response routing from hook state. Session
     /// initialization therefore returns only application state or a protocol-level
     /// rejection; it never stores or receives a caller reply path.
-    fn init(leaf: &mut L, packet: Packet, ctx: &mut SessionInit) -> Result<Self, SessionInitError>;
+    fn init(leaf: &mut L, packet: Packet) -> Result<Self, SessionInitError>;
 
     /// Advances one active hook session.
     ///
@@ -70,36 +69,6 @@ pub trait Session<L>: Sized {
         _: &mut ratatui::Frame<'_>,
         _: ratatui::layout::Rect,
     ) {
-    }
-}
-
-/// Context passed to [`Session::init`].
-///
-/// This carries routing metadata that the generated leaf already knows before the
-/// session state exists. Protocols that need source paths should encode them in the
-/// packet payload; `packet_path` is the destination path that routed the packet here.
-pub struct SessionInit {
-    hook_id: HookID,
-    packet_path: Vec<u32>,
-}
-
-impl SessionInit {
-    /// Creates initialization metadata for a delivered packet.
-    pub fn new(hook_id: HookID, packet_path: Vec<u32>) -> Self {
-        Self {
-            hook_id,
-            packet_path,
-        }
-    }
-
-    /// Returns the hook id that will identify the new session.
-    pub fn hook_id(&self) -> HookID {
-        self.hook_id
-    }
-
-    /// Returns the destination path from the packet that reached this leaf.
-    pub fn packet_path(&self) -> &[u32] {
-        &self.packet_path
     }
 }
 
