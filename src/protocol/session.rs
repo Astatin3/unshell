@@ -9,26 +9,25 @@ use crate::interface::SessionView;
 ///
 /// A session family maps one outer `procedure_id` to many live hook instances. The
 /// generated leaf owns packet grouping, retry-safe output flushing, and final cleanup;
-/// the session implementation owns only application behavior.
+/// the session value owns one hook's application behavior and mutable state.
 ///
 /// # Example
 ///
 /// ```rust,ignore
-/// impl Session<MyLeafState> for MySession {
+/// impl Session<MyLeafState> for MySessionState {
 ///     const PROCEDURE_ID: u32 = 7;
-///     type State = MySessionState;
 ///
 ///     fn init(
 ///         leaf: &mut MyLeafState,
 ///         packet: Packet,
 ///         ctx: &mut SessionInit,
-///     ) -> Result<Self::State, SessionInitError> {
+///     ) -> Result<Self, SessionInitError> {
 ///         Ok(MySessionState::from_open(leaf, packet, ctx))
 ///     }
 ///
 ///     fn update(
 ///         leaf: &mut MyLeafState,
-///         session: &mut Self::State,
+///         session: &mut Self,
 ///         incoming: &mut PacketQueue,
 ///         ctx: &mut SessionCtx<'_>,
 ///     ) -> SessionStatus {
@@ -39,23 +38,16 @@ use crate::interface::SessionView;
 ///     }
 /// }
 /// ```
-pub trait Session<L> {
+pub trait Session<L>: Sized {
     /// Outer packet procedure id used by every packet in this session family.
     const PROCEDURE_ID: u32;
 
-    /// Application state stored for one live hook.
-    type State;
-
-    /// Creates one session state from a packet whose hook has no active session.
+    /// Creates one session value from a packet whose hook has no active session.
     ///
     /// The generated runtime derives all response routing from hook state. Session
     /// initialization therefore returns only application state or a protocol-level
     /// rejection; it never stores or receives a caller reply path.
-    fn init(
-        leaf: &mut L,
-        packet: Packet,
-        ctx: &mut SessionInit,
-    ) -> Result<Self::State, SessionInitError>;
+    fn init(leaf: &mut L, packet: Packet, ctx: &mut SessionInit) -> Result<Self, SessionInitError>;
 
     /// Advances one active hook session.
     ///
@@ -65,7 +57,7 @@ pub trait Session<L> {
     /// generated retry rules.
     fn update(
         leaf: &mut L,
-        session: &mut Self::State,
+        session: &mut Self,
         incoming: &mut PacketQueue,
         ctx: &mut SessionCtx<'_>,
     ) -> SessionStatus;
@@ -73,7 +65,7 @@ pub trait Session<L> {
     #[cfg(feature = "interface_ratatui")]
     fn render_ratatui(
         _: &L,
-        _: &Self::State,
+        _: &Self,
         _: &mut SessionView,
         _: &mut ratatui::Frame<'_>,
         _: ratatui::layout::Rect,

@@ -91,7 +91,7 @@ pub fn dispatch_session<L, S>(
     endpoint: &Endpoint,
     leaf_id: u32,
     leaf: &mut L,
-    family: &mut SessionFamily<S::State>,
+    family: &mut SessionFamily<S>,
     packet: Packet,
     outbox: &mut LeafOutbox,
     interface: &mut Option<&mut InterfaceStore>,
@@ -215,7 +215,7 @@ pub fn dispatch_session<L, S>(
 pub fn update_session_family<L, S>(
     leaf_id: u32,
     leaf: &mut L,
-    family: &mut SessionFamily<S::State>,
+    family: &mut SessionFamily<S>,
     interface: &mut Option<&mut InterfaceStore>,
 ) where
     S: Session<L>,
@@ -338,7 +338,7 @@ pub fn flush_leaf_outbox(
 pub fn flush_session_family<L, S>(
     endpoint: &mut Endpoint,
     leaf_id: u32,
-    family: &mut SessionFamily<S::State>,
+    family: &mut SessionFamily<S>,
     interface: &mut Option<&mut InterfaceStore>,
 ) where
     S: Session<L>,

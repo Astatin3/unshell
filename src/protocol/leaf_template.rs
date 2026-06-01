@@ -17,9 +17,7 @@ macro_rules! unshell_leaf {
             state: $State,
             outbox: $crate::protocol::LeafOutbox,
             $(
-                $session_field: $crate::protocol::SessionFamily<
-                    <$Session as $crate::protocol::Session<$State>>::State,
-                >,
+                $session_field: $crate::protocol::SessionFamily<$Session>,
             )*
         }
 

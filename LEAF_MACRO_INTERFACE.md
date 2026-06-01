@@ -41,7 +41,7 @@ unshell_leaf! {
             authors: unshell::alloc::vec!["ASTATIN3"],
         },
         sessions {
-            pty: PtySession,
+            pty: PtySessionState,
         }
         procedures {}
     }
@@ -59,9 +59,13 @@ The example above expands to the equivalent of:
 pub struct FakePtyLeaf {
     state: FakePtyState,
     outbox: LeafOutbox,
-    pty: SessionFamily<<PtySession as Session<FakePtyState>>::State>,
+    pty: SessionFamily<PtySessionState>,
 }
 ```
+
+Session types are the per-hook state values themselves. There is no separate
+zero-sized handler struct; a type like `PtySessionState` implements `Session` and is
+stored directly in the generated `SessionFamily`.
 
 The wrapper implements:
 
@@ -149,13 +153,12 @@ Ratatui rendering is a plain feature-gated pass:
 leaf.render_ratatui(frame, area, &mut interface);
 ```
 
-Session rendering is an associated function because session families are type-level
-contracts, not stored objects:
+Session rendering is an associated function on the stored session state type:
 
 ```rust
 fn render_ratatui(
     leaf: &LeafState,
-    session: &Self::State,
+    session: &Self,
     view: &mut SessionView,
     frame: &mut ratatui::Frame<'_>,
     area: ratatui::layout::Rect,
