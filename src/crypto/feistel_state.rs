@@ -11,6 +11,14 @@ const NONCE16_1: u16 = const_random::const_random!(u16);
 const NONCE16_2: u16 = const_random::const_random!(u16);
 const NONCE32: u32 = const_random::const_random!(u32);
 
+/// Odd additive step used by [`FeistelShuffle`] before applying the permutation.
+///
+/// A step through a `u16` counter only visits every possible value when it is
+/// coprime with `2^16`; for powers of two, that means the step must be odd. Without
+/// this constraint, a randomized even step can cycle through a subset of values and
+/// collide before the hook id space is exhausted.
+const FEISTEL_STEP: u16 = NONCE16_2 | 1;
+
 pub struct NoShuffle(u16);
 
 /// Linear shuffle, no randomization, just a random starting point and step size
@@ -35,7 +43,7 @@ impl FeistelShuffle {
     }
 
     pub fn next(&mut self) -> u16 {
-        self.0 = self.0.wrapping_add(NONCE16_2);
+        self.0 = self.0.wrapping_add(FEISTEL_STEP);
         feistel_shuffle(self.0, self.1)
     }
 }
