@@ -5,10 +5,15 @@ use crate::protocol::LeafMeta;
 
 use alloc::{format, vec, vec::Vec};
 
-use super::support::{CommsLeaf, ENDPOINT_A, ENDPOINT_B, assert_hook_present, assert_hook_removed};
+use super::super::support::{
+    assertions::{assert_hook_present, assert_hook_removed},
+    endpoints::{ENDPOINT_A, ENDPOINT_B},
+    transport::CommsLeaf,
+};
 
 const LEAF_STREAM_CALLER: u32 = 200;
 const LEAF_STREAM_RESPONDENT: u32 = 201;
+const LEAF_COMMS: u32 = 101;
 
 /// Builds the initial downwards packet that opens the stream on the respondent.
 ///
@@ -104,7 +109,7 @@ impl Leaf for StreamCallerLeaf {
             name: "Stream Caller Leaf",
             identifier: "dev.unshell.test.stream_caller_leaf",
             version: "v0",
-            authors: vec!["ASTATIN3"],
+            authors: alloc::vec!["ASTATIN3"],
         }
     }
 
@@ -127,10 +132,10 @@ impl Leaf for StreamRespondentLeaf {
     #[cfg(feature = "interface")]
     fn get_meta(&self) -> LeafMeta {
         LeafMeta {
-            name: "Stream Respondant Leaf",
+            name: "Stream Respondent Leaf",
             identifier: "dev.unshell.test.stream_respondent_leaf",
             version: "v0",
-            authors: vec!["ASTATIN3"],
+            authors: alloc::vec!["ASTATIN3"],
         }
     }
 
@@ -243,9 +248,9 @@ fn stream_endpoints(total_packets: usize) -> StreamHarness {
 /// Asserts the requested two-endpoint, four-leaf topology.
 fn assert_four_leaf_topology(harness: &StreamHarness) {
     assert_eq!(harness.caller_a.get_id(), LEAF_STREAM_CALLER);
-    assert_eq!(harness.comms_a.get_id(), 101);
+    assert_eq!(harness.comms_a.get_id(), LEAF_COMMS);
     assert_eq!(harness.respondent_b.get_id(), LEAF_STREAM_RESPONDENT);
-    assert_eq!(harness.comms_b.get_id(), 101);
+    assert_eq!(harness.comms_b.get_id(), LEAF_COMMS);
 }
 
 /// Drives the initial request until it is queued locally on endpoint B.

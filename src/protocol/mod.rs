@@ -32,8 +32,4 @@ pub type PacketQueue = VecDeque<Packet>;
 type RouteMap = Vec<(EndpointName, PacketQueue)>;
 
 #[cfg(test)]
-mod tests {
-    mod merkle_sync;
-    mod oneshot;
-    mod packet;
-}
+mod tests;

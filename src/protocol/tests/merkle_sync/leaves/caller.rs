@@ -1,43 +1,25 @@
-use alloc::{collections::VecDeque, rc::Rc, vec, vec::Vec};
+use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use core::cell::RefCell;
-
-use crossbeam_channel::{Receiver, Sender};
 
 use crate::protocol::{Endpoint, Leaf, Packet};
 
 #[cfg(feature = "interface")]
 use crate::protocol::LeafMeta;
 
-use super::{
+use super::super::{
     codec::{decode_block_chunk, decode_child_summary, decode_u32},
     constants::{
-        ENDPOINT_CALLER, ENDPOINT_RESPONDENT, LEAF_MERKLE_CALLER, LEAF_MERKLE_RESPONDENT,
-        LEAF_MOCK_CONNECTION, PROC_BLOCK_CHUNK, PROC_CHILD_HASH_ENTRY, PROC_GET_BLOCK_STREAM,
-        PROC_GET_CHILD_HASHES, PROC_GET_ROOT_HASH, PROC_ROOT_HASH, ROOT_NODE,
+        ENDPOINT_CALLER, LEAF_MERKLE_CALLER, PROC_BLOCK_CHUNK, PROC_CHILD_HASH_ENTRY,
+        PROC_GET_BLOCK_STREAM, PROC_GET_CHILD_HASHES, PROC_GET_ROOT_HASH, PROC_ROOT_HASH,
+        ROOT_NODE,
     },
-    rpc::{
-        block_chunk_frame, block_stream_request, child_hash_frame, child_hashes_request,
-        root_hash_frame, root_hash_request,
-    },
-    state::{CallerPhase, CallerReport, RespondentReport, ResponseStream},
-    tree::{BlockChunk, ChildKind, MerkleStore},
+    rpc::{block_stream_request, child_hashes_request, root_hash_request},
+    state::{CallerPhase, CallerReport},
+    tree::{ChildKind, MerkleStore},
 };
 
-/// Leaf that simulates a serialized transport connection with crossbeam channels.
-///
-/// This is intentionally tiny and reusable. Both endpoints in the Merkle test have
-/// exactly one of these leaves, giving the requested four-leaf topology: caller,
-/// respondent, and two mock connections.
-pub(super) struct MockConnectionLeaf {
-    pub(super) tx: Sender<Vec<u8>>,
-    pub(super) rx: Receiver<Vec<u8>>,
-    pub(super) remote_id: u32,
-    pub(super) is_authority: bool,
-    pub(super) started: bool,
-}
-
 /// Caller leaf that drives the Merkle synchronization algorithm.
-pub(super) struct MerkleCallerLeaf {
+pub(crate) struct MerkleCallerLeaf {
     local: MerkleStore,
     phase: CallerPhase,
     pending_nodes: VecDeque<u32>,
@@ -45,34 +27,9 @@ pub(super) struct MerkleCallerLeaf {
     report: Rc<RefCell<CallerReport>>,
 }
 
-/// Respondent leaf that serves Merkle hash and block streams.
-pub(super) struct MerkleRespondentLeaf {
-    remote: MerkleStore,
-    active_stream: Option<ResponseStream>,
-    report: Rc<RefCell<RespondentReport>>,
-}
-
-impl MockConnectionLeaf {
-    /// Creates one side of a mock connection.
-    pub(super) fn new(
-        tx: Sender<Vec<u8>>,
-        rx: Receiver<Vec<u8>>,
-        remote_id: u32,
-        is_authority: bool,
-    ) -> Self {
-        Self {
-            tx,
-            rx,
-            remote_id,
-            is_authority,
-            started: false,
-        }
-    }
-}
-
 impl MerkleCallerLeaf {
     /// Creates a caller with a local store and externally visible report.
-    pub(super) fn new(local: MerkleStore, report: Rc<RefCell<CallerReport>>) -> Self {
+    pub(crate) fn new(local: MerkleStore, report: Rc<RefCell<CallerReport>>) -> Self {
         Self {
             local,
             phase: CallerPhase::NeedRoot,
@@ -80,55 +37,6 @@ impl MerkleCallerLeaf {
             pending_blocks: VecDeque::new(),
             report,
         }
-    }
-}
-
-impl MerkleRespondentLeaf {
-    /// Creates a respondent backed by the authoritative remote store.
-    pub(super) fn new(remote: MerkleStore, report: Rc<RefCell<RespondentReport>>) -> Self {
-        Self {
-            remote,
-            active_stream: None,
-            report,
-        }
-    }
-}
-
-impl Leaf for MockConnectionLeaf {
-    fn get_id(&self) -> u32 {
-        LEAF_MOCK_CONNECTION
-    }
-
-    #[cfg(feature = "interface")]
-    fn get_meta(&self) -> LeafMeta {
-        LeafMeta {
-            name: "Merke Connection Leaf",
-            identifier: "dev.unshell.test.merkle.connection",
-            version: "v0",
-            authors: vec!["ASTATIN3"],
-        }
-    }
-
-    fn update(&mut self, endpoint: &mut Endpoint) {
-        if !self.started {
-            endpoint.add_connection(self.remote_id, self.is_authority);
-            self.started = true;
-        }
-
-        while !self.rx.is_empty() {
-            let data = self.rx.recv().unwrap();
-
-            // Mock transports move untrusted bytes. Malformed frames are dropped so
-            // the sync state machine is tested only after packet parsing succeeds.
-            if let Ok(packet) = Packet::deserialize(&data) {
-                let _ = endpoint.add_inbound_from(self.remote_id, packet);
-            }
-        }
-
-        endpoint.take_outbound_clear(self.remote_id, |packet| {
-            let data = packet.serialize().unwrap();
-            let _ = self.tx.send(data);
-        });
     }
 }
 
@@ -143,34 +51,13 @@ impl Leaf for MerkleCallerLeaf {
             name: "Merke Caller Leaf",
             identifier: "dev.unshell.test.merkle.caller",
             version: "v0",
-            authors: vec!["ASTATIN3"],
+            authors: alloc::vec!["ASTATIN3"],
         }
     }
 
     fn update(&mut self, endpoint: &mut Endpoint) {
         self.receive_responses(endpoint);
         self.dispatch_next_request(endpoint);
-    }
-}
-
-impl Leaf for MerkleRespondentLeaf {
-    fn get_id(&self) -> u32 {
-        LEAF_MERKLE_RESPONDENT
-    }
-
-    #[cfg(feature = "interface")]
-    fn get_meta(&self) -> LeafMeta {
-        LeafMeta {
-            name: "Merke Respondent Leaf",
-            identifier: "dev.unshell.test.merkle.respondent",
-            version: "v0",
-            authors: vec!["ASTATIN3"],
-        }
-    }
-
-    fn update(&mut self, endpoint: &mut Endpoint) {
-        self.open_stream_from_request(endpoint);
-        self.send_one_response_frame(endpoint);
     }
 }
 
@@ -344,91 +231,5 @@ impl MerkleCallerLeaf {
         let mut report = self.report.borrow_mut();
         report.done = true;
         report.final_root_hash = Some(self.local.root_hash());
-    }
-}
-
-impl MerkleRespondentLeaf {
-    /// Opens one response stream from the first pending local request.
-    fn open_stream_from_request(&mut self, endpoint: &mut Endpoint) {
-        if self.active_stream.is_some() {
-            return;
-        }
-
-        let mut request = None;
-        endpoint.take_inbound_clear(ENDPOINT_RESPONDENT, |packet| {
-            if request.is_none() {
-                request = Some((packet.hook_id, packet.procedure_id, packet.data.clone()));
-            }
-        });
-
-        let Some((hook_id, procedure_id, data)) = request else {
-            return;
-        };
-
-        let frames = self.frames_for_request(procedure_id, &data);
-
-        self.report.borrow_mut().requests_seen.push(procedure_id);
-        if !frames.is_empty() {
-            self.report.borrow_mut().streams_started += 1;
-            self.active_stream = Some(ResponseStream::new(hook_id, frames));
-        }
-    }
-
-    /// Builds response frames for one request procedure.
-    fn frames_for_request(&self, procedure_id: u32, data: &[u8]) -> Vec<super::rpc::OutgoingFrame> {
-        match procedure_id {
-            PROC_GET_ROOT_HASH => vec![root_hash_frame(self.remote.root_hash())],
-            PROC_GET_CHILD_HASHES => {
-                let node_id = decode_u32(data).expect("child hash request node id");
-                self.remote
-                    .child_summaries(node_id)
-                    .into_iter()
-                    .map(child_hash_frame)
-                    .collect()
-            }
-            PROC_GET_BLOCK_STREAM => {
-                let block_id = decode_u32(data).expect("block stream request block id");
-                let chunks = self.remote.block_chunks(block_id);
-                let total = chunks.len() as u32;
-                chunks
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, data)| {
-                        block_chunk_frame(BlockChunk {
-                            block_id,
-                            index: index as u32,
-                            total,
-                            data,
-                        })
-                    })
-                    .collect()
-            }
-            _ => Vec::new(),
-        }
-    }
-
-    /// Sends at most one response frame per update loop.
-    fn send_one_response_frame(&mut self, endpoint: &mut Endpoint) {
-        let Some(stream) = self.active_stream.as_mut() else {
-            return;
-        };
-
-        if stream.is_empty() {
-            self.active_stream = None;
-            return;
-        }
-
-        let packet = stream.next_packet().expect("active stream frame");
-        if endpoint.add_outbound(packet).is_err() {
-            return;
-        }
-
-        self.report.borrow_mut().frames_sent += 1;
-        stream.advance();
-
-        if stream.is_complete() {
-            self.report.borrow_mut().streams_completed += 1;
-            self.active_stream = None;
-        }
     }
 }
