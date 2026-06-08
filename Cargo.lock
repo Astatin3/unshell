@@ -1901,6 +1901,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unshell-cli"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "unshell",
+]
+
+[[package]]
 name = "ush-obfuscate"
 version = "0.1.0"
 dependencies = [

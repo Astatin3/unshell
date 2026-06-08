@@ -1,5 +1,8 @@
 use crate::protocol::{Endpoint, Packet, ProcedureOut};
 
+#[cfg(feature = "interface_ratatui")]
+use crate::interface::InterfaceContext;
+
 /// Contract implemented by one generated one-packet procedure handler.
 ///
 /// Procedures are for stateless or short-lived operations such as ping, capabilities,
@@ -12,10 +15,18 @@ pub trait Procedure<L> {
     /// Handles one packet and optionally queues response packets in `out`.
     fn handle(leaf: &mut L, endpoint: &mut Endpoint, packet: Packet, out: &mut ProcedureOut);
 
+    /// Renders procedure-owned interface state inside its leaf UI.
+    ///
+    /// Procedures are usually short-lived, so the first interface pass does not impose
+    /// a procedure history format. Leaf authors can still use the context database
+    /// directly from custom leaf code, and generated procedure helpers can grow typed
+    /// serialization later without changing the leaf-level interface method.
     #[cfg(feature = "interface_ratatui")]
-    fn render_ratatui(_: &L, _: &mut ratatui::Frame<'_>, _: ratatui::layout::Rect) {
-        // TODO(interface-ratatui): pass a compact Ratatui render context here once
-        // the replacement interface shape is introduced. One-shot procedure UI
-        // should expose static capability/state details, not stored packet events.
+    fn render_interface_ratatui(
+        _: &L,
+        _: &mut InterfaceContext<'_>,
+        _: &mut ratatui::Frame<'_>,
+        _: ratatui::layout::Rect,
+    ) {
     }
 }

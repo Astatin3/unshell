@@ -6,7 +6,8 @@
 //! ## Architecture
 //!
 //! - [`protocol`] - Wire types, framing, stateless validation, and routing/runtime.
-//! - [`interface`] - Placeholder extension points for optional frontend adapters.
+//! - [`interface`] - Namespaced blob storage and frontend services for optional
+//!   operator interfaces.
 //!
 //! The library requires `alloc` for path and payload management.
 

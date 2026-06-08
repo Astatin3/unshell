@@ -6,11 +6,11 @@ use crate::{constants::PROC_PING, state::FakePtyState};
 ///
 /// The fake PTY leaf is primarily session-oriented, so this deliberately small
 /// procedure gives tests a non-session packet family. It also gives the future
-/// Ratatui interface a stable procedure branch to render without reintroducing the
-/// removed global interface view store.
+/// Ratatui interface a stable procedure branch to render if procedure-owned blobs are
+/// added later without reintroducing the removed global interface view store.
 ///
-/// TODO(interface-ratatui): add a `Procedure::render_ratatui` implementation when
-/// the replacement render context is introduced.
+/// TODO(interface-ratatui): add `Procedure::render_interface_ratatui` only after a
+/// real operator view needs procedure state in addition to serialized sessions.
 pub(crate) struct PingProcedure;
 
 impl Procedure<FakePtyState> for PingProcedure {

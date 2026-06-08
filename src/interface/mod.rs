@@ -1,11 +1,21 @@
-//! Interface extension points for optional operator-facing frontends.
+//! Interface services shared by optional operator-facing frontends.
 //!
-//! The previous interface layer mixed packet tracing, session/procedure view storage,
-//! and rendering state into one global store. That design has been removed so leaves
-//! can expose backend-specific rendering directly from their own state, matching the
-//! rest of the protocol's leaf/session/procedure ownership model.
+//! This module deliberately exposes storage as a tiny namespaced blob database. The
+//! database does not know about packets, audit events, sessions, procedures, or UI
+//! widgets. Generated and handwritten leaves own that meaning by serializing their
+//! own state into bytes and deserializing those bytes when a frontend asks to display
+//! historical work.
 
-// TODO(interface-ratatui): add the small Ratatui render context that should be passed
-// to `Leaf::render_ratatui`, `Session::render_ratatui`, and
-// `Procedure::render_ratatui`. It should describe the render target, not own packet
-// history or generated runtime state.
+mod context;
+mod database;
+mod key;
+
+#[cfg(feature = "interface_ratatui")]
+mod ratatui;
+
+pub use context::InterfaceContext;
+pub use database::InterfaceDatabase;
+pub use key::{hook_key, procedure_namespace, session_namespace, static_key};
+
+#[cfg(feature = "interface_ratatui")]
+pub use ratatui::{RatatuiInterface, RatatuiLeafAreas};

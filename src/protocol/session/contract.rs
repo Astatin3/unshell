@@ -1,4 +1,9 @@
+use alloc::vec::Vec;
+
 use crate::protocol::{Endpoint, Packet, PacketQueue, SessionInitError, SessionStatus};
+
+#[cfg(feature = "interface_ratatui")]
+use crate::interface::InterfaceContext;
 
 /// Contract implemented by one hook-backed generated session family.
 ///
@@ -57,10 +62,36 @@ pub trait Session<L>: Sized {
         endpoint: &mut Endpoint,
     ) -> SessionStatus;
 
+    /// Serializes this session for interface history storage.
+    ///
+    /// Returning `false` means the session does not expose historical state. Returning
+    /// `true` means `out` contains a complete session-owned representation that
+    /// [`Self::deserialize_interface_state`] can later rebuild. The generated leaf
+    /// stores these bytes as opaque database blobs; no packet log or record schema is
+    /// created around them.
+    fn serialize_interface_state(&self, _: &mut Vec<u8>) -> bool {
+        false
+    }
+
+    /// Rebuilds a session object from bytes previously written by this session type.
+    ///
+    /// This keeps active and historical UI unified: generated leaves can deserialize a
+    /// stored session blob and pass it to the same Ratatui helper used for live state.
+    fn deserialize_interface_state(_: &[u8]) -> Option<Self> {
+        None
+    }
+
+    /// Renders one active or historical session inside its owning leaf UI.
+    ///
+    /// This is not a public lifecycle method. It is a typed helper that generated or
+    /// handwritten leaves may call from their single leaf-level interface pass.
     #[cfg(feature = "interface_ratatui")]
-    fn render_ratatui(_: &L, _: &Self, _: &mut ratatui::Frame<'_>, _: ratatui::layout::Rect) {
-        // TODO(interface-ratatui): pass a compact Ratatui render context here once
-        // the replacement interface shape is introduced. Session UI should render
-        // from the live session state rather than from removed global view records.
+    fn render_interface_ratatui(
+        _: &L,
+        _: &Self,
+        _: &mut InterfaceContext<'_>,
+        _: &mut ratatui::Frame<'_>,
+        _: ratatui::layout::Rect,
+    ) {
     }
 }

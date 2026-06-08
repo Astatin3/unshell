@@ -162,6 +162,116 @@ macro_rules! unshell_leaf {
                 let _ = packet;
             }
 
+            #[cfg(feature = "interface_ratatui")]
+            fn __unshell_write_interface_sessions(
+                &self,
+                ctx: &mut $crate::interface::InterfaceContext<'_>,
+            ) {
+                let leaf_id = $id;
+
+                $(
+                    for entry in &self.$session_field.entries {
+                        let mut bytes = $crate::alloc::vec::Vec::new();
+                        let wrote_state =
+                            <$Session as $crate::protocol::Session<$State>>::serialize_interface_state(
+                                &entry.state,
+                                &mut bytes,
+                            );
+
+                        if wrote_state {
+                            let namespace = $crate::interface::session_namespace(
+                                leaf_id,
+                                <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID,
+                            );
+                            let key = $crate::interface::hook_key(entry.hook_id);
+
+                            ctx.database.put(&namespace, &key, &bytes);
+                        }
+                    }
+                )*
+            }
+
+            #[cfg(feature = "interface_ratatui")]
+            fn __unshell_historical_session_count(
+                &self,
+                ctx: &mut $crate::interface::InterfaceContext<'_>,
+            ) -> usize {
+                let leaf_id = $id;
+                let mut count = 0usize;
+
+                $(
+                    let namespace = $crate::interface::session_namespace(
+                        leaf_id,
+                        <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID,
+                    );
+
+                    for (_, bytes) in ctx.database.scan(&namespace) {
+                        if <$Session as $crate::protocol::Session<$State>>::deserialize_interface_state(
+                            &bytes,
+                        )
+                        .is_some()
+                        {
+                            count += 1;
+                        }
+                    }
+                )*
+
+                count
+            }
+
+            #[cfg(feature = "interface_ratatui")]
+            fn __unshell_render_active_interface_sessions(
+                &self,
+                ctx: &mut $crate::interface::InterfaceContext<'_>,
+                frame: &mut $crate::protocol::ratatui::Frame<'_>,
+                area: $crate::protocol::ratatui::layout::Rect,
+            ) {
+                $(
+                    for entry in &self.$session_field.entries {
+                        <$Session as $crate::protocol::Session<$State>>::render_interface_ratatui(
+                            &self.state,
+                            &entry.state,
+                            ctx,
+                            frame,
+                            area,
+                        );
+                    }
+                )*
+            }
+
+            #[cfg(feature = "interface_ratatui")]
+            fn __unshell_render_historical_interface_sessions(
+                &self,
+                ctx: &mut $crate::interface::InterfaceContext<'_>,
+                frame: &mut $crate::protocol::ratatui::Frame<'_>,
+                area: $crate::protocol::ratatui::layout::Rect,
+            ) {
+                let leaf_id = $id;
+
+                $(
+                    let namespace = $crate::interface::session_namespace(
+                        leaf_id,
+                        <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID,
+                    );
+
+                    for (_, bytes) in ctx.database.scan(&namespace) {
+                        if let Some(session) =
+                            <$Session as $crate::protocol::Session<$State>>::deserialize_interface_state(
+                                &bytes,
+                            )
+                        {
+                            <$Session as $crate::protocol::Session<$State>>::render_interface_ratatui(
+                                &self.state,
+                                &session,
+                                ctx,
+                                frame,
+                                area,
+                            );
+                        }
+                    }
+                )*
+            }
+
         }
 
         impl $crate::protocol::Leaf for $Leaf {
@@ -180,40 +290,36 @@ macro_rules! unshell_leaf {
             }
 
             #[cfg(feature = "interface_ratatui")]
-            fn render_ratatui(
-                &self,
+            fn update_interface_ratatui(
+                &mut self,
+                endpoint: &mut $crate::protocol::Endpoint,
+                ctx: &mut $crate::interface::InterfaceContext<'_>,
                 frame: &mut $crate::protocol::ratatui::Frame<'_>,
                 area: $crate::protocol::ratatui::layout::Rect,
             ) {
-                let leaf_id = $id;
-                let _ = (&frame, &area, leaf_id);
+                self.__unshell_update_inner(endpoint);
+                self.__unshell_write_interface_sessions(ctx);
 
-                // TODO(interface-ratatui): split `area` between generated session and
-                // procedure renderers once the new Ratatui interface context exists.
-                // The generated wrapper should only orchestrate child render calls;
-                // packet/event history belongs in explicit leaf state if a UI needs it.
+                let historical_session_count = self.__unshell_historical_session_count(ctx);
+                let meta = $meta;
+                let areas = ctx.ratatui.render_leaf_chrome(
+                    &meta,
+                    self.active_session_count(),
+                    historical_session_count,
+                    frame,
+                    area,
+                );
 
-                $(
-                    for entry in &self.$session_field.entries {
-                        <$Session as $crate::protocol::Session<$State>>::render_ratatui(
-                            &self.state,
-                            &entry.state,
-                            frame,
-                            area,
-                        );
-                    }
-                )*
-
-                $(
-                    {
-                        let _ = stringify!($procedure_field);
-                        <$Procedure as $crate::protocol::Procedure<$State>>::render_ratatui(
-                            &self.state,
-                            frame,
-                            area,
-                        );
-                    }
-                )*
+                self.__unshell_render_active_interface_sessions(
+                    ctx,
+                    frame,
+                    areas.active_sessions,
+                );
+                self.__unshell_render_historical_interface_sessions(
+                    ctx,
+                    frame,
+                    areas.historical_sessions,
+                );
             }
         }
     };

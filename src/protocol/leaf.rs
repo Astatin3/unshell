@@ -3,6 +3,9 @@ use crate::protocol::Endpoint;
 #[cfg(feature = "interface")]
 use crate::protocol::leaf_meta::LeafMeta;
 
+#[cfg(feature = "interface_ratatui")]
+use crate::interface::InterfaceContext;
+
 /// Application extension point hosted by an [`Endpoint`].
 ///
 /// A leaf owns product-specific state and reacts to packets that endpoint routing has
@@ -23,11 +26,24 @@ pub trait Leaf {
         LeafMeta::anonymous()
     }
 
+    /// Runs one Ratatui interface pass for this leaf.
+    ///
+    /// This is the only public UI lifecycle method. The default keeps handwritten
+    /// leaves usable by advancing normal protocol state and drawing shared leaf chrome
+    /// with no active or historical sessions. Generated leaves override it to serialize
+    /// their session objects into the context database, load historical session blobs,
+    /// and render through their known session types.
     #[cfg(feature = "interface_ratatui")]
-    fn render_ratatui(&self, _: &mut ratatui::Frame<'_>, _: ratatui::layout::Rect) {
-        // TODO(interface-ratatui): replace this backend-specific stub with a small
-        // render context once the new Ratatui interface API is defined. Rendering
-        // should inspect leaf-owned state directly and must not require a global
-        // packet-flow store.
+    fn update_interface_ratatui(
+        &mut self,
+        endpoint: &mut Endpoint,
+        ctx: &mut InterfaceContext<'_>,
+        frame: &mut ratatui::Frame<'_>,
+        area: ratatui::layout::Rect,
+    ) {
+        self.update(endpoint);
+
+        let meta = self.get_meta();
+        let _ = ctx.ratatui.render_leaf_chrome(&meta, 0, 0, frame, area);
     }
 }

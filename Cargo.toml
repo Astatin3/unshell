@@ -4,6 +4,7 @@ cargo-features = ["trim-paths", "panic-immediate-abort"]
 members = [
     "ush-obfuscate",
     "base62",
+    "unshell-cli",
 
     "unshell-leaves/leaf-pty", "unshell-leaves/leaf-shell", "examples/endpoint_test", "unshell-leaves/tcp_simple",
 ]
@@ -30,6 +31,7 @@ const-random      = "0.1.18"
 ratatui = "0.30.0"
 
 unshell          = { path = "." }
+unshell-cli      = { path = "./unshell-cli" }
 # unshell-protocol = { path = "./unshell-protocol" }
 
 # ush-obfuscate = { path = "./ush-obfuscate" }

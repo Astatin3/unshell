@@ -77,7 +77,7 @@ The wrapper implements:
 - `Leaf::get_id()`
 - `Leaf::update()`
 - feature-gated `Leaf::get_meta()`
-- feature-gated `Leaf::render_ratatui()`
+- feature-gated `Leaf::update_interface_ratatui()`
 
 ## Runtime Helpers
 
@@ -100,8 +100,8 @@ session/procedure render buckets, timestamps, and retry ownership into one globa
 object, which made the frontend path more complicated than the leaf state it was
 trying to expose.
 
-The replacement direction is direct backend-specific rendering from the state that
-already owns the behavior:
+The replacement direction is one backend-specific leaf interface pass from the state
+that already owns the behavior:
 
 ```text
 Leaf wrapper
@@ -110,36 +110,40 @@ Leaf wrapper
   generated procedure families
         |
         v
-feature-gated render method for the selected frontend backend
+feature-gated update/render method for the selected frontend backend
 ```
 
-TODO(interface-ratatui): add a small Ratatui render context under `src/interface`
-and pass it through `Leaf::render_ratatui`, `Session::render_ratatui`, and
-`Procedure::render_ratatui`. The context should describe render target metadata; it
-must not become another packet-flow database.
+The interface context is deliberately a service bundle. It exposes a namespaced blob
+database and, for Ratatui, a renderer service for shared leaf chrome. The database
+stores serialized session objects as opaque bytes. It does not define transport logs,
+audit event enums, or any record schema; leaves and their macros own the meaning of
+every blob they write.
 
 ## Ratatui Rendering
 
 Ratatui rendering is a plain feature-gated pass:
 
 ```rust
-leaf.render_ratatui(frame, area);
+leaf.update_interface_ratatui(endpoint, context, frame, area);
 ```
 
 Session rendering is an associated function on the stored session state type:
 
 ```rust
-fn render_ratatui(
+fn render_interface_ratatui(
     leaf: &LeafState,
     session: &Self,
+    context: &mut InterfaceContext<'_>,
     frame: &mut ratatui::Frame<'_>,
     area: ratatui::layout::Rect,
 ) {
 }
 ```
 
-Procedure rendering is also associated and renders from leaf state. The current
-signature is intentionally minimal until the replacement Ratatui context is added.
+Procedure rendering is also associated and renders from leaf state. The first
+generated implementation persists sessions only because they are the long-lived state
+operators need to inspect historically; procedures can still use the database directly
+from handwritten leaf code.
 
 ## Why This Replaced The Proc Macro
 
@@ -152,7 +156,7 @@ The new design is intentionally boring:
 ```text
 macro template -> named fields and loops
 runtime helpers -> behavior
-feature-gated render methods -> UI adapters
+feature-gated leaf interface pass -> UI adapters and serialized state blobs
 ```
 
 That is the whole game.
