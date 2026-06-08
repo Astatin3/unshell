@@ -5,7 +5,7 @@ use unshell::interface::InterfaceDatabase;
 /// In-memory implementation of the core interface blob store.
 ///
 /// This database is intentionally small and deterministic. It is suitable for tests,
-/// demos, and single-process CLI sessions where serialized leaf state only needs to
+/// demos, and single-process TUI sessions where serialized leaf state only needs to
 /// live for the lifetime of the operator tool. Production audit tooling can implement
 /// [`InterfaceDatabase`] with a durable store while preserving the same opaque
 /// namespace/key/value contract.
@@ -22,7 +22,7 @@ impl MemoryInterfaceDatabase {
 
     /// Returns the number of stored blobs across all namespaces.
     ///
-    /// This is a CLI/testing convenience rather than part of the core trait because
+    /// This is a TUI/testing convenience rather than part of the core trait because
     /// leaves should only rely on namespace scans, not global database inspection.
     pub fn len(&self) -> usize {
         self.values.len()

@@ -20,7 +20,7 @@ pub struct InterfaceContext<'a> {
     /// Ratatui renderer used by generated leaves for the shared leaf chrome.
     ///
     /// The concrete implementation lives outside the core protocol crate. Keeping it
-    /// as a trait object lets `unshell-cli` provide terminal UI behavior without
+    /// as a trait object lets `unshell-tui` provide terminal UI behavior without
     /// making the storage format or generated leaf API depend on a specific renderer.
     #[cfg(feature = "interface_ratatui")]
     pub ratatui: &'a mut dyn crate::interface::RatatuiInterface,

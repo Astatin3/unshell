@@ -15,7 +15,7 @@ pub struct RatatuiLeafAreas {
 /// Ratatui rendering service used by the leaf-level interface pass.
 ///
 /// The trait lives in the core crate only so generated leaves can call it without
-/// depending on a CLI crate. Concrete UI behavior belongs in `unshell-cli`, which can
+/// depending on a TUI crate. Concrete UI behavior belongs in `unshell-tui`, which can
 /// implement themes, widgets, focus, and operator input while leaving protocol leaves
 /// free of terminal-specific layout code.
 pub trait RatatuiInterface {

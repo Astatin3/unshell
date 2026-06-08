@@ -13,7 +13,7 @@ use unshell::{
 /// Visual settings used by [`DefaultRatatuiInterface`].
 ///
 /// The core interface accepts a renderer trait object rather than a theme object, so
-/// theming belongs here in the CLI layer. Callers can either customize this simple
+/// theming belongs here in the TUI layer. Callers can either customize this simple
 /// value or replace the whole renderer with their own [`RatatuiInterface`]
 /// implementation.
 #[derive(Debug, Clone, Copy)]
@@ -43,7 +43,7 @@ impl Default for InterfaceTheme {
 /// It draws a compact header with leaf metadata and session counts, then reserves two
 /// child areas: one for active sessions and one for historical sessions loaded from the
 /// interface database. Typed session widgets are still rendered by each leaf/session;
-/// this struct only owns shared CLI chrome and layout policy.
+/// this struct only owns shared TUI chrome and layout policy.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultRatatuiInterface {
     theme: InterfaceTheme,

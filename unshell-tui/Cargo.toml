@@ -1,10 +1,11 @@
 [package]
-name = "unshell-cli"
+name = "unshell-tui"
 version.workspace = true
 edition.workspace = true
-description = "Ratatui interface helpers for UnShell"
+description = "Ratatui terminal interface for UnShell"
 
 [dependencies]
+crossterm.workspace = true
 ratatui.workspace = true
 unshell = { workspace = true, features = ["interface_ratatui"] }
 

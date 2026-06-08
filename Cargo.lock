@@ -1901,9 +1901,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "unshell-cli"
+name = "unshell-tui"
 version = "0.1.0"
 dependencies = [
+ "crossterm",
  "ratatui",
  "unshell",
 ]
