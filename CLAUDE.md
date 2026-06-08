@@ -31,6 +31,7 @@ Key routing rules:
 - Commit at every real milestone when implementation is allowed and the user has not forbidden commits. Create a local git commit each time a meaningful milestone is reached. Commit messages must be accurate, specific, and reflect the actual change.
 - Explain unintuitive choices. Whenever an implementation, algorithm, or control flow could appear backwards, surprising, or overly indirect, add a short rationale comment or documentation note explaining why it is correct.
 - Track work with TODOs. Use a task list throughout the work so progress, remaining steps, and milestone boundaries stay explicit.
+- Maintain ignored project learnings in `learnings/`. During every non-trivial task, read relevant existing markdown files in `learnings/` before making broad changes, then update or create concise markdown records when you discover durable facts, architectural decisions, verified commands, pitfalls, or user preferences. Prefer updating an existing record over creating a duplicate. Keep these records factual and specific: include file paths, feature names, command results, decisions, and rationale. Because `learnings/` is intentionally gitignored, do not stage or commit those files unless the user explicitly asks.
 - ALL Sub-agents must be told to read this file before continuing.
 
 ## Comments
@@ -117,5 +118,6 @@ A task is not complete unless:
 - code structure is readable and appropriately split
 - documentation, comments, and examples were added where needed
 - unintuitive logic has rationale
+- relevant `learnings/` markdown files were reviewed and updated with durable new facts
 - progress was tracked
 - the milestone was committed locally if implementation was allowed
