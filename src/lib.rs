@@ -6,7 +6,7 @@
 //! ## Architecture
 //!
 //! - [`protocol`] - Wire types, framing, stateless validation, and routing/runtime.
-//! - [`interface`] - Typed control surfaces used by UI adapters and control leaves.
+//! - [`interface`] - Placeholder extension points for optional frontend adapters.
 //!
 //! The library requires `alloc` for path and payload management.
 

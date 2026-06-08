@@ -121,59 +121,6 @@ macro_rules! unshell_leaf {
                 );
             }
 
-            #[cfg(feature = "interface")]
-            fn __unshell_update_interface_inner(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-                interface: &mut $crate::interface::InterfaceStore,
-            ) {
-                let leaf_id = $id;
-                let _ = leaf_id;
-
-                $crate::unshell_leaf!(
-                    @flush_outbox_interface
-                    endpoint,
-                    leaf_id,
-                    &mut self.outbox,
-                    interface;
-                    $( $procedure_field : $Procedure ),*
-                );
-
-                let Some(local_id) = endpoint.path.last().copied() else {
-                    return;
-                };
-
-                let mut packets = $crate::alloc::vec::Vec::new();
-                endpoint.take_inbound_matching(
-                    local_id,
-                    Self::__unshell_packet_is_owned,
-                    |packet| packets.push(packet),
-                );
-
-                for packet in packets {
-                    self.__unshell_dispatch_packet_interface(endpoint, packet, interface);
-                }
-
-                $(
-                    $crate::protocol::update_session_family_interface::<$State, $Session>(
-                        endpoint,
-                        leaf_id,
-                        &mut self.state,
-                        &mut self.$session_field,
-                        interface,
-                    );
-                )*
-
-                $crate::unshell_leaf!(
-                    @flush_outbox_interface
-                    endpoint,
-                    leaf_id,
-                    &mut self.outbox,
-                    interface;
-                    $( $procedure_field : $Procedure ),*
-                );
-            }
-
             fn __unshell_dispatch_packet(
                 &mut self,
                 endpoint: &mut $crate::protocol::Endpoint,
@@ -215,53 +162,6 @@ macro_rules! unshell_leaf {
                 let _ = packet;
             }
 
-            #[cfg(feature = "interface")]
-            fn __unshell_dispatch_packet_interface(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-                packet: $crate::protocol::Packet,
-                interface: &mut $crate::interface::InterfaceStore,
-            ) {
-                let leaf_id = $id;
-                let _ = leaf_id;
-
-                $(
-                    if packet.procedure_id
-                        == <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID
-                    {
-                        $crate::protocol::dispatch_session_interface::<$State, $Session>(
-                            endpoint,
-                            leaf_id,
-                            &mut self.state,
-                            &mut self.$session_field,
-                            packet,
-                            interface,
-                        );
-                        return;
-                    }
-                )*
-
-                $(
-                    if packet.procedure_id
-                        == <$Procedure as $crate::protocol::Procedure<$State>>::PROCEDURE_ID
-                    {
-                        let _ = stringify!($procedure_field);
-                        $crate::protocol::dispatch_procedure_interface::<$State, $Procedure>(
-                            leaf_id,
-                            &mut self.state,
-                            endpoint,
-                            packet,
-                            &mut self.outbox,
-                            interface,
-                        );
-                        return;
-                    }
-                )*
-
-                let _ = endpoint;
-                let _ = packet;
-                let _ = interface;
-            }
         }
 
         impl $crate::protocol::Leaf for $Leaf {
@@ -275,41 +175,29 @@ macro_rules! unshell_leaf {
             }
 
             #[cfg(feature = "interface")]
-            #[inline(never)]
-            fn update_interface(
-                &mut self,
-                endpoint: &mut $crate::protocol::Endpoint,
-                interface: &mut $crate::interface::InterfaceStore,
-            ) {
-                self.__unshell_update_interface_inner(endpoint, interface);
-            }
-
-            #[cfg(feature = "interface")]
             fn get_meta(&self) -> $crate::protocol::LeafMeta {
                 $meta
             }
 
             #[cfg(feature = "interface_ratatui")]
             fn render_ratatui(
-                &mut self,
+                &self,
                 frame: &mut $crate::protocol::ratatui::Frame<'_>,
                 area: $crate::protocol::ratatui::layout::Rect,
-                interface: &mut $crate::interface::InterfaceStore,
             ) {
                 let leaf_id = $id;
-                let _ = (&frame, &area, &interface, leaf_id);
+                let _ = (&frame, &area, leaf_id);
+
+                // TODO(interface-ratatui): split `area` between generated session and
+                // procedure renderers once the new Ratatui interface context exists.
+                // The generated wrapper should only orchestrate child render calls;
+                // packet/event history belongs in explicit leaf state if a UI needs it.
 
                 $(
-                    for entry in &mut self.$session_field.entries {
-                        let view = interface.session_view_mut(
-                            leaf_id,
-                            <$Session as $crate::protocol::Session<$State>>::PROCEDURE_ID,
-                            entry.hook_id,
-                        );
+                    for entry in &self.$session_field.entries {
                         <$Session as $crate::protocol::Session<$State>>::render_ratatui(
                             &self.state,
                             &entry.state,
-                            view,
                             frame,
                             area,
                         );
@@ -319,13 +207,8 @@ macro_rules! unshell_leaf {
                 $(
                     {
                         let _ = stringify!($procedure_field);
-                        let view = interface.procedure_view_mut(
-                            leaf_id,
-                            <$Procedure as $crate::protocol::Procedure<$State>>::PROCEDURE_ID,
-                        );
                         <$Procedure as $crate::protocol::Procedure<$State>>::render_ratatui(
                             &self.state,
-                            view,
                             frame,
                             area,
                         );
@@ -374,18 +257,6 @@ macro_rules! unshell_leaf {
         )*
 
         $crate::protocol::flush_leaf_outbox($endpoint, $outbox);
-    }};
-
-    // Flush queued procedure responses with interface logging when procedures exist.
-    (@flush_outbox_interface $endpoint:expr, $leaf_id:expr, $outbox:expr, $interface:expr;) => {};
-
-    (@flush_outbox_interface $endpoint:expr, $leaf_id:expr, $outbox:expr, $interface:expr; $first_field:ident : $FirstProcedure:ty $(, $procedure_field:ident : $Procedure:ty )* $(,)?) => {{
-        let _ = stringify!($first_field);
-        $(
-            let _ = stringify!($procedure_field);
-        )*
-
-        $crate::protocol::flush_leaf_outbox_interface($endpoint, $leaf_id, $outbox, $interface);
     }};
 
 }

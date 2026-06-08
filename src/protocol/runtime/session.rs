@@ -5,9 +5,9 @@ use crate::protocol::{
 /// Dispatches one packet into a generated session family.
 ///
 /// The macro picks `S` and the family field. This helper owns the boring details:
-/// find the hook, initialize missing sessions, and route rejected responses. The
-/// interface build uses the sibling logging helper so the smallest endpoint binary
-/// does not mention the interface logging types on its hot update path.
+/// find the hook, initialize missing sessions, and route rejected responses. Keeping
+/// this path frontend-free ensures optional UI backends render from explicit leaf or
+/// session state instead of from hidden routing side effects.
 pub fn dispatch_session<L, S>(
     endpoint: &mut Endpoint,
     leaf: &mut L,

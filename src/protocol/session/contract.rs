@@ -1,8 +1,5 @@
 use crate::protocol::{Endpoint, Packet, PacketQueue, SessionInitError, SessionStatus};
 
-#[cfg(feature = "interface_ratatui")]
-use crate::interface::SessionView;
-
 /// Contract implemented by one hook-backed generated session family.
 ///
 /// A session family maps one outer `procedure_id` to many live hook instances. The
@@ -61,12 +58,9 @@ pub trait Session<L>: Sized {
     ) -> SessionStatus;
 
     #[cfg(feature = "interface_ratatui")]
-    fn render_ratatui(
-        _: &L,
-        _: &Self,
-        _: &mut SessionView,
-        _: &mut ratatui::Frame<'_>,
-        _: ratatui::layout::Rect,
-    ) {
+    fn render_ratatui(_: &L, _: &Self, _: &mut ratatui::Frame<'_>, _: ratatui::layout::Rect) {
+        // TODO(interface-ratatui): pass a compact Ratatui render context here once
+        // the replacement interface shape is introduced. Session UI should render
+        // from the live session state rather than from removed global view records.
     }
 }

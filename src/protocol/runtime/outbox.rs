@@ -1,7 +1,5 @@
 use alloc::collections::VecDeque;
 
-#[cfg(feature = "interface")]
-use crate::interface::InterfaceTarget;
 use crate::protocol::{Packet, PacketQueue};
 
 /// Retry queue shared by generated leaves.
@@ -15,14 +13,12 @@ pub struct LeafOutbox {
 
 /// One packet retained by a leaf-level retry queue.
 ///
-/// Procedure responses from different generated branches share one queue. Storing the
-/// owner beside the packet keeps route logging precise without exposing another public
-/// queue type.
+/// Procedure responses from different generated branches share one queue. The queue
+/// deliberately stores only packets; frontend rendering should derive from leaf-owned
+/// state rather than from retry internals.
 #[derive(Clone)]
 pub(super) struct LeafOutboxEntry {
     pub(super) packet: Packet,
-    #[cfg(feature = "interface")]
-    pub(super) target: Option<InterfaceTarget>,
 }
 
 impl LeafOutbox {
@@ -35,11 +31,7 @@ impl LeafOutbox {
 
     /// Adds one packet to the retry queue.
     pub fn push(&mut self, packet: Packet) {
-        self.packets.push_back(LeafOutboxEntry {
-            packet,
-            #[cfg(feature = "interface")]
-            target: None,
-        });
+        self.packets.push_back(LeafOutboxEntry { packet });
     }
 
     /// Adds all packets from `packets` in FIFO order.
@@ -57,23 +49,6 @@ impl LeafOutbox {
     /// Returns true when the queue has no pending packets.
     pub fn is_empty(&self) -> bool {
         self.packets.is_empty()
-    }
-
-    /// Adds one packet with a runtime-known interface target.
-    #[cfg(feature = "interface")]
-    pub(crate) fn push_for_target(&mut self, packet: Packet, target: InterfaceTarget) {
-        self.packets.push_back(LeafOutboxEntry {
-            packet,
-            target: Some(target),
-        });
-    }
-
-    /// Adds all packets with the same runtime-known interface target.
-    #[cfg(feature = "interface")]
-    pub(crate) fn extend_for_target(&mut self, packets: PacketQueue, target: InterfaceTarget) {
-        for packet in packets {
-            self.push_for_target(packet, target);
-        }
     }
 }
 

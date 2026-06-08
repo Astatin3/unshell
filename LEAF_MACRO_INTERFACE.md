@@ -76,7 +76,6 @@ The wrapper implements:
 - `pending_packet_count()`
 - `Leaf::get_id()`
 - `Leaf::update()`
-- feature-gated `Leaf::update_interface()`
 - feature-gated `Leaf::get_meta()`
 - feature-gated `Leaf::render_ratatui()`
 
@@ -90,67 +89,41 @@ The macro delegates behavior to small helpers:
 - `flush_leaf_outbox`
 
 This keeps the macro readable. The helper functions own the mechanics of session
-lookup, initialization, procedure response flushing, and optional interface logging.
-Sessions route their own output immediately through `Endpoint` helpers to avoid a
-per-session output context and retry queue in small implant builds.
+lookup, initialization, and procedure response flushing. Sessions route their own
+output immediately through `Endpoint` helpers to avoid a per-session output context
+and retry queue in small implant builds.
 
-## Interface Store
+## Interface Direction
 
-`InterfaceStore` is caller-owned. It records packet flow and timing without putting
-UI state inside `Endpoint` or the leaf wrapper.
+The old caller-owned interface store has been removed. It mixed event tracing,
+session/procedure render buckets, timestamps, and retry ownership into one global
+object, which made the frontend path more complicated than the leaf state it was
+trying to expose.
 
-```text
-InterfaceStore
-  events: Vec<InterfaceEvent>
-  sessions: BTreeMap<SessionKey, SessionView>
-  procedures: BTreeMap<ProcedureKey, ProcedureView>
-```
-
-Generated leaves receive an optional mutable store during `update_interface`. The
-helpers create and update the appropriate session/procedure views when packets are
-dispatched, sessions update, and queued procedure outbound routes succeed or fail.
-
-Internally, interface events are target-driven:
+The replacement direction is direct backend-specific rendering from the state that
+already owns the behavior:
 
 ```text
-generated runtime
-  knows packet owner
+Leaf wrapper
+  leaf state
+  generated session families
+  generated procedure families
         |
         v
-InterfaceTarget::Session(SessionKey)
-InterfaceTarget::Procedure(ProcedureKey)
-        |
-        v
-InterfaceStore::record(...)
-  append InterfaceEvent
-  link event index to exactly one view
-  update SessionViewStatus when applicable
+feature-gated render method for the selected frontend backend
 ```
 
-This is deliberately not inferred from `Packet`. A PTY session packet and a one-shot
-procedure packet both have `procedure_id` and `hook_id`, but they should not both
-create session views. The runtime already knows which dispatch branch handled the
-packet, so that answer is carried into the store.
-
-Leaf-level retry queues carry the same owner metadata for procedure responses.
-Session responses bypass this queue and use `Endpoint::send_hook_raw` or
-`Endpoint::send_hook_frame` directly.
-
-Time remains caller-supplied:
-
-```rust
-interface.set_now_ns(Some(now_ns));
-leaf.update_interface(endpoint, &mut interface);
-```
-
-No clock is embedded in the no_std protocol layer.
+TODO(interface-ratatui): add a small Ratatui render context under `src/interface`
+and pass it through `Leaf::render_ratatui`, `Session::render_ratatui`, and
+`Procedure::render_ratatui`. The context should describe render target metadata; it
+must not become another packet-flow database.
 
 ## Ratatui Rendering
 
 Ratatui rendering is a plain feature-gated pass:
 
 ```rust
-leaf.render_ratatui(frame, area, &mut interface);
+leaf.render_ratatui(frame, area);
 ```
 
 Session rendering is an associated function on the stored session state type:
@@ -159,15 +132,14 @@ Session rendering is an associated function on the stored session state type:
 fn render_ratatui(
     leaf: &LeafState,
     session: &Self,
-    view: &mut SessionView,
     frame: &mut ratatui::Frame<'_>,
     area: ratatui::layout::Rect,
 ) {
 }
 ```
 
-Procedure rendering is also associated and renders from leaf state plus the caller
-owned procedure view.
+Procedure rendering is also associated and renders from leaf state. The current
+signature is intentionally minimal until the replacement Ratatui context is added.
 
 ## Why This Replaced The Proc Macro
 
@@ -180,7 +152,7 @@ The new design is intentionally boring:
 ```text
 macro template -> named fields and loops
 runtime helpers -> behavior
-caller InterfaceStore -> UI/log state
+feature-gated render methods -> UI adapters
 ```
 
 That is the whole game.

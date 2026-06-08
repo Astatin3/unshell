@@ -20,13 +20,13 @@ macro_rules! version {
     };
 }
 
-/// Stable interface identifier for the listening TCP bridge leaf.
+/// Stable string identifier for the listening TCP bridge leaf.
 pub const IDENTIFIER_SERVER: &str = concat!("dev.unshell.", version!(), ".tcp_simple.server");
 
 /// Numeric identifier for [`TCPServerLeaf`].
 pub const IDENTIFIER_SERVER_HASH: u32 = hash_str_32(IDENTIFIER_SERVER);
 
-/// Stable interface identifier for the connecting TCP bridge leaf.
+/// Stable string identifier for the connecting TCP bridge leaf.
 pub const IDENTIFIER_CLIENT: &str = concat!("dev.unshell.", version!(), ".tcp_simple.client");
 
 /// Numeric identifier for [`TCPClientLeaf`].
