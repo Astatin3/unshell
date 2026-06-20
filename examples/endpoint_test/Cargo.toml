@@ -10,6 +10,7 @@ include.workspace = true
 [dependencies]
 unshell = { workspace = true }
 leaf-shell = { path = "../../unshell-leaves/leaf-shell" }
+tcp_simple = { path = "../../unshell-leaves/tcp_simple" }
 
 [[bin]]
 name = "endpoint_test"

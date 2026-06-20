@@ -37,7 +37,7 @@ pub fn dispatch_session_interface<L, S>(
         .iter_mut()
         .find(|entry| entry.hook_id == hook_id)
     {
-        entry.inbox.push_back(packet);
+        entry.inbox.push(packet);
 
         interface.record_for(
             target,

@@ -141,7 +141,7 @@ fn request_response_round_trip_over_mock_transport() {
     );
     let response = &Endpoint::route_get(ENDPOINT_A, &endpoint_a.inbound)
         .unwrap()
-        .front()
+        .first()
         .unwrap();
     assert!(response.end_hook);
     assert_eq!(response.data, "ABC123".as_bytes());

@@ -23,7 +23,7 @@ pub fn dispatch_session<L, S>(
         .iter_mut()
         .find(|entry| entry.hook_id == hook_id)
     {
-        entry.inbox.push_back(packet);
+        entry.inbox.push(packet);
         return;
     }
 

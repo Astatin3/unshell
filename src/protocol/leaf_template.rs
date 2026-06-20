@@ -76,6 +76,7 @@ macro_rules! unshell_leaf {
                 )*
             }
 
+            #[inline(never)]
             fn __unshell_update_inner(
                 &mut self,
                 endpoint: &mut $crate::protocol::Endpoint,
@@ -269,7 +270,7 @@ macro_rules! unshell_leaf {
                 $id
             }
 
-            #[inline(never)]
+            #[inline(always)]
             fn update(&mut self, endpoint: &mut $crate::protocol::Endpoint) {
                 self.__unshell_update_inner(endpoint);
             }

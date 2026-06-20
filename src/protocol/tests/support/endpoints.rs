@@ -26,7 +26,7 @@ pub(crate) fn single_outbound_packet(endpoint: &Endpoint, next_hop: u32) -> &Pac
     let queue = Endpoint::route_get(next_hop, &endpoint.outbound)
         .unwrap_or_else(|| panic!("expected one outbound queue for {next_hop}"));
     assert_eq!(queue.len(), 1, "expected exactly one outbound packet");
-    queue.front().unwrap()
+    queue.first().unwrap()
 }
 
 /// Returns the only inbound packet delivered to `local_id`.
@@ -38,5 +38,5 @@ pub(crate) fn single_inbound_packet(endpoint: &Endpoint, local_id: u32) -> &Pack
     let queue = Endpoint::route_get(local_id, &endpoint.inbound)
         .unwrap_or_else(|| panic!("expected one inbound queue for {local_id}"));
     assert_eq!(queue.len(), 1, "expected exactly one inbound packet");
-    queue.front().unwrap()
+    queue.first().unwrap()
 }

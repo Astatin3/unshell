@@ -59,7 +59,8 @@ impl Session<FakePtyState> for PtySessionState {
             session.opened_pending = false;
         }
 
-        while let Some(packet) = incoming.pop_front() {
+        while !incoming.is_empty() {
+            let packet = incoming.remove(0);
             match frame_opcode(&packet) {
                 Some(OP_INPUT) => {
                     let _ = endpoint.send_hook_frame(

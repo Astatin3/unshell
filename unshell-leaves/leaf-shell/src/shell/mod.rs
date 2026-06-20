@@ -74,7 +74,6 @@ impl ShellSession {
     fn spawn(hook_id: HookID) -> Result<Self, SessionInitError> {
         let child = Command::new("/bin/bash")
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
             .spawn()
             .map_err(|_| SessionInitError::rejected())?;
 
@@ -116,7 +115,8 @@ impl Session<ShellState> for ShellSession {
         incoming: &mut PacketQueue,
         _endpoint: &mut Endpoint,
     ) -> SessionStatus {
-        while let Some(packet) = incoming.pop_front() {
+        while !incoming.is_empty() {
+            let packet = incoming.remove(0);
             if packet.end_hook {
                 session.close_stdin();
             }
