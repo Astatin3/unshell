@@ -1,0 +1,35 @@
+cargo-features = ["trim-paths", "panic-immediate-abort"]
+
+[workspace]
+name = "unshell"
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+authors = ["ASTATIN3 (Michael Mikovsky)"]
+
+
+[workspace.dependencies]
+protocol.path = "./protocol"
+
+heapless = "0.9.3"
+rkyv = {version = "0.8.17", features = ["little_endian"]}
+static_init = "1.0.4"
+
+[package]
+name = "libunshell"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+protocol.workspace = true
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "immediate-abort"
+debug = true
+trim-paths="all"
