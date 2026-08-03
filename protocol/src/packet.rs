@@ -16,20 +16,13 @@ pub struct PacketHeader {
     ///
     /// Downwards:
     /// Corresponds to the index out of the path.
-    /// It gets initialized at the depth of the source,
+    /// It gets initialized 0,
     /// incremented every relay
     ///
     /// Upwards:
-    /// This is initiated at the distance between the child and the root.
-    /// Decremented every relay
+    /// This is initiated at the distance between the child and the target.
+    /// Decremented every relay.
     pub depth_number: u8,
-
-    /// Downwards:
-    /// Specifies the index of node ID in the path that is the source
-    ///
-    /// Upwards:
-    /// Not used.
-    pub src_index: u8,
 
     /// Downwards:
     /// The explicit path

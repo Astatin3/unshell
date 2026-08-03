@@ -4,7 +4,7 @@ use crate::{HookID, NodeID, ProcedureID, packet::PacketHeader};
 
 pub struct Router {
     /// This node's ID
-    id: NodeID,
+    pub id: NodeID,
 
     /// The node IDs of all parents in decending order.
     /// The 0th index is the root node, and the last is
@@ -12,7 +12,7 @@ pub struct Router {
     ///
     /// This may be blank if this is the root node,
     /// or a parent hasn't been established yet.
-    this_path: Vec<NodeID>,
+    pub this_path: Vec<NodeID>,
 
     /// Map of registered hooks
     ///
@@ -37,19 +37,37 @@ impl Router {
         self.hooks.contains(hook)
     }
 
-    pub fn recv_downwards<F, G, H>(
+    pub fn recv<F, G, H>(
         &mut self,
-        mut packet: PacketHeader,
+        packet: PacketHeader,
 
         // Called when a packet must be immediately written
         // to some stream
-        mut callback_relay: F,
+        callback_relay: F,
 
         // Called when a packet should be processed
-        mut callback_recv: G,
+        callback_recv: G,
 
         // Called when a packet is malformed,
         // it's packet data should be cleared
+        callback_malformed: H,
+    ) where
+        F: FnMut(PacketHeader),
+        G: FnMut(PacketHeader),
+        H: FnMut(),
+    {
+        if packet.is_downwards() {
+            self.recv_downwards(packet, callback_relay, callback_recv, callback_malformed);
+        } else {
+            self.recv_upwards(packet, callback_relay, callback_recv, callback_malformed);
+        }
+    }
+
+    fn recv_downwards<F, G, H>(
+        &mut self,
+        mut packet: PacketHeader,
+        mut callback_relay: F,
+        mut callback_recv: G,
         mut callback_malformed: H,
     ) where
         F: FnMut(PacketHeader),
@@ -60,17 +78,21 @@ impl Router {
         let path_len = packet.path.len();
         let depth_number = packet.depth_number as usize;
 
-        // The depth number must always match the depth of this endpoint
-        if depth_number != this_depth {
+        // This can never happen
+        if depth_number > this_depth || path_len > this_depth || depth_number > path_len {
             return callback_malformed();
         }
 
-        let upper_node = match packet.path.get(packet.src_index as usize) {
+        // Get source node
+        // depth_number = (src_path_len + hops) - src_index
+        // depth_number = this_depth - src_index
+        // src_index = this_depth - depth_number
+        let upper_node = match packet.path.get(this_depth - depth_number) {
             Some(node) => *node,
-
             None => return callback_malformed(),
         };
 
+        // Get destination node
         let lower_node = match packet.path.last() {
             Some(node) => *node,
             None => return callback_malformed(), // malformed
@@ -84,34 +106,26 @@ impl Router {
             self.check_remove_hook(&hook);
         }
 
-        let last_node = depth_number + 1 == path_len;
+        let last_node = this_depth == path_len - 1;
         let correct_last_node = self.id == lower_node;
 
         if last_node && correct_last_node {
-            callback_recv(packet);
+            return callback_recv(packet);
         } else if !last_node && !correct_last_node {
             // If this overflows it will make the next router just drop the packet
             packet.depth_number = packet.depth_number.saturating_add(1);
 
-            callback_relay(packet);
+            return callback_relay(packet);
         }
 
         callback_malformed();
     }
 
-    pub fn recv_upwards<F, G, H>(
+    fn recv_upwards<F, G, H>(
         &mut self,
         mut packet: PacketHeader,
-
-        // Called when a packet must be immediately written
-        // to some stream
         mut callback_relay: F,
-
-        // Called when a packet should be processed
         mut callback_recv: G,
-
-        // Called when a packet is malformed,
-        // it's packet data should be cleared
         mut callback_malformed: H,
     ) where
         F: FnMut(PacketHeader),
@@ -121,51 +135,49 @@ impl Router {
         let this_depth = self.this_path.len();
         let depth_number = packet.depth_number as usize;
 
-        if depth_number != this_depth {
+        if depth_number > this_depth {
             return callback_malformed();
         }
 
-        let src_node = match packet.path.get(depth_number) {
+        let lower_node = match packet.path.first() {
             Some(node) => *node,
             None => return callback_malformed(),
         };
 
-        match depth_number
-            .checked_sub(1)
-            .and_then(|i| self.this_path.get(i))
-        {
-            Some(dst_node) => {
-                let dst_node = *dst_node;
-                let hook = (src_node, dst_node, packet.hook_id, packet.procedure_id);
+        // If the packet is sent to the root
+        if depth_number == 0 {
+            let hook = (self.id, lower_node, packet.hook_id, packet.procedure_id);
 
-                if !self.hook_exists(&hook) {
-                    return callback_malformed();
-                }
-
-                if packet.is_close() {
-                    self.check_remove_hook(&hook);
-                }
-
-                packet.depth_number -= 1;
-                packet.path.push(self.id);
-
-                callback_relay(packet);
+            if !self.hook_exists(&hook) {
+                return callback_malformed();
             }
 
-            // This packet is sent to the root
-            None => {
-                let hook = (src_node, self.id, packet.hook_id, packet.procedure_id);
-
-                if !self.hook_exists(&hook) {
-                    return callback_malformed();
-                }
-
-                if packet.is_close() {
-                    self.check_remove_hook(&hook);
-                }
-
-                callback_recv(packet)
+            if packet.is_close() {
+                self.check_remove_hook(&hook);
             }
+
+            return callback_recv(packet);
+        } else {
+            // Get upper node position
+            let upper_node = match self.this_path.get(this_depth - depth_number) {
+                Some(dst_node) => *dst_node,
+                None => return callback_malformed(),
+            };
+
+            let hook = (upper_node, lower_node, packet.hook_id, packet.procedure_id);
+
+            if !self.hook_exists(&hook) {
+                return callback_malformed();
+            }
+
+            if packet.is_close() {
+                self.check_remove_hook(&hook);
+            }
+
+            packet.depth_number -= 1;
+            packet.path.push(self.id);
+
+            return callback_relay(packet);
         }
     }
 }
