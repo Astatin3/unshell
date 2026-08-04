@@ -79,7 +79,7 @@ impl Router {
         let depth_number = packet.depth_number as usize;
 
         // This can never happen
-        if depth_number > this_depth || path_len > this_depth || depth_number > path_len {
+        if depth_number > this_depth || path_len <= this_depth || depth_number > path_len {
             return callback_malformed();
         }
 
