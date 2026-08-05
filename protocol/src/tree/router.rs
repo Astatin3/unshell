@@ -1,10 +1,13 @@
 use std::collections::HashSet;
 
-use crate::{HookID, NodeID, ProcedureID, packet::PacketHeader};
+use crate::{
+    api::{HookId, NodeId, ProcedureId, router::Router},
+    tree::packet::TreePacketHeader,
+};
 
-pub struct Router {
+pub struct TreeRouter {
     /// This node's ID
-    pub id: NodeID,
+    pub id: NodeId,
 
     /// The node IDs of all parents in decending order.
     /// The 0th index is the root node, and the last is
@@ -12,7 +15,7 @@ pub struct Router {
     ///
     /// This may be blank if this is the root node,
     /// or a parent hasn't been established yet.
-    pub this_path: Vec<NodeID>,
+    pub this_path: Vec<NodeId>,
 
     /// Map of registered hooks
     ///
@@ -21,57 +24,31 @@ pub struct Router {
     /// 1: lower Node ID
     /// 2: Hook id
     /// 3: Procedure id
-    hooks: HashSet<(NodeID, NodeID, HookID, ProcedureID)>,
+    hooks: HashSet<(NodeId, NodeId, HookId, ProcedureId)>,
 }
 
-impl Router {
-    fn check_create_hook(&mut self, hook: (NodeID, NodeID, HookID, ProcedureID)) -> bool {
+impl TreeRouter {
+    fn check_create_hook(&mut self, hook: (NodeId, NodeId, HookId, ProcedureId)) -> bool {
         self.hooks.insert(hook)
     }
 
-    fn check_remove_hook(&mut self, hook: &(NodeID, NodeID, HookID, ProcedureID)) -> bool {
+    fn check_remove_hook(&mut self, hook: &(NodeId, NodeId, HookId, ProcedureId)) -> bool {
         self.hooks.remove(hook)
     }
 
-    pub fn hook_exists(&self, hook: &(NodeID, NodeID, HookID, ProcedureID)) -> bool {
+    pub fn hook_exists(&self, hook: &(NodeId, NodeId, HookId, ProcedureId)) -> bool {
         self.hooks.contains(hook)
-    }
-
-    pub fn recv<F, G, H>(
-        &mut self,
-        packet: PacketHeader,
-
-        // Called when a packet must be immediately written
-        // to some stream
-        callback_relay: F,
-
-        // Called when a packet should be processed
-        callback_recv: G,
-
-        // Called when a packet is malformed,
-        // it's packet data should be cleared
-        callback_malformed: H,
-    ) where
-        F: FnMut(PacketHeader),
-        G: FnMut(PacketHeader),
-        H: FnMut(),
-    {
-        if packet.is_downwards() {
-            self.recv_downwards(packet, callback_relay, callback_recv, callback_malformed);
-        } else {
-            self.recv_upwards(packet, callback_relay, callback_recv, callback_malformed);
-        }
     }
 
     fn recv_downwards<F, G, H>(
         &mut self,
-        mut packet: PacketHeader,
+        mut packet: TreePacketHeader,
         mut callback_relay: F,
         mut callback_recv: G,
         mut callback_malformed: H,
     ) where
-        F: FnMut(PacketHeader),
-        G: FnMut(PacketHeader),
+        F: FnMut(TreePacketHeader),
+        G: FnMut(TreePacketHeader),
         H: FnMut(),
     {
         let this_depth = self.this_path.len();
@@ -123,13 +100,13 @@ impl Router {
 
     fn recv_upwards<F, G, H>(
         &mut self,
-        mut packet: PacketHeader,
+        mut packet: TreePacketHeader,
         mut callback_relay: F,
         mut callback_recv: G,
         mut callback_malformed: H,
     ) where
-        F: FnMut(PacketHeader),
-        G: FnMut(PacketHeader),
+        F: FnMut(TreePacketHeader),
+        G: FnMut(TreePacketHeader),
         H: FnMut(),
     {
         let this_depth = self.this_path.len();
@@ -178,6 +155,36 @@ impl Router {
             packet.path.push(self.id);
 
             return callback_relay(packet);
+        }
+    }
+}
+
+impl Router for TreeRouter {
+    type HeaderType = TreePacketHeader;
+
+    fn route<F, G, H>(
+        &mut self,
+        packet: TreePacketHeader,
+
+        // Called when a packet must be immediately written
+        // to some stream
+        callback_relay: F,
+
+        // Called when a packet should be processed
+        callback_recv: G,
+
+        // Called when a packet is malformed,
+        // it's packet data should be cleared
+        callback_malformed: H,
+    ) where
+        F: FnMut(TreePacketHeader),
+        G: FnMut(TreePacketHeader),
+        H: FnMut(),
+    {
+        if packet.is_downwards() {
+            self.recv_downwards(packet, callback_relay, callback_recv, callback_malformed);
+        } else {
+            self.recv_upwards(packet, callback_relay, callback_recv, callback_malformed);
         }
     }
 }

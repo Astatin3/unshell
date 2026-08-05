@@ -16,6 +16,7 @@ protocol.path = "./protocol"
 heapless = "0.9.3"
 rkyv = {version = "0.8.17", features = ["little_endian"]}
 static_init = "1.0.4"
+phf = "0.14.0"
 
 [package]
 name = "libunshell"

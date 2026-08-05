@@ -1,7 +1,7 @@
-use crate::{HookID, NodeID, ProcedureID};
+use crate::api::{HookId, NodeId, ProcedureId};
 
 #[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize, Debug, PartialEq)]
-pub struct PacketHeader {
+pub struct TreePacketHeader {
     /// Determines the type of packet
     /// bit 0-1: packet type, 0: Downwards, 1: upwards,
     /// bit 3: close bit, if this is set, then the hook ID will be invalidated.
@@ -30,16 +30,16 @@ pub struct PacketHeader {
     ///
     /// Upwards:
     /// A packet route trace
-    pub path: Vec<NodeID>,
+    pub path: Vec<NodeId>,
 
     /// Hook ID
-    pub hook_id: HookID,
+    pub hook_id: HookId,
 
     /// Procedure ID
-    pub procedure_id: ProcedureID,
+    pub procedure_id: ProcedureId,
 }
 
-impl PacketHeader {
+impl TreePacketHeader {
     const PACKET_TYPE_MASK: u8 = 0b0000_0011;
     const CLOSE_BIT: u8 = 0b0000_1000;
 

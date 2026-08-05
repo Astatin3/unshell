@@ -7,3 +7,4 @@ authors.workspace = true
 [dependencies]
 heapless.workspace = true
 rkyv.workspace = true
+phf.workspace = true
